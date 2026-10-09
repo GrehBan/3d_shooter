@@ -117,9 +117,17 @@ func test_overflow_drops_and_counts() -> void:
 	var queue := HitEventQueue.new(2)
 	assert_bool(queue.push(1, 1, HitEventQueue.HitKind.MELEE, 0)).is_true()
 	assert_bool(queue.push(1, 2, HitEventQueue.HitKind.MELEE, 0)).is_true()
-	assert_bool(queue.push(1, 3, HitEventQueue.HitKind.MELEE, 0)).is_false()
-	assert_int(queue.dropped_count()).is_equal(1)
+	var results: Array[bool] = []
+	await assert_error(func() -> void:
+		results.append(queue.push(1, 3, HitEventQueue.HitKind.MELEE, 0))
+		results.append(queue.push(1, 4, HitEventQueue.HitKind.MELEE, 0))) \
+		.is_push_error("HitEventQueue: переполнение, события отбрасываются")
+	assert_array(results).is_equal([false, false])
+	assert_int(queue.dropped_count()).is_equal(2)
 	assert_int(queue.prepare()).is_equal(2)
+	# Сохраняются первые пришедшие события.
+	assert_int(queue.get_target(0)).is_equal(1)
+	assert_int(queue.get_target(1)).is_equal(2)
 	queue.clear()
 	assert_int(queue.count()).is_equal(0)
 	assert_int(queue.prepare()).is_equal(0)
@@ -180,7 +188,9 @@ func test_damageable_pool_cycle_does_not_allocate() -> void:
 	assert_int(objects_delta).is_equal(0)
 	assert_int(memory_delta).is_equal(0)
 	assert_int(after_detach).is_equal(Damageable.NO_HANDLE)
-	assert_int(acc).is_not_equal(-1)
+	# Каждый attach восстанавливает handle i, каждый detach даёт NO_HANDLE (-1):
+	# сумма 0 + 1 + … + 19999 − 20000.
+	assert_int(acc).is_equal(19999 * 20000 / 2 - 20000)
 
 
 func test_hot_path_does_not_allocate() -> void:

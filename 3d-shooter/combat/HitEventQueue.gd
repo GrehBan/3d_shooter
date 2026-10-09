@@ -20,8 +20,13 @@ extends RefCounted
 ## если почти все события тика имеют одинаковый префикс (одни слоты цели и
 ## источника при разных поколениях и payload, совпадающих в младших 17 битах).
 ##
-## Ёмкость фиксирована (по умолчанию 512, не больше MAX_CAPACITY). Переполнение:
-## push() возвращает false, событие отбрасывается, dropped_count() растёт.
+## Ёмкость фиксирована (по умолчанию 512, не больше MAX_CAPACITY) и подбирается
+## под худший случай: переполнение — ошибка конфигурации, а не штатный режим.
+## При переполнении push() возвращает false, сохраняются первые пришедшие
+## события, остальные отбрасываются, dropped_count() растёт, а push_error
+## пишется один раз до ближайшего clear(). Порядок детерминирован только при
+## dropped_count() == 0: отбор при переполнении зависит от порядка колбэков.
+## Бенчмарк и интеграционные тесты боя обязаны падать при dropped_count() != 0.
 
 enum HitKind { HITSCAN, PROJECTILE, MELEE, AREA }
 
@@ -41,6 +46,7 @@ const _PREFIX_SHIFT: int = _RECORD_BITS
 var _capacity: int = 0
 var _count: int = 0
 var _dropped: int = 0
+var _overflow_reported: bool = false
 var _source: PackedInt64Array = PackedInt64Array()
 var _target: PackedInt64Array = PackedInt64Array()
 var _payload: PackedInt64Array = PackedInt64Array()
@@ -81,6 +87,9 @@ func reset_dropped_count() -> void:
 func push(source: int, target: int, kind: HitKind, payload: int) -> bool:
 	if _count == _capacity:
 		_dropped += 1
+		if not _overflow_reported:
+			_overflow_reported = true
+			push_error("HitEventQueue: переполнение, события отбрасываются")
 		return false
 	_source[_count] = source
 	_target[_count] = target
@@ -125,6 +134,7 @@ func get_payload(i: int) -> int:
 ## Очищает очередь после обработки логическим тиком.
 func clear() -> void:
 	_count = 0
+	_overflow_reported = false
 
 
 # Ключ без номера записи: индекс цели, индекс источника, вид, младшие биты payload.
