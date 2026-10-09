@@ -1,0 +1,29 @@
+# Godot (the project lives in 3d-shooter/; nested .gitignore there covers .godot/ and /android/)
+**/.godot/
+**/.nomedia
+*.translation
+
+# Export artifacts and credentials
+**/export_credentials.cfg
+**/build/
+**/exports/
+*.exe
+*.pck
+*.apk
+*.aab
+
+# gdUnit4 reports and benchmark output
+**/reports/
+**/.gdunit4/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch
+*.tmp
+*.log
