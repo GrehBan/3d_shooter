@@ -35,6 +35,10 @@ common/physics_interpolation=true
 
 enabled=PackedStringArray("res://addons/gdUnit4/plugin.cfg")
 
+[gdunit4]
+
+settings/common/update_notification_enabled=false
+
 [input]
 
 move_forward={
