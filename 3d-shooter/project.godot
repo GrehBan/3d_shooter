@@ -11,8 +11,14 @@ config_version=5
 [application]
 
 config/name="Rogue Calibre"
+run/main_scene="res://world/sandbox/Sandbox.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
+
+[autoload]
+
+EventBus="*res://core/EventBus.gd"
+GameLoop="*res://core/GameLoop.gd"
 
 [display]
 
