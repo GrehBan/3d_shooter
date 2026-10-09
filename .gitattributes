@@ -1,0 +1,2 @@
+# Скрипты CI исполняются bash и на Windows-раннерах: только LF.
+*.sh text eol=lf

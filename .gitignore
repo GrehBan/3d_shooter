@@ -27,3 +27,6 @@ desktop.ini
 # Local scratch
 *.tmp
 *.log
+
+# CI logs
+ci-logs/

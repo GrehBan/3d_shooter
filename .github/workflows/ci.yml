@@ -1,0 +1,101 @@
+# CI Rogue Calibre: импорт проекта, проверка скриптов, тесты gdUnit4 (unit + golden)
+# и бенчмарк regress.gd.
+# Прогон идёт на Linux и Windows: golden-тесты на двух платформах заодно проверяют,
+# что детерминированный контур даёт побитово одинаковый результат.
+# Слияние без зелёного CI блокируется правилом защиты ветки master на GitHub
+# (required status checks: оба задания этого workflow).
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2-stable
+  # Официальные сборки: github.com/godotengine/godot-builds, суммы из SHA512-SUMS.txt релиза.
+  GODOT_BASE_URL: https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable
+
+jobs:
+  checks:
+    name: Tests and benchmark (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            godot_zip: Godot_v4.7.2-stable_linux.x86_64.zip
+            godot_bin: Godot_v4.7.2-stable_linux.x86_64
+            godot_sha512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
+          - os: windows-latest
+            godot_zip: Godot_v4.7.2-stable_win64.exe.zip
+            godot_bin: Godot_v4.7.2-stable_win64_console.exe
+            godot_sha512: 83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993
+    defaults:
+      run:
+        shell: bash
+    env:
+      LOG_DIR: ci-logs
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Cache Godot archive
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/godot-dl
+          key: godot-${{ env.GODOT_VERSION }}-${{ runner.os }}-${{ matrix.godot_sha512 }}
+
+      - name: Download and verify Godot
+        run: |
+          # Контекст runner недоступен в env задания, поэтому каталог берётся из RUNNER_TEMP.
+          # На Windows он приходит в виде D:\a\_temp и переводится в путь bash.
+          temp_dir="$RUNNER_TEMP"
+          if command -v cygpath > /dev/null; then temp_dir="$(cygpath -u "$temp_dir")"; fi
+          dl_dir="$temp_dir/godot-dl"
+          godot_dir="$temp_dir/godot"
+          mkdir -p "$dl_dir" "$godot_dir"
+          archive="$dl_dir/${{ matrix.godot_zip }}"
+          if [[ ! -f "$archive" ]]; then
+            curl -fsSL --retry 3 -o "$archive" "$GODOT_BASE_URL/${{ matrix.godot_zip }}"
+          fi
+          # Архив проверяется при каждом запуске, в том числе из кеша.
+          echo "${{ matrix.godot_sha512 }}  $archive" | sha512sum -c -
+          python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$archive" "$godot_dir" \
+            || python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$archive" "$godot_dir"
+          chmod +x "$godot_dir/${{ matrix.godot_bin }}"
+          echo "GODOT=$godot_dir/${{ matrix.godot_bin }}" >> "$GITHUB_ENV"
+
+      - name: Import project
+        run: bash ci/run_checks.sh import
+
+      - name: Check scripts
+        run: bash ci/run_checks.sh scripts
+
+      - name: Unit and golden tests (gdUnit4)
+        run: bash ci/run_checks.sh tests
+
+      - name: Benchmark (regress.gd)
+        run: bash ci/run_checks.sh regress
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reports-${{ matrix.os }}
+          path: |
+            3d-shooter/reports/
+            ci-logs/
+          if-no-files-found: warn
+          retention-days: 14

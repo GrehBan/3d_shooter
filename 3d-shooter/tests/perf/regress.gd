@@ -14,7 +14,10 @@ extends SceneTree
 ##   дельта OBJECT_COUNT, OBJECT_NODE_COUNT, OBJECT_RESOURCE_COUNT за замер = 0;
 ##   дельта OBJECT_ORPHAN_NODE_COUNT = 0 (OBJECT_NODE_COUNT считает только узлы
 ##   в дереве, а утёкший Node.new() вне дерева виден лишь здесь и в OBJECT_COUNT);
-##   прирост MEMORY_STATIC за замер ≤ 1 МБ.
+##   прирост MEMORY_STATIC за замер ≤ 1 МБ;
+##   с синтетической нагрузкой: контрольная сумма совпадает с эталоном
+##   (детерминизм математики; эталон меняется только вместе с LOAD_SEED,
+##   числом тиков или формулой нагрузки).
 ## Время логического тика (среднее и максимум) только выводится: задел под
 ## бюджет 7 мс, жёстким порогом станет на сцене-бенчмарке M3.
 
@@ -23,6 +26,7 @@ const WARMUP_TICKS: int = 300  # 5 с при 60 Гц
 const MEASURE_TICKS: int = 3600  # 60 с при 60 Гц
 const MEMORY_STATIC_TOLERANCE: int = 1024 * 1024
 const LOAD_SEED: int = 0x5EED
+const EXPECTED_SYNTHETIC_CHECKSUM: int = 3032385286
 const EXIT_PASS: int = 0
 const EXIT_FAIL: int = 1
 const EXIT_SETUP_ERROR: int = 2
@@ -141,6 +145,11 @@ func _finish() -> void:
 		failures.append("OBJECT_ORPHAN_NODE_COUNT изменился на %d (ожидается 0)" % orphans_delta)
 	if memory_delta > MEMORY_STATIC_TOLERANCE:
 		failures.append("MEMORY_STATIC вырос на %d байт (допуск %d)" % [memory_delta, MEMORY_STATIC_TOLERANCE])
+	var checksum: int = -1
+	if _load != null:
+		checksum = int(_load.get(&"checksum"))
+		if checksum != EXPECTED_SYNTHETIC_CHECKSUM:
+			failures.append("контрольная сумма нагрузки %d, эталон %d" % [checksum, EXPECTED_SYNTHETIC_CHECKSUM])
 
 	var avg_usec: float = float(_logic_usec_sum) / maxf(1.0, float(_logic_samples))
 	print("REGRESS allocations: objects=%+d nodes=%+d resources=%+d orphans=%+d memory_static=%+d B" % [
@@ -148,7 +157,7 @@ func _finish() -> void:
 	print("REGRESS logic_tick: samples=%d avg=%.1f us max=%d us (бюджет 7000 us, не порог)" % [
 		_logic_samples, avg_usec, _logic_usec_max])
 	if _load != null:
-		print("REGRESS synthetic_checksum=%d" % int(_load.get(&"checksum")))
+		print("REGRESS synthetic_checksum=%d (эталон %d)" % [checksum, EXPECTED_SYNTHETIC_CHECKSUM])
 	print("REGRESS wall_time=%d ms" % (Time.get_ticks_msec() - _wall_start_msec))
 
 	if _load != null:

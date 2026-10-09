@@ -82,6 +82,10 @@
     ```bash
     godot --headless --path 3d-shooter --fixed-fps 60 -s res://tests/perf/regress.gd
     ```
+*   **Все проверки CI локально (импорт, проверка скриптов, тесты, бенчмарк):**
+    ```bash
+    GODOT=/путь/к/godot bash ci/run_checks.sh
+    ```
 
 ---
 
