@@ -8,13 +8,13 @@ extends RefCounted
 ##
 ## Допустимые диапазоны, при которых промежуточный результат не выходит за int64
 ## (проверяются assert, то есть только в debug-сборке):
-##   mul(a, b): |a| ≤ MAX_MUL_OPERAND и |b| ≤ MAX_MUL_OPERAND
-##              (≈ 3 037 000.499 в единицах, |a·b| < 2^63);
+##   mul(a, b): |a·b| ≤ INT64_MAX (ограничено произведение, а не каждый операнд:
+##              урон 5 млн ед. × множитель 2.0 допустим);
 ##   div(a, b): |a| ≤ MAX_DIV_DIVIDEND (≈ 9.22·10^12 в единицах, |a·1000| < 2^63).
 ## Деление на ноль детерминированно: результат 0 и push_error.
 
 const SCALE: int = 1000
-const MAX_MUL_OPERAND: int = 3_037_000_499  # floor(sqrt(2^63 - 1))
+const INT64_MAX: int = 9_223_372_036_854_775_807
 const MAX_DIV_DIVIDEND: int = 9_223_372_036_854_775  # floor((2^63 - 1) / SCALE)
 
 
@@ -31,7 +31,7 @@ static func to_int(value: int) -> int:
 
 ## Произведение двух значений ×1000, округление к нулю.
 static func mul(a: int, b: int) -> int:
-	assert(absi(a) <= MAX_MUL_OPERAND and absi(b) <= MAX_MUL_OPERAND, "Fixed.mul: выход за диапазон")
+	assert(b == 0 or absi(a) <= INT64_MAX / absi(b), "Fixed.mul: переполнение произведения")
 	return (a * b) / SCALE
 
 

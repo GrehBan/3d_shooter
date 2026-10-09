@@ -49,11 +49,20 @@ func test_div_by_zero_returns_zero_and_reports() -> void:
 
 
 func test_mul_at_range_limit_does_not_overflow() -> void:
-	var m: int = Fixed.MAX_MUL_OPERAND
+	var m: int = 3_037_000_499  # floor(sqrt(INT64_MAX)): симметричная граница
 	var expected: int = (m * m) / Fixed.SCALE
 	assert_bool(expected > 0).is_true()
 	assert_int(Fixed.mul(m, m)).is_equal(expected)
 	assert_int(Fixed.mul(-m, m)).is_equal(-expected)
+
+
+func test_mul_allows_large_operand_with_small_multiplier() -> void:
+	# 5 млн ед. × 2.0: первый операнд больше симметричной границы, произведение безопасно.
+	assert_int(Fixed.mul(5_000_000_000, 2000)).is_equal(10_000_000_000)
+	assert_int(Fixed.mul(2000, -5_000_000_000)).is_equal(-10_000_000_000)
+	# Граница по произведению: INT64_MAX / 1000 × 1.0.
+	var d: int = Fixed.INT64_MAX / Fixed.SCALE
+	assert_int(Fixed.mul(d, Fixed.SCALE)).is_equal(d)
 
 
 func test_div_at_range_limit_does_not_overflow() -> void:
