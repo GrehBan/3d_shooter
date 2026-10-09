@@ -1,7 +1,8 @@
 class_name HandlePool
 extends RefCounted
-## Выдача слотов фиксированной ёмкости с handle по поколениям. Общая основа
-## для StatBlock (сущности) и AttackContextPool (контексты атак).
+## Выдача слотов фиксированной ёмкости с handle по поколениям (AttackContextPool).
+## StatBlock использует тот же формат handle, но проверку держит inline: вызов
+## метода HandlePool на каждом обращении к стату дал +5% к логическому тику.
 ##
 ## Handle (int64) = generation · INDEX_SPAN + index. Поколение растёт при каждом
 ## release(), поэтому устаревший handle, чей слот уже выдан снова, отвергается.
