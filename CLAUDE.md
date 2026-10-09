@@ -68,11 +68,11 @@
 
 *   **Запуск всех тестов (Headless):**
     ```bash
-    godot --headless --path 3d-shooter -s addons/gdUnit4/bin/GdUnitCmdTool.gd --add res://tests/
+    godot --headless --path 3d-shooter -s addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode --add res://tests/
     ```
 *   **Запуск тестов конкретной директории:**
     ```bash
-    godot --headless --path 3d-shooter -s addons/gdUnit4/bin/GdUnitCmdTool.gd --add res://tests/unit/
+    godot --headless --path 3d-shooter -s addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode --add res://tests/unit/
     ```
 *   **Запуск бенчмарка и «золотых» тестов производительности:**
     ```bash
