@@ -17,7 +17,8 @@ extends SceneTree
 ##   прирост MEMORY_STATIC за замер ≤ 1 МБ;
 ##   с синтетической нагрузкой: контрольная сумма совпадает с эталоном
 ##   (детерминизм математики; эталон меняется только вместе с LOAD_SEED,
-##   числом тиков или формулой нагрузки).
+##   числом тиков или формулой нагрузки) и ни одна запись урона не отброшена
+##   из-за переполнения DamagePayloadBuffer.
 ## Время логического тика (среднее и максимум) только выводится: задел под
 ## бюджет 7 мс, жёстким порогом станет на сцене-бенчмарке M3.
 
@@ -146,10 +147,14 @@ func _finish() -> void:
 	if memory_delta > MEMORY_STATIC_TOLERANCE:
 		failures.append("MEMORY_STATIC вырос на %d байт (допуск %d)" % [memory_delta, MEMORY_STATIC_TOLERANCE])
 	var checksum: int = -1
+	var dropped: int = 0
 	if _load != null:
 		checksum = int(_load.get(&"checksum"))
 		if checksum != EXPECTED_SYNTHETIC_CHECKSUM:
 			failures.append("контрольная сумма нагрузки %d, эталон %d" % [checksum, EXPECTED_SYNTHETIC_CHECKSUM])
+		dropped = int(_load.call(&"dropped_payloads"))
+		if dropped != 0:
+			failures.append("отброшено записей урона: %d (ожидается 0)" % dropped)
 
 	var avg_usec: float = float(_logic_usec_sum) / maxf(1.0, float(_logic_samples))
 	print("REGRESS allocations: objects=%+d nodes=%+d resources=%+d orphans=%+d memory_static=%+d B" % [
@@ -157,7 +162,8 @@ func _finish() -> void:
 	print("REGRESS logic_tick: samples=%d avg=%.1f us max=%d us (бюджет 7000 us, не порог)" % [
 		_logic_samples, avg_usec, _logic_usec_max])
 	if _load != null:
-		print("REGRESS synthetic_checksum=%d (эталон %d)" % [checksum, EXPECTED_SYNTHETIC_CHECKSUM])
+		print("REGRESS synthetic_checksum=%d (эталон %d) dropped_payloads=%d" % [
+			checksum, EXPECTED_SYNTHETIC_CHECKSUM, dropped])
 	print("REGRESS wall_time=%d ms" % (Time.get_ticks_msec() - _wall_start_msec))
 
 	if _load != null:

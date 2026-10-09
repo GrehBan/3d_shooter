@@ -111,6 +111,79 @@ func test_state_with_wrong_capacity_is_rejected() -> void:
 		.is_push_error("StatBlock.set_state: ёмкость снимка не совпадает")
 
 
+func _corrupted_state_is_rejected(state: Dictionary) -> void:
+	var target := StatBlock.new(4)
+	await assert_error(func() -> void: target.set_state(state)) \
+		.is_push_error("StatBlock.set_state: повреждённый снимок")
+	# Отвергнутый снимок не меняет состояние.
+	assert_int(target.alive_count()).is_equal(0)
+
+
+func _sample_state() -> Dictionary:
+	var sb := StatBlock.new(4)
+	sb.allocate()
+	sb.allocate()
+	return sb.get_state()  # индексы 0 и 1 живы, свободны 3 и 2
+
+
+func test_state_with_duplicate_free_index_is_rejected() -> void:
+	var state: Dictionary = _sample_state()
+	var free: PackedInt32Array = state["free"]
+	free[1] = free[0]  # один индекс дважды в free-list
+	state["free"] = free
+	await _corrupted_state_is_rejected(state)
+
+
+func test_state_with_free_index_out_of_range_is_rejected() -> void:
+	var state: Dictionary = _sample_state()
+	var free: PackedInt32Array = state["free"]
+	free[0] = 99
+	state["free"] = free
+	await _corrupted_state_is_rejected(state)
+
+
+func test_state_with_alive_flag_mismatch_is_rejected() -> void:
+	var state: Dictionary = _sample_state()
+	var alive: PackedByteArray = state["alive"]
+	alive[3] = 1  # индекс 3 в free-list, но помечен живым
+	state["alive"] = alive
+	await _corrupted_state_is_rejected(state)
+
+
+func test_state_with_negative_generation_is_rejected() -> void:
+	var state: Dictionary = _sample_state()
+	var generation: PackedInt32Array = state["generation"]
+	generation[0] = -1
+	state["generation"] = generation
+	await _corrupted_state_is_rejected(state)
+
+
+func test_handle_beyond_int32_stays_valid() -> void:
+	var sb := StatBlock.new(4)
+	var state: Dictionary = sb.get_state()
+	# Слот 0 переиспользован 40000 раз и сейчас занят.
+	var generation: PackedInt32Array = state["generation"]
+	generation[0] = 40_000
+	var alive: PackedByteArray = state["alive"]
+	alive[0] = 1
+	var free: PackedInt32Array = state["free"]
+	free.remove_at(free.find(0))
+	free.append(0)  # хвост за пределами free_count не проверяется
+	state["generation"] = generation
+	state["alive"] = alive
+	state["free"] = free
+	state["free_count"] = 3
+	state["alive_count"] = 1
+	assert_bool(sb.set_state(state)).is_true()
+	var handle: int = 40_000 * StatBlock.HANDLE_INDEX_SPAN
+	assert_bool(handle > 2_147_483_647).is_true()
+	assert_bool(sb.is_valid(handle)).is_true()
+	assert_bool(sb.set_stat(handle, StatBlock.Stat.HP, 5_000)).is_true()
+	assert_int(sb.get_stat(handle, StatBlock.Stat.HP)).is_equal(5_000)
+	# Усечённый до Int32 handle недействителен.
+	assert_bool(sb.is_valid(handle & 0x7FFFFFFF)).is_false()
+
+
 func test_hot_path_does_not_allocate() -> void:
 	var sb := StatBlock.new(64)
 	var handles := PackedInt64Array()

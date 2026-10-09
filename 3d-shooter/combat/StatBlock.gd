@@ -7,7 +7,9 @@ extends RefCounted
 ## пакетной обработки. Лимит Int32: 2 147 483 ед. ×1000, то есть ~2.1 млн HP.
 ## Статусы — 64-битная маска на сущность (битовая упаковка для M2).
 ##
-## Handle сущности = generation · HANDLE_INDEX_SPAN + index. Поколение растёт при
+## Handle сущности (int64) = generation · HANDLE_INDEX_SPAN + index. Хранить
+## handle только в int64 (PackedInt64Array): после 32768 переиспользований
+## одного слота он выходит за пределы Int32. Поколение растёт при
 ## каждом release(), поэтому handle умершей сущности, чей индекс уже выдан новой,
 ## отвергается при любом обращении: урон по устаревшему id не попадёт в чужую цель.
 ##
@@ -172,7 +174,8 @@ func set_state(state: Dictionary) -> bool:
 	if data.size() != _capacity * STAT_COUNT or status.size() != _capacity \
 			or generation.size() != _capacity or alive.size() != _capacity \
 			or free.size() != _capacity or free_count < 0 or free_count > _capacity \
-			or alive_count != _capacity - free_count:
+			or alive_count != _capacity - free_count \
+			or not _is_consistent(free, free_count, alive, generation):
 		push_error("StatBlock.set_state: повреждённый снимок")
 		return false
 	_data = data.duplicate()
@@ -182,6 +185,26 @@ func set_state(state: Dictionary) -> bool:
 	_free = free.duplicate()
 	_free_count = free_count
 	_alive_count = alive_count
+	return true
+
+
+# Zero-Trust проверка снимка: свободные индексы различны и лежат в [0, capacity),
+# alive == 0 ровно для них и 1 для остальных, поколения неотрицательны.
+# Путь загрузки, аллокации допустимы.
+func _is_consistent(free: PackedInt32Array, free_count: int, alive: PackedByteArray,
+		generation: PackedInt32Array) -> bool:
+	var is_free := PackedByteArray()
+	is_free.resize(_capacity)
+	for i: int in free_count:
+		var index: int = free[i]
+		if index < 0 or index >= _capacity or is_free[index] == 1:
+			return false
+		is_free[index] = 1
+	for index: int in _capacity:
+		if generation[index] < 0:
+			return false
+		if alive[index] != 1 - is_free[index]:
+			return false
 	return true
 
 
