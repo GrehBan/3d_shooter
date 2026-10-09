@@ -1,6 +1,6 @@
-[gd_resource type="Resource" format=3]
+[gd_resource type="Resource" format=3 uid="uid://c4e3iyofuw1b"]
 
-[ext_resource type="Script" path="res://tests/fixtures/registry/RegistryFixtureData.gd" id="1_data"]
+[ext_resource type="Script" uid="uid://r0tdsoxwwssu" path="res://tests/fixtures/registry/RegistryFixtureData.gd" id="1_data"]
 
 [resource]
 script = ExtResource("1_data")

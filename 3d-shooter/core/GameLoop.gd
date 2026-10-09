@@ -17,6 +17,7 @@ const EXPECTED_PHYSICS_TICKS_PER_SECOND: int = 60
 const PHYSICS_PROCESS_PRIORITY: int = 1000
 
 var _clock: LogicClock = LogicClock.new()
+var _last_logic_tick_usec: int = 0
 
 
 func _ready() -> void:
@@ -28,7 +29,9 @@ func _ready() -> void:
 
 func _physics_process(_delta: float) -> void:
 	if _clock.advance():
+		var start_usec: int = Time.get_ticks_usec()
 		logic_tick.emit(_clock.logic_tick)
+		_last_logic_tick_usec = Time.get_ticks_usec() - start_usec
 
 
 func get_physics_tick() -> int:
@@ -37,6 +40,12 @@ func get_physics_tick() -> int:
 
 func get_logic_tick() -> int:
 	return _clock.logic_tick
+
+
+## Длительность последнего логического тика в микросекундах (все подписчики
+## logic_tick). Только метрика для профилирования и бенчмарка: в логику не идёт.
+func get_last_logic_tick_usec() -> int:
+	return _last_logic_tick_usec
 
 
 ## Сбрасывает логическое время (начало забега или комнаты).

@@ -80,7 +80,7 @@
     ```
 *   **Запуск бенчмарка и «золотых» тестов производительности:**
     ```bash
-    godot --headless --path 3d-shooter -s res://tests/perf/regress.gd
+    godot --headless --path 3d-shooter --fixed-fps 60 -s res://tests/perf/regress.gd
     ```
 
 ---

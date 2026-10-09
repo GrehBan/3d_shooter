@@ -76,6 +76,8 @@ func register(category: int, key: StringName, resource: Resource) -> bool:
 
 ## Загружает все .tres/.res из каталога (без рекурсии), ключ — имя файла без
 ## расширения. Возвращает число загруженных ресурсов или INVALID_ID при ошибке.
+## INVALID_ID — фатальная ошибка старта: часть ресурсов каталога к этому моменту
+## уже зарегистрирована, поэтому вызывающий не продолжает с таким реестром.
 func load_directory(category: int, dir_path: String) -> int:
 	if not DirAccess.dir_exists_absolute(dir_path):
 		push_error("Registry: каталог не найден: %s" % dir_path)
