@@ -7,10 +7,10 @@ extends RefCounted
 ## пакетной обработки. Лимит Int32: 2 147 483 ед. ×1000, то есть ~2.1 млн HP.
 ## Статусы — 64-битная маска на сущность (битовая упаковка для M2).
 ##
-## Handle сущности (int64) выдаёт HandlePool: generation · HANDLE_INDEX_SPAN + index.
-## Хранить handle только в int64 (PackedInt64Array): после 32768 переиспользований
-## одного слота он выходит за пределы Int32. Поколение растёт при каждом
-## release(), поэтому handle умершей сущности, чей индекс уже выдан новой,
+## Handle сущности (int64) = generation · HANDLE_INDEX_SPAN + index. Хранить
+## handle только в int64 (PackedInt64Array): после 32768 переиспользований
+## одного слота он выходит за пределы Int32. Поколение растёт при
+## каждом release(), поэтому handle умершей сущности, чей индекс уже выдан новой,
 ## отвергается при любом обращении: урон по устаревшему id не попадёт в чужую цель.
 ##
 ## Ёмкость фиксируется в конструкторе. allocate()/release() и все аксессоры
@@ -19,25 +19,32 @@ extends RefCounted
 enum Stat { HP, MAX_HP, SHIELD, MAX_SHIELD, ARMOR, ENERGY, MAX_ENERGY }
 
 const STAT_COUNT: int = 7
-const INVALID_HANDLE: int = HandlePool.INVALID_HANDLE
-const HANDLE_INDEX_SPAN: int = HandlePool.INDEX_SPAN
-const MAX_CAPACITY: int = HandlePool.MAX_CAPACITY
+const INVALID_HANDLE: int = -1
+const HANDLE_INDEX_SPAN: int = 1 << 16
+const MAX_CAPACITY: int = HANDLE_INDEX_SPAN
 const DEFAULT_CAPACITY: int = 256
 const VALUE_MIN: int = -2_147_483_648  # пределы хранения стата (Int32)
 const VALUE_MAX: int = 2_147_483_647
 
 var _capacity: int = 0
-var _handles: HandlePool
 var _data: PackedInt32Array = PackedInt32Array()
 var _status: PackedInt64Array = PackedInt64Array()
+var _generation: PackedInt32Array = PackedInt32Array()
+var _alive: PackedByteArray = PackedByteArray()
+var _free: PackedInt32Array = PackedInt32Array()  # стек свободных индексов
+var _free_count: int = 0
+var _alive_count: int = 0
 
 
 func _init(capacity: int = DEFAULT_CAPACITY) -> void:
 	assert(capacity > 0 and capacity <= MAX_CAPACITY, "StatBlock: недопустимая ёмкость")
 	_capacity = clampi(capacity, 1, MAX_CAPACITY)
-	_handles = HandlePool.new(_capacity)
 	_data.resize(_capacity * STAT_COUNT)
 	_status.resize(_capacity)
+	_generation.resize(_capacity)
+	_alive.resize(_capacity)
+	_free.resize(_capacity)
+	_reset_free_list()
 
 
 func capacity() -> int:
@@ -45,34 +52,51 @@ func capacity() -> int:
 
 
 func alive_count() -> int:
-	return _handles.alive_count()
+	return _alive_count
 
 
 ## Выдаёт новую сущность с нулевыми статами. INVALID_HANDLE, если ёмкость исчерпана.
 func allocate() -> int:
-	var handle: int = _handles.allocate()
-	if handle == INVALID_HANDLE:
+	if _free_count == 0:
 		push_error("StatBlock: ёмкость %d исчерпана" % _capacity)
 		return INVALID_HANDLE
-	var index: int = _handles.index_of(handle)
+	_free_count -= 1
+	var index: int = _free[_free_count]
 	for stat: int in STAT_COUNT:
 		_data[stat * _capacity + index] = 0
 	_status[index] = 0
-	return handle
+	_alive[index] = 1
+	_alive_count += 1
+	return _generation[index] * HANDLE_INDEX_SPAN + index
 
 
 ## Освобождает сущность. Устаревший или чужой handle — false без побочных эффектов.
 func release(handle: int) -> bool:
-	return _handles.release(handle)
+	var index: int = index_of(handle)
+	if index < 0:
+		return false
+	_alive[index] = 0
+	_generation[index] += 1
+	_free[_free_count] = index
+	_free_count += 1
+	_alive_count -= 1
+	return true
 
 
 func is_valid(handle: int) -> bool:
-	return _handles.is_valid(handle)
+	return index_of(handle) >= 0
 
 
 ## Индекс в плотных массивах или -1 для недействительного handle.
 func index_of(handle: int) -> int:
-	return _handles.index_of(handle)
+	if handle < 0:
+		return -1
+	var index: int = handle % HANDLE_INDEX_SPAN
+	if index >= _capacity or _alive[index] == 0:
+		return -1
+	if handle / HANDLE_INDEX_SPAN != _generation[index]:
+		return -1
+	return index
 
 
 ## Значение стата ×1000; 0 для недействительного handle.
@@ -123,27 +147,70 @@ func set_status(handle: int, mask: int) -> bool:
 
 ## Снимок для SaveSystem (Zero-Trust State). Аллоцирует: только при сохранении.
 func get_state() -> Dictionary:
-	var state: Dictionary = _handles.get_state()
-	state["data"] = _data.duplicate()
-	state["status"] = _status.duplicate()
-	state["alive_count"] = _handles.alive_count()
-	return state
+	return {
+		"capacity": _capacity,
+		"data": _data.duplicate(),
+		"status": _status.duplicate(),
+		"generation": _generation.duplicate(),
+		"alive": _alive.duplicate(),
+		"free": _free.duplicate(),
+		"free_count": _free_count,
+		"alive_count": _alive_count,
+	}
 
 
-## Восстановление из get_state(). false, если снимок не подходит по ёмкости или
-## повреждён (проверки согласованности слотов — в HandlePool.set_state()).
+## Восстановление из get_state(). false, если снимок не подходит по ёмкости или формату.
 func set_state(state: Dictionary) -> bool:
 	if int(state.get("capacity", -1)) != _capacity:
 		push_error("StatBlock.set_state: ёмкость снимка не совпадает")
 		return false
 	var data: PackedInt32Array = state.get("data", PackedInt32Array())
 	var status: PackedInt64Array = state.get("status", PackedInt64Array())
+	var generation: PackedInt32Array = state.get("generation", PackedInt32Array())
+	var alive: PackedByteArray = state.get("alive", PackedByteArray())
+	var free: PackedInt32Array = state.get("free", PackedInt32Array())
 	var free_count: int = int(state.get("free_count", -1))
 	var alive_count: int = int(state.get("alive_count", -1))
 	if data.size() != _capacity * STAT_COUNT or status.size() != _capacity \
-			or alive_count != _capacity - free_count or not _handles.set_state(state):
+			or generation.size() != _capacity or alive.size() != _capacity \
+			or free.size() != _capacity or free_count < 0 or free_count > _capacity \
+			or alive_count != _capacity - free_count \
+			or not _is_consistent(free, free_count, alive, generation):
 		push_error("StatBlock.set_state: повреждённый снимок")
 		return false
 	_data = data.duplicate()
 	_status = status.duplicate()
+	_generation = generation.duplicate()
+	_alive = alive.duplicate()
+	_free = free.duplicate()
+	_free_count = free_count
+	_alive_count = alive_count
 	return true
+
+
+# Zero-Trust проверка снимка: свободные индексы различны и лежат в [0, capacity),
+# alive == 0 ровно для них и 1 для остальных, поколения неотрицательны.
+# Путь загрузки, аллокации допустимы.
+func _is_consistent(free: PackedInt32Array, free_count: int, alive: PackedByteArray,
+		generation: PackedInt32Array) -> bool:
+	var is_free := PackedByteArray()
+	is_free.resize(_capacity)
+	for i: int in free_count:
+		var index: int = free[i]
+		if index < 0 or index >= _capacity or is_free[index] == 1:
+			return false
+		is_free[index] = 1
+	for index: int in _capacity:
+		if generation[index] < 0:
+			return false
+		if alive[index] != 1 - is_free[index]:
+			return false
+	return true
+
+
+func _reset_free_list() -> void:
+	# Стек заполняется так, чтобы первым выдавался индекс 0: порядок выдачи детерминирован.
+	for i: int in _capacity:
+		_free[i] = _capacity - 1 - i
+	_free_count = _capacity
+	_alive_count = 0
