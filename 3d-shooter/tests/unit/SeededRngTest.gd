@@ -119,6 +119,16 @@ func test_state_roundtrip_continues_sequence() -> void:
 		assert_int(restored.next_u32()).is_equal(expected[i])
 
 
+func test_set_state_rejects_all_zero_state() -> void:
+	var r := SeededRng.new(0)
+	r.set_state(PackedInt64Array([0, 0, 0, 0, 0]))
+	var any_nonzero: bool = false
+	for i: int in 8:
+		if r.next_u32() != 0:
+			any_nonzero = true
+	assert_bool(any_nonzero).is_true()
+
+
 func test_reseed_resets_to_initial_sequence() -> void:
 	var r := SeededRng.new(10)
 	var first: int = r.next_u32()

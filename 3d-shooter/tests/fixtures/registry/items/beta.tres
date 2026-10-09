@@ -1,0 +1,7 @@
+[gd_resource type="Resource" format=3]
+
+[ext_resource type="Script" path="res://tests/fixtures/registry/RegistryFixtureData.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+value = 2

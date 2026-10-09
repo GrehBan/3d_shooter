@@ -139,7 +139,10 @@ func get_state() -> PackedInt64Array:
 	return PackedInt64Array([_seed, _s0, _s1, _s2, _s3])
 
 
-## Восстановление из снимка get_state().
+## Восстановление из снимка get_state(). Проверку снимка из файла делает
+## загрузчик сохранений: assert ниже вырезается в релизной сборке.
+## Нулевое состояние (xoshiro128** из него выдаёт только нули) исправляется
+## так же, как в reseed().
 func set_state(state: PackedInt64Array) -> void:
 	assert(state.size() == 5, "SeededRng.set_state: ожидается 5 значений")
 	_seed = state[0]
@@ -147,6 +150,8 @@ func set_state(state: PackedInt64Array) -> void:
 	_s1 = state[2] & MASK32
 	_s2 = state[3] & MASK32
 	_s3 = state[4] & MASK32
+	if (_s0 | _s1 | _s2 | _s3) == 0:
+		_s0 = 1
 
 
 ## Сид подпотока из родительского сида и id потока. Результат в [0, 2^63).
