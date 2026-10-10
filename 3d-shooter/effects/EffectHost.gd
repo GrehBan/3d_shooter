@@ -17,7 +17,9 @@ extends RefCounted
 ## пересборки. Добавлять и снимать эффекты можно прямо в бою (спавн и смерть
 ## элит): аллокаций и сортировки нет. Если слот занят устаревшим хостом,
 ## который не сняли clear_host, его записи освобождаются при первом
-## add_effect нового хоста.
+## add_effect хоста более нового поколения. add_effect по handle более старого
+## поколения, чем у владельца слота, отказывает и не трогает записи живого хоста
+## (отложенный эффект убитой цели).
 ## clear_host освобождает записи в обратном порядке добавления (список хоста
 ## растёт с головы); это часть детерминированного поведения: от порядка
 ## освобождения зависит, какие слоты записей выдаются дальше.
@@ -94,8 +96,8 @@ func reset_counters() -> void:
 
 
 ## Подписывает эффект хоста на триггер. Возвращает handle записи или
-## INVALID_HANDLE, если хост, триггер или фаза вне диапазона либо ёмкость
-## записей исчерпана.
+## INVALID_HANDLE, если хост, триггер или фаза вне диапазона, handle хоста
+## устарел относительно владельца слота либо ёмкость записей исчерпана.
 func add_effect(host: int, trigger: EffectTrigger.Trigger, phase: EffectTrigger.Phase,
 		priority: int, slot_index: int, effect_id: int, state_slot: int) -> int:
 	var slot: int = _host_slot(host)
@@ -103,8 +105,12 @@ func add_effect(host: int, trigger: EffectTrigger.Trigger, phase: EffectTrigger.
 		return INVALID_HANDLE
 	if phase < EffectTrigger.Phase.PRE or phase > EffectTrigger.Phase.POST:
 		return INVALID_HANDLE
-	if _slot_host[slot] != host:
-		if _slot_host[slot] != INVALID_HANDLE:
+	var owner: int = _slot_host[slot]
+	if owner != host:
+		if owner != INVALID_HANDLE:
+			# Слот занят: очистка только ради более нового поколения.
+			if host / HandlePool.INDEX_SPAN < owner / HandlePool.INDEX_SPAN:
+				return INVALID_HANDLE
 			_clear_slot(slot)
 		_slot_host[slot] = host
 	var entry: int = _entries.allocate()

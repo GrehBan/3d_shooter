@@ -105,6 +105,20 @@ func test_stale_host_entries_freed_on_slot_reuse_without_clear() -> void:
 	assert_array(_effect_ids(host, new_elite, T.ON_HIT)).is_equal(PackedInt32Array([3]))
 
 
+func test_add_with_older_generation_does_not_touch_live_host() -> void:
+	var host := EffectHost.new(4, 16)
+	var dead_elite: int = 0 * SPAN + 1
+	var live_elite: int = 1 * SPAN + 1  # тот же слот, поколение 1
+	host.add_effect(live_elite, T.ON_HIT, P.MAIN, 0, 0, 7, 0)
+	host.add_effect(live_elite, T.ON_KILL, P.POST, 0, 0, 8, 0)
+	# Отложенный эффект убитой элиты (поколение 0) пытается подписать её на триггер.
+	assert_int(host.add_effect(dead_elite, T.ON_HIT, P.MAIN, 0, 0, 9, 0)).is_equal(EffectHost.INVALID_HANDLE)
+	assert_int(host.entry_count()).is_equal(2)
+	assert_array(_effect_ids(host, live_elite, T.ON_HIT)).is_equal(PackedInt32Array([7]))
+	assert_array(_effect_ids(host, live_elite, T.ON_KILL)).is_equal(PackedInt32Array([8]))
+	assert_int(host.first(dead_elite, T.ON_HIT)).is_equal(EffectHost.NO_ENTRY)
+
+
 func test_invalid_host_or_trigger_is_refused() -> void:
 	var host := EffectHost.new(4, 16)
 	assert_int(host.add_effect(-1, T.ON_HIT, P.MAIN, 0, 0, 1, 0)).is_equal(EffectHost.INVALID_HANDLE)
