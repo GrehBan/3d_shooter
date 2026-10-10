@@ -15,7 +15,7 @@
 
 **Готово, когда:** CI настроен и требует 100% прохождения тестов. Архитектура ядра инициализируется без ошибок и полностью изолирована от рендеринга. Слияние PR без зеленого CI невозможно.
 
-*Выполнено 2026-10-09: репозиторий [GrehBan/3d_shooter](https://github.com/GrehBan/3d_shooter), первый прогон CI зелёный на Linux и Windows. Ветка `master` защищена: обязательные проверки «Tests and benchmark (ubuntu-latest)» и «Tests and benchmark (windows-latest)» в строгом режиме, force-push и удаление запрещены. Администратор репозитория может пушить в обход проверок (`enforce_admins` выключен). Локально те же проверки запускает `ci/run_checks.sh`.*
+*Выполнено 2026-10-09: репозиторий [GrehBan/3d_shooter](https://github.com/GrehBan/3d_shooter), первый прогон CI зелёный на Linux и Windows. Ветка `master` защищена: обязательные проверки «Tests and benchmark (ubuntu-latest)» и «Tests and benchmark (windows-latest)» в строгом режиме, force-push и удаление запрещены, правила действуют и для администратора (`enforce_admins`): изменения попадают в `master` только через PR. Локально те же проверки запускает `ci/run_checks.sh`.*
 
 ## M1a. Контракты и Архитектурная Изоляция (Decoupling)
 
@@ -23,6 +23,8 @@
 * **Изоляция:** Эти классы реализуются строго как чистые данные (`RefCounted` или модули GDExtension) без наследования от `Node`/`Node3D`. Godot выступает только как визуализатор.
 
 **Готово, когда:** Контракты утверждены, написаны mock-тесты. Разработчики логики и разработчики визуала могут работать независимо, не касаясь файлов друг друга.
+
+*Выполнено 2026-10-10: контракты описаны в `docs/contracts.md`; `Fixed`, `StatBlock`, `DamagePayload`/`DamagePayloadBuffer`, `Damageable`, `HitEventQueue`, `AttackContextPool`, `EffectHost`, `MovementAbilities` с unit- и golden-тестами; сквозной mock-тест `CombatContractsGoldenTest`; изоляция логики от узлов закреплена `LogicIsolationTest`; `regress.gd` гоняет синтетику через весь конвейер.*
 
 ## M1. Движение, Стрельба и Zero-Allocation
 

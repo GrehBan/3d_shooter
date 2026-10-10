@@ -29,7 +29,7 @@ extends RefCounted
 ##
 ## Переполнение ёмкости записей — ошибка конфигурации: push_error один раз
 ## до reset_counters(), счётчик capacity_refusals; корректность только при нуле.
-## TODO(M1a шаг 8): regress.gd и интеграционный тест падают при capacity_refusals != 0.
+## regress.gd и CombatContractsGoldenTest падают при capacity_refusals != 0.
 
 const NO_ENTRY: int = -1
 const INVALID_HANDLE: int = HandlePool.INVALID_HANDLE
