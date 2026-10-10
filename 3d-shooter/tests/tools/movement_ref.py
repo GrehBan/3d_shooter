@@ -87,6 +87,8 @@ class Abilities:
         s = e % SPAN
         if self.slot_host[s] != e:
             if self.slot_host[s] != -1:
+                if e // SPAN < self.slot_host[s] // SPAN:
+                    return False  # устаревший handle не трогает живую сущность
                 self._clear(s)
             self.slot_host[s] = e
         flags = (GROUND if ground else 0) | (AIR if air else 0)
