@@ -82,6 +82,8 @@ class EffectHost:
             return -1
         if self.slot_host[s] != host:
             if self.slot_host[s] != -1:
+                if host // SPAN < self.slot_host[s] // SPAN:
+                    return -1  # устаревший handle не трогает живого хоста
                 self._clear_slot(s)
             self.slot_host[s] = host
         h = self.pool.alloc()
