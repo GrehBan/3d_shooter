@@ -9,7 +9,8 @@ extends RefCounted
 ## Хранить handle только в int64: после 32768 переиспользований слота он выходит
 ## за пределы Int32. Слоты выдаются со стека свободных индексов, первым — 0:
 ## порядок выдачи детерминирован. После конструктора методы не выделяют память,
-## кроме get_state()/set_state() (путь сохранения и загрузки).
+## кроме get_state()/set_state() (путь сохранения и загрузки). Поколение хранится
+## в Int32 и переполнилось бы только через 2^31 освобождений одного слота.
 
 const INVALID_HANDLE: int = -1
 const INDEX_SPAN: int = 1 << 16
@@ -102,16 +103,21 @@ func get_state() -> Dictionary:
 
 
 ## Восстановление из get_state() с проверкой согласованности (Zero-Trust):
-## свободные индексы различны и лежат в [0, capacity), alive == 0 ровно для них
-## и 1 для остальных, поколения неотрицательны. false — снимок отвергнут,
-## состояние не изменено.
+## типы полей, свободные индексы различны и лежат в [0, capacity), alive == 0
+## ровно для них и 1 для остальных, поколения неотрицательны. false — снимок
+## отвергнут, состояние не изменено.
 func set_state(state: Dictionary) -> bool:
-	if int(state.get("capacity", -1)) != _capacity:
+	if typeof(state.get("capacity")) != TYPE_INT or typeof(state.get("free_count")) != TYPE_INT \
+			or typeof(state.get("generation")) != TYPE_PACKED_INT32_ARRAY \
+			or typeof(state.get("free")) != TYPE_PACKED_INT32_ARRAY \
+			or typeof(state.get("alive")) != TYPE_PACKED_BYTE_ARRAY:
 		return false
-	var generation: PackedInt32Array = state.get("generation", PackedInt32Array())
-	var alive: PackedByteArray = state.get("alive", PackedByteArray())
-	var free: PackedInt32Array = state.get("free", PackedInt32Array())
-	var free_count: int = int(state.get("free_count", -1))
+	if int(state["capacity"]) != _capacity:
+		return false
+	var generation: PackedInt32Array = state["generation"]
+	var alive: PackedByteArray = state["alive"]
+	var free: PackedInt32Array = state["free"]
+	var free_count: int = int(state["free_count"])
 	if generation.size() != _capacity or alive.size() != _capacity or free.size() != _capacity \
 			or free_count < 0 or free_count > _capacity:
 		return false

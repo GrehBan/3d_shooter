@@ -65,6 +65,22 @@ func test_corrupted_states_are_rejected() -> void:
 	cases.append(negative)
 	var wrong_capacity: Dictionary = HandlePool.new(8).get_state()
 	cases.append(wrong_capacity)
+	# Неверные типы полей из испорченного сейва: отказ вместо ошибки выполнения.
+	var array_instead_of_packed: Dictionary = base.get_state()
+	array_instead_of_packed["free"] = [3, 2, 1, 0]
+	cases.append(array_instead_of_packed)
+	var string_capacity: Dictionary = base.get_state()
+	string_capacity["capacity"] = "4"
+	cases.append(string_capacity)
+	var null_alive: Dictionary = base.get_state()
+	null_alive["alive"] = null
+	cases.append(null_alive)
+	var float_free_count: Dictionary = base.get_state()
+	float_free_count["free_count"] = 2.0
+	cases.append(float_free_count)
+	var missing_generation: Dictionary = base.get_state()
+	missing_generation.erase("generation")
+	cases.append(missing_generation)
 	for state: Dictionary in cases:
 		var target := HandlePool.new(4)
 		assert_bool(target.set_state(state)).is_false()
@@ -88,4 +104,6 @@ func test_hot_path_does_not_allocate() -> void:
 	var memory_delta: int = int(Performance.get_monitor(Performance.MEMORY_STATIC)) - memory_before
 	assert_int(objects_delta).is_equal(0)
 	assert_int(memory_delta).is_equal(0)
-	assert_int(acc).is_not_equal(-1)
+	# release кладёт индекс на вершину стека, allocate возвращает его же, поэтому
+	# index_of(handles[slot]) == slot: 20000 = 625 × 32, сумма 625 × (0 + … + 31).
+	assert_int(acc).is_equal(625 * 496)

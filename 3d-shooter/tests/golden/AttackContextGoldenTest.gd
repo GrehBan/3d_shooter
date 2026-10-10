@@ -2,7 +2,8 @@ extends GdUnitTestSuite
 ## Золотой тест AttackContextPool: сценарий цепной молнии в ширину с ветвлением,
 ## отказами по глубине, бюджету и повторной цели в ветке; цели — полные handle,
 ## среди них одинаковые слоты разных поколений. Эталон посчитан независимой
-## Python-моделью HandlePool + AttackContextPool.
+## Python-моделью HandlePool + AttackContextPool: tests/tools/acp_ref.py
+## (запуск из корня репозитория: python 3d-shooter/tests/tools/acp_ref.py).
 
 const FNV_OFFSET: int = 2166136261
 const FNV_PRIME: int = 16777619
