@@ -94,11 +94,14 @@ func reset_counters() -> void:
 
 
 ## Подписывает эффект хоста на триггер. Возвращает handle записи или
-## INVALID_HANDLE, если хост вне диапазона или ёмкость записей исчерпана.
+## INVALID_HANDLE, если хост, триггер или фаза вне диапазона либо ёмкость
+## записей исчерпана.
 func add_effect(host: int, trigger: EffectTrigger.Trigger, phase: EffectTrigger.Phase,
 		priority: int, slot_index: int, effect_id: int, state_slot: int) -> int:
 	var slot: int = _host_slot(host)
 	if slot < 0 or trigger < 0 or trigger >= TRIGGER_COUNT:
+		return INVALID_HANDLE
+	if phase < EffectTrigger.Phase.PRE or phase > EffectTrigger.Phase.POST:
 		return INVALID_HANDLE
 	if _slot_host[slot] != host:
 		if _slot_host[slot] != INVALID_HANDLE:

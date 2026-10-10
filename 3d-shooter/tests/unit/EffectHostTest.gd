@@ -109,6 +109,9 @@ func test_invalid_host_or_trigger_is_refused() -> void:
 	var host := EffectHost.new(4, 16)
 	assert_int(host.add_effect(-1, T.ON_HIT, P.MAIN, 0, 0, 1, 0)).is_equal(EffectHost.INVALID_HANDLE)
 	assert_int(host.add_effect(7, T.ON_HIT, P.MAIN, 0, 0, 1, 0)).is_equal(EffectHost.INVALID_HANDLE)
+	assert_int(host.add_effect(0, 99 as EffectTrigger.Trigger, P.MAIN, 0, 0, 1, 0)).is_equal(EffectHost.INVALID_HANDLE)
+	assert_int(host.add_effect(0, T.ON_HIT, 3 as EffectTrigger.Phase, 0, 0, 1, 0)).is_equal(EffectHost.INVALID_HANDLE)
+	assert_int(host.add_effect(0, T.ON_HIT, -1 as EffectTrigger.Phase, 0, 0, 1, 0)).is_equal(EffectHost.INVALID_HANDLE)
 	assert_int(host.first(-1, T.ON_HIT)).is_equal(EffectHost.NO_ENTRY)
 	assert_int(host.entry_count()).is_equal(0)
 
