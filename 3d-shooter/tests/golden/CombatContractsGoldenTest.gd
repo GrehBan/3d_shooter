@@ -103,7 +103,8 @@ static func _run(shuffle_seed: int) -> PackedInt64Array:
 			if not chain_opened:
 				chain_opened = true
 				child = contexts.open_child(root)
-				var chain_target: int = enemies[(target % SPAN - 1 + 1) % ENEMIES]
+				var enemy_index: int = target % SPAN - 1  # слот 0 занят игроком
+				var chain_target: int = enemies[(enemy_index + 1) % ENEMIES]
 				var chained: bool = contexts.try_register_hit(child, chain_target)
 				if chained:
 					payloads.push(player, chain_target, CHAIN_DAMAGE, DamagePayload.Element.ELECTRIC,

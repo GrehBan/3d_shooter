@@ -13,7 +13,10 @@
   Здесь вызываются `HitEventQueue.push()` и `MovementAbilities.try_activate()`.
 * **Логический тик, 30 Гц**: `GameLoop` испускает `logic_tick(tick)` на каждом втором
   физическом тике. У `GameLoop` `process_physics_priority = 1000`, поэтому логика идёт после
-  всех физических обработчиков этого тика и видит их события. Подписчики логического тика
+  всех физических обработчиков этого тика и видит их события: попадание raycast-hitscan
+  из `_physics_process` попадает в тот же тик. Сигналы контактов Jolt (`body_entered` и т. п.
+  у снарядов и зон) приходят после шага физики, поэтому логика видит их только в следующем
+  физическом тике. Подписчики логического тика
   вызывают `HitEventQueue.prepare()` → обход → `clear()`, разрешают `AttackContext`, обходят
   `EffectHost`, применяют `DamagePayloadBuffer` к `StatBlock`, вызывают
   `MovementAbilities.regen_energy()`.
@@ -83,7 +86,9 @@
 
 * `mul(a, b)`, `div(a, b)`, `from_int`, `to_int`. Округление всегда к нулю:
   `mul(-1500, 333) = -499`.
-* Диапазоны (assert в debug): `mul` — |a·b| ≤ INT64_MAX; `div` — |a| ≤ ≈9.22·10^12 единиц.
+* Диапазоны (assert в debug); `a`, `b` — сырые значения ×1000: `mul` требует
+  |a·b| ≤ INT64_MAX; `div` требует |a| ≤ INT64_MAX / 1000 ≈ 9.22·10^15 сырых
+  (≈9.22·10^12 целых единиц).
 * Деление на 0 → результат 0 и `push_error`.
 
 ### SeededRng (`core/SeededRng.gd`)

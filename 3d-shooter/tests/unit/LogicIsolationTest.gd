@@ -1,6 +1,7 @@
 extends GdUnitTestSuite
 ## «Логика и визуал независимы» (roadmap M1a): скрипты логики — чистые классы.
-## Каждый скрипт в core/, combat/, effects/ и player/MovementAbilit* должен
+## Каждый скрипт в core/, combat/, effects/ (рекурсивно, с подпапками) и
+## player/MovementAbilit* должен
 ## наследовать RefCounted или Resource. Исключения — только в ALLOWED_NODES,
 ## с причиной; новый Node-класс в логике без записи здесь роняет тест.
 
@@ -15,11 +16,17 @@ const ALLOWED_NODES: Dictionary = {
 }
 
 
+static func _collect_recursive(dir_path: String, paths: PackedStringArray) -> void:
+	for file_name: String in DirAccess.get_files_at(dir_path):
+		if file_name.get_extension() == "gd":
+			paths.append(dir_path.path_join(file_name))
+	for sub_dir: String in DirAccess.get_directories_at(dir_path):
+		_collect_recursive(dir_path.path_join(sub_dir), paths)
+
+
 static func _collect(paths: PackedStringArray) -> PackedStringArray:
 	for dir_path: String in LOGIC_DIRS:
-		for file_name: String in DirAccess.get_files_at(dir_path):
-			if file_name.get_extension() == "gd":
-				paths.append(dir_path.path_join(file_name))
+		_collect_recursive(dir_path, paths)
 	for dir_path: String in LOGIC_FILE_PREFIXES:
 		var prefix: String = LOGIC_FILE_PREFIXES[dir_path]
 		for file_name: String in DirAccess.get_files_at(dir_path):
