@@ -17,7 +17,9 @@ extends RefCounted
 ## Сущность — handle StatBlock (int64), слот = handle % INDEX_SPAN; слот помнит
 ## полный handle владельца. try_activate, revoke и clear_entity по устаревшему
 ## handle отказывают; способности устаревшей сущности, которую не сняли
-## clear_entity, снимаются при grant() новой сущности в том же слоте.
+## clear_entity, снимаются при grant() сущности более нового поколения в том же
+## слоте. grant() по handle более старого поколения, чем у владельца слота,
+## отказывает и не трогает живую сущность (отложенный эффект убитой цели).
 ## Повторный grant() обновляет параметры, но не сбрасывает кулдаун.
 ## Сущности хотя бы с одной способностью лежат в плотном массиве для
 ## regen_energy(); grant/revoke/clear_entity поддерживают его swap-remove.
@@ -66,14 +68,19 @@ func active_count() -> int:
 
 
 ## Выдаёт способность (или обновляет параметры уже выданной, не трогая кулдаун).
-## false, если сущность или вид вне диапазона.
+## false, если сущность или вид вне диапазона либо handle устарел относительно
+## владельца слота.
 func grant(entity: int, kind: MovementAbilityData.Kind, energy_cost: int, cooldown_ticks: int,
 		usable_on_ground: bool, usable_in_air: bool) -> bool:
 	var slot: int = _slot_of(entity)
 	if slot < 0 or kind < 0 or kind >= KIND_COUNT:
 		return false
-	if _slot_host[slot] != entity:
-		if _slot_host[slot] != INVALID_HANDLE:
+	var owner: int = _slot_host[slot]
+	if owner != entity:
+		if owner != INVALID_HANDLE:
+			# Слот занят: очистка только ради более нового поколения.
+			if entity / HandlePool.INDEX_SPAN < owner / HandlePool.INDEX_SPAN:
+				return false
 			_clear_slot(slot)
 		_slot_host[slot] = entity
 	var cell: int = slot * KIND_COUNT + kind

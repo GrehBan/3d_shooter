@@ -126,6 +126,21 @@ func test_stale_entity_abilities_dropped_on_slot_reuse_without_clear() -> void:
 	assert_int(abilities.active_count()).is_equal(1)
 
 
+func test_grant_with_older_generation_does_not_touch_live_entity() -> void:
+	var stats := StatBlock.new(4)
+	var abilities := MovementAbilities.new(4)
+	var dead: int = _spawn(stats, 3000)
+	stats.release(dead)
+	var live: int = _spawn(stats, 3000)  # тот же слот, поколение 1
+	abilities.grant(live, K.DASH, 1000, 0, true, true)
+	# Отложенный эффект убитой сущности (поколение 0) выдаёт ей способность.
+	assert_bool(abilities.grant(dead, K.GRAPPLE, 0, 0, true, true)).is_false()
+	assert_bool(abilities.is_granted(live, K.DASH)).is_true()
+	assert_bool(abilities.is_granted(live, K.GRAPPLE)).is_false()
+	assert_int(abilities.active_count()).is_equal(1)
+	assert_bool(abilities.try_activate(live, K.DASH, 1, false, stats)).is_true()
+
+
 func test_active_list_swap_remove_keeps_other_entities() -> void:
 	var stats := StatBlock.new(8)
 	var abilities := MovementAbilities.new(8, 100)
