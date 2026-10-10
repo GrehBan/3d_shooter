@@ -16,6 +16,13 @@ static func _effect_ids(host: EffectHost, owner: int, trigger: EffectTrigger.Tri
 	return ids
 
 
+func test_trigger_count_matches_enum() -> void:
+	# TRIGGER_COUNT задан литералом: GDScript не считает Trigger.size() константным
+	# выражением. Тест ловит рассинхронизацию при добавлении триггера.
+	assert_int(EffectTrigger.TRIGGER_COUNT).is_equal(EffectTrigger.Trigger.size())
+	assert_int(EffectHost.TRIGGER_COUNT).is_equal(EffectTrigger.Trigger.size())
+
+
 func test_resolution_order_is_phase_priority_slot() -> void:
 	var host := EffectHost.new(4, 16)
 	var owner: int = 1

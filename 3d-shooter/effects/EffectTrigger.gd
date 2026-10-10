@@ -33,4 +33,4 @@ enum Trigger {
 
 enum Phase { PRE, MAIN, POST }
 
-const TRIGGER_COUNT: int = 18
+const TRIGGER_COUNT: int = 18  # = Trigger.size(), проверяется тестом
