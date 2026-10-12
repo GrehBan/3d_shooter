@@ -826,3 +826,27 @@ Source commit ещё не создан; SHA не назначался. Посл�
 выполнит локальный source commit, затем отдельно проверенную запись его фактического
 SHA и STOP по последнему поручению пользователя. Stage/commit/push/PR/merge
 в этом doc-only шаге отсутствуют; пакеты3–5 не начаты.
+
+### Source commit принятого пакета 2 M1 — 2026-10-12
+
+После второго независимого PASS точного итогового 32-file снимка относительно
+`081d9ae627ca62c7ff4a9e833a5310580c488ad0`, включая запись приёмки в четырёх MD,
+координатор создал source commit `499fbc2ec414eb8bcf7b13aa4f3bf5d7d44f1410`
+(`M1: implement mobility and resolve review blockers`) в `codex/m1-mobility`:
+32 files, 2295 insertions, 19 deletions. Предшествующее независимое ревью дало PASS
+для patch SHA256 `d7de84eb3bd55c13de2c37e5186ded86b7544bd1f55b9195c841e2b9bd1a5b17`
+и manifest SHA256 `8ae9ffbbe9b69e9224a52d8cca0f17d75beb765bae5bd5ffddf73ad265c98708`.
+Перед stage сверены branch/HEAD/index и все approved SHA; staged ровно 32 файла,
+cached diff-check0. После commit рабочее дерево чистое; SHA, subject и состав
+commit дополнительно прочитаны исполнителем doc-only записи.
+
+Новая запись фактического SHA в плане, roadmap, журнале и текущем статусе закрытого
+AIR-jump debt ещё НЕ проверена независимым ревьюером. Код/тесты/ресурсы не менялись,
+32 исходных SHA совпали с принятым manifest до записи; Godot ради MD не запускался.
+Doc-only diff, ссылки и whitespace проверяются, снимок относительно `499fbc2`
+фиксируется в `ci-logs/mobility/cooldown-fix/commit-record-review/`.
+После независимого PASS эту запись фиксирует координатор отдельным docs commit,
+затем STOP; повторная запись SHA самого docs commit не требуется.
+Windows all199/199/25suite/mobility30/30 остаётся результатом принятых source bytes;
+Linux/GitHub CI и GUI этой версии не запускались. Пакеты3–5/push/PR/merge не начаты.
+Stage/commit в этом doc-only шаге исполнитель не выполнял.
