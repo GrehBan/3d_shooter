@@ -850,3 +850,59 @@ Doc-only diff, ссылки и whitespace проверяются, снимок �
 Windows all199/199/25suite/mobility30/30 остаётся результатом принятых source bytes;
 Linux/GitHub CI и GUI этой версии не запускались. Пакеты3–5/push/PR/merge не начаты.
 Stage/commit в этом doc-only шаге исполнитель не выполнял.
+
+### Официальный source PASS Архитектора ПО для пакета 2 M1 — 2026-10-13
+
+Архитектор ПО сообщил официальный независимый итог «блокеров не найдено» (PASS)
+для source `499fbc2ec414eb8bcf7b13aa4f3bf5d7d44f1410` в `codex/m1-mobility`
+относительно `081d9ae627ca62c7ff4a9e833a5310580c488ad0`.
+Это новый официальный code verdict, отдельно от внутренних PASS 2026-10-12 и ревью MD;
+предыдущие датированные записи выше сохранены как история. Ревью выполнено чтением
+Git diff, требований и сохранённых cooldown-fix логов. Сам Архитектор Godot, тесты
+и benchmark не запускал; результаты ниже принадлежат сохранённому Windows-прогону.
+
+Все 32 content-файла source сопоставлены с принятым снимком с нормализацией CRLF/LF:
+patch SHA256 `d7de84eb3bd55c13de2c37e5186ded86b7544bd1f55b9195c841e2b9bd1a5b17`,
+manifest SHA256 `8ae9ffbbe9b69e9224a52d8cca0f17d75beb765bae5bd5ffddf73ad265c98708`.
+Runtime/tests совпадают. Точные repo-relative пути сохранённых accepted-артефактов:
+`ci-logs/mobility/cooldown-fix/accepted-review/review-final.patch` и
+`ci-logs/mobility/cooldown-fix/accepted-review/review-final.manifest.json`.
+Логи и артефакты хранятся локально в исходном worktree
+`C:/Users/maxim/.codex/worktrees/m1-mobility/3d_shooter`, исключены из Git;
+в новом docs-only worktree их копий нет. Хеши обоих accepted-артефактов сверены
+при подготовке этой записи. Source → `85d75baa01ba23ef2be0f27a1962ab7dac76e019`
+меняет лишь четыре MD: этот журнал, [follow-ups](follow-ups.md), [план M1](../m1-plan.md)
+и [roadmap](../../roadmap.md); это не новый runtime/test снимок.
+
+Сохранённый Windows Godot 4.7.2 `ci/run_checks.sh all` завершился с exit0:
+import PASS, scripts50/0, gdUnit4 199/199 в25suite, MobilityPhysics30/30,
+cooldown-only PASS. Active3900 ticks (300 warmup +3600 measure): 557.12 м,
+dash30/slide15/double15/landing15/regen1800, objects/nodes/resources/orphans/static
+delta0, dropped0. Synthetic `regress.gd` PASS, checksum3032385286,
+objects/nodes/resources/orphans0, static+248808B≤1МиБ, dropped/config_errors0,
+logic avg723.2/max3826мкс. Точные пути логов:
+`ci-logs/mobility/cooldown-fix/import.log`, `ci-logs/mobility/cooldown-fix/scripts.log`,
+`ci-logs/mobility/cooldown-fix/tests.log`, `ci-logs/mobility/cooldown-fix/regress.log`;
+exit0 сохранён в `ci-logs/mobility/cooldown-fix/all.exit-code.txt`.
+Синтетика не заменяет полноценный M1 CPU benchmark реального конвейера.
+Linux/GitHub CI и GUI этой версии не подтверждены; вся M1 не завершена.
+
+Пакет 2 принят локально, все блокирующие P2 закрыты, AIR-jump debt остаётся закрытым.
+Открыт отдельный неблокирующий [P3](follow-ups.md#p3-точность-int-cap-высоты-падения):
+`res://player/FPSController.gd:313–314` при огромной конечной высоте float округляет
+cap до `922337203685485568` вместо точного int cap `922337203685485580` (−12 мм),
+без переполнения и влияния на текущие Int32 HP/SHIELD при armor `0..100000`.
+Будущее исправление точного int cap отдельной веткой с boundary-test не входит
+в этот docs-only шаг и не отменяет source PASS.
+
+Новая запись официального результата подготовлена в `codex/m1-mobility-official-pass`,
+worktree `m1-mobility-official-pass/3d_shooter`, база `85d75ba`.
+Изменяются ровно четыре MD; они ожидают отдельного независимого архитектурного ревью
+точной итоговой версии. Код/тесты/UID/сцены/контракты/настройки не меняются,
+Godot ради документации не запускается. Во время docs-шага игровые решения пакета 3
+подтверждены архитектором и ратифицированы геймдизайнером; согласование транспорта
+и ёмкостей ещё требует завершения. Следующий шаг — фиксация согласованной игровой
+семантики [пакета 3](../m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий)
+в документах и завершение согласования транспортного контракта/ёмкости до runtime;
+транспортная ёмкость не назначает игровое число дробин.
+Runtime пакетов3–5 не начат; stage/commit/push/PR/merge в этом шаге не выполняются.
