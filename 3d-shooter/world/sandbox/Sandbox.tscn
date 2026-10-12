@@ -1,5 +1,7 @@
 [gd_scene format=3 uid="uid://de71l3jwdfny"]
 
+[ext_resource type="Script" path="res://player/FPSController.gd" id="1_player"]
+
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
 [sub_resource type="Sky" id="Sky_main"]
@@ -15,6 +17,28 @@ size = Vector3(40, 1, 40)
 
 [sub_resource type="BoxMesh" id="BoxMesh_floor"]
 size = Vector3(40, 1, 40)
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.35
+height = 1.8
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall"]
+size = Vector3(8, 3, 0.5)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall"]
+size = Vector3(8, 3, 0.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_slope"]
+size = Vector3(4, 0.5, 6)
+
+[sub_resource type="BoxMesh" id="BoxMesh_slope"]
+size = Vector3(4, 0.5, 6)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_platform"]
+size = Vector3(4, 1.5, 4)
+
+[sub_resource type="BoxMesh" id="BoxMesh_platform"]
+size = Vector3(4, 1.5, 4)
 
 [node name="Sandbox" type="Node3D"]
 
@@ -36,5 +60,49 @@ shape = SubResource("BoxShape3D_floor")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
 mesh = SubResource("BoxMesh_floor")
 
-[node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 3, 8)
+[node name="Wall" type="StaticBody3D" parent="."]
+position = Vector3(0, 1.5, -8)
+collision_layer = 1
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Wall"]
+shape = SubResource("BoxShape3D_wall")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Wall"]
+mesh = SubResource("BoxMesh_wall")
+
+[node name="Slope" type="StaticBody3D" parent="."]
+position = Vector3(8, 0.5, -4)
+rotation = Vector3(0.2617994, 0, 0)
+collision_layer = 1
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Slope"]
+shape = SubResource("BoxShape3D_slope")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Slope"]
+mesh = SubResource("BoxMesh_slope")
+
+[node name="Platform" type="StaticBody3D" parent="."]
+position = Vector3(-8, 0.75, -4)
+collision_layer = 1
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Platform"]
+shape = SubResource("BoxShape3D_platform")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Platform"]
+mesh = SubResource("BoxMesh_platform")
+
+[node name="Player" type="CharacterBody3D" parent="."]
+position = Vector3(0, 0.95, 8)
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="Camera3D" type="Camera3D" parent="Player"]
+position = Vector3(0, 0.65, 0)
+current = true
