@@ -159,18 +159,29 @@ func get_state() -> Dictionary:
 	}
 
 
-## Восстановление из get_state(). false, если снимок не подходит по ёмкости или формату.
+## Восстановление из get_state(). Типы проверяются до присваиваний и приведений.
+## false — снимок отвергнут по ёмкости или формату, состояние не изменено.
 func set_state(state: Dictionary) -> bool:
-	if int(state.get("capacity", -1)) != _capacity:
+	if typeof(state.get("capacity")) != TYPE_INT \
+			or typeof(state.get("free_count")) != TYPE_INT \
+			or typeof(state.get("alive_count")) != TYPE_INT \
+			or typeof(state.get("data")) != TYPE_PACKED_INT32_ARRAY \
+			or typeof(state.get("status")) != TYPE_PACKED_INT64_ARRAY \
+			or typeof(state.get("generation")) != TYPE_PACKED_INT32_ARRAY \
+			or typeof(state.get("alive")) != TYPE_PACKED_BYTE_ARRAY \
+			or typeof(state.get("free")) != TYPE_PACKED_INT32_ARRAY:
+		push_error("StatBlock.set_state: повреждённый снимок")
+		return false
+	if int(state["capacity"]) != _capacity:
 		push_error("StatBlock.set_state: ёмкость снимка не совпадает")
 		return false
-	var data: PackedInt32Array = state.get("data", PackedInt32Array())
-	var status: PackedInt64Array = state.get("status", PackedInt64Array())
-	var generation: PackedInt32Array = state.get("generation", PackedInt32Array())
-	var alive: PackedByteArray = state.get("alive", PackedByteArray())
-	var free: PackedInt32Array = state.get("free", PackedInt32Array())
-	var free_count: int = int(state.get("free_count", -1))
-	var alive_count: int = int(state.get("alive_count", -1))
+	var data: PackedInt32Array = state["data"]
+	var status: PackedInt64Array = state["status"]
+	var generation: PackedInt32Array = state["generation"]
+	var alive: PackedByteArray = state["alive"]
+	var free: PackedInt32Array = state["free"]
+	var free_count: int = int(state["free_count"])
+	var alive_count: int = int(state["alive_count"])
 	if data.size() != _capacity * STAT_COUNT or status.size() != _capacity \
 			or generation.size() != _capacity or alive.size() != _capacity \
 			or free.size() != _capacity or free_count < 0 or free_count > _capacity \

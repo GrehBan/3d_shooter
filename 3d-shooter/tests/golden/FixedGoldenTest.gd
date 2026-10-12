@@ -1,6 +1,7 @@
 extends GdUnitTestSuite
 ## Золотой тест Fixed: эталонный хеш посчитан независимой реализацией на Python
 ## (целые произвольной точности, деление с округлением к нулю).
+## Модель: tests/tools/fixed_ref.py.
 
 const FNV_OFFSET: int = 2166136261
 const FNV_PRIME: int = 16777619

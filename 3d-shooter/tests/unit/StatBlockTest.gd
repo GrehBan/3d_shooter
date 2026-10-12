@@ -94,8 +94,9 @@ func test_state_roundtrip_preserves_entities_and_generations() -> void:
 	sb.set_status(c, 0b101)
 	var state: Dictionary = sb.get_state()
 
-	var restored := StatBlock.new(4)
+	var restored: StatBlock = _populated_target()
 	assert_bool(restored.set_state(state)).is_true()
+	assert_dict(restored.get_state()).is_equal(state)
 	assert_int(restored.get_stat(a, StatBlock.Stat.HP)).is_equal(42_000)
 	assert_int(restored.get_status(c)).is_equal(0b101)
 	assert_bool(restored.is_valid(b)).is_false()
@@ -105,18 +106,40 @@ func test_state_roundtrip_preserves_entities_and_generations() -> void:
 
 
 func test_state_with_wrong_capacity_is_rejected() -> void:
-	var state: Dictionary = StatBlock.new(4).get_state()
-	var other := StatBlock.new(8)
-	await assert_error(func() -> void: other.set_state(state)) \
-		.is_push_error("StatBlock.set_state: ёмкость снимка не совпадает")
+	var state: Dictionary = StatBlock.new(8).get_state()
+	await _corrupted_state_is_rejected(state, "StatBlock.set_state: ёмкость снимка не совпадает")
 
 
-func _corrupted_state_is_rejected(state: Dictionary) -> void:
-	var target := StatBlock.new(4)
-	await assert_error(func() -> void: target.set_state(state)) \
-		.is_push_error("StatBlock.set_state: повреждённый снимок")
-	# Отвергнутый снимок не меняет состояние.
-	assert_int(target.alive_count()).is_equal(0)
+func _populated_target(capacity: int = 4) -> StatBlock:
+	var target := StatBlock.new(capacity)
+	var handles := PackedInt64Array()
+	for index: int in capacity:
+		var handle: int = target.allocate()
+		handles.append(handle)
+		for stat: int in StatBlock.STAT_COUNT:
+			target.set_stat(handle, stat, (index + 1) * 10_000 + stat)
+		target.set_status(handle, (1 << 62) | (1 << (index + 32)))
+	if capacity > 1:
+		target.release(handles[capacity - 1])
+	target.release(handles[0])
+	var reused: int = target.allocate()  # индекс 0 с поколением 1
+	for stat: int in StatBlock.STAT_COUNT:
+		target.set_stat(reused, stat, -20_000 - stat)
+	target.set_status(reused, (1 << 61) | 1)
+	return target
+
+
+func _corrupted_state_is_rejected(state: Dictionary,
+		error_message: String = "StatBlock.set_state: повреждённый снимок",
+		target_capacity: int = 4) -> void:
+	var target: StatBlock = _populated_target(target_capacity)
+	var before: Dictionary = target.get_state()
+	var result: Array[bool] = []
+	await assert_error(func() -> void: result.append(target.set_state(state))) \
+		.is_push_error(error_message)
+	assert_array(result).is_equal([false])
+	# Сравниваем все поля: статы, статусы, поколения, флаги, free-list и счётчики.
+	assert_dict(target.get_state()).is_equal(before)
 
 
 func _sample_state() -> Dictionary:
@@ -124,6 +147,64 @@ func _sample_state() -> Dictionary:
 	sb.allocate()
 	sb.allocate()
 	return sb.get_state()  # индексы 0 и 1 живы, свободны 3 и 2
+
+
+func test_state_with_missing_fields_is_rejected() -> void:
+	for field: String in _sample_state():
+		var state: Dictionary = _sample_state()
+		state.erase(field)
+		await _corrupted_state_is_rejected(state)
+
+
+func test_state_with_null_fields_is_rejected() -> void:
+	for field: String in _sample_state():
+		var state: Dictionary = _sample_state()
+		state[field] = null
+		await _corrupted_state_is_rejected(state)
+
+
+func test_state_with_numeric_strings_is_rejected_without_coercion() -> void:
+	for field: String in ["capacity", "free_count", "alive_count"]:
+		var state: Dictionary = _sample_state()
+		state[field] = str(state[field])  # после int() снимок был бы полностью валиден
+		await _corrupted_state_is_rejected(state)
+
+
+func test_state_with_float_counters_is_rejected_without_coercion() -> void:
+	for field: String in ["capacity", "free_count", "alive_count"]:
+		var state: Dictionary = _sample_state()
+		state[field] = float(state[field])
+		await _corrupted_state_is_rejected(state)
+
+
+func test_state_with_bool_counters_is_rejected_without_coercion() -> void:
+	# true мог бы превратиться в валидное число 1 для каждого поля.
+	for field: String in ["capacity", "free_count", "alive_count"]:
+		var capacity: int = 1 if field == "capacity" else 4
+		var source := StatBlock.new(capacity)
+		var entity_count: int = 3 if field == "free_count" else 1
+		for index: int in entity_count:
+			source.allocate()
+		var state: Dictionary = source.get_state()
+		state[field] = true
+		await _corrupted_state_is_rejected(state, "StatBlock.set_state: повреждённый снимок", capacity)
+
+
+func test_state_with_plain_arrays_is_rejected() -> void:
+	for field: String in ["data", "status", "generation", "alive", "free"]:
+		var state: Dictionary = _sample_state()
+		state[field] = Array(state[field])  # правильные элементы и размер, неверный тип
+		await _corrupted_state_is_rejected(state)
+
+
+func test_state_with_wrong_packed_array_types_is_rejected() -> void:
+	for field: String in ["data", "status", "generation", "alive", "free"]:
+		var state: Dictionary = _sample_state()
+		if field == "status":
+			state[field] = PackedInt32Array(Array(state[field]))
+		else:
+			state[field] = PackedInt64Array(Array(state[field]))
+		await _corrupted_state_is_rejected(state)
 
 
 func test_state_with_duplicate_free_index_is_rejected() -> void:

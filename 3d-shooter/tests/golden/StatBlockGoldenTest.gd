@@ -2,6 +2,7 @@ extends GdUnitTestSuite
 ## Золотой тест StatBlock: сценарий выдачи, освобождения и записи статов,
 ## эталон посчитан независимой моделью на Python. Фиксирует порядок выдачи
 ## индексов, рост поколений и отказ для устаревших handle.
+## Модель: tests/tools/stat_block_ref.py.
 
 const FNV_OFFSET: int = 2166136261
 const FNV_PRIME: int = 16777619

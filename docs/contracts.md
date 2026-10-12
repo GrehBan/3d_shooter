@@ -107,7 +107,13 @@
 * 64-битная маска статусов на сущность.
 * `allocate()` выдаёт индексы с нуля в детерминированном порядке; `release()` повышает
   поколение. При исчерпании ёмкости — `push_error` и `INVALID_HANDLE`.
-* `get_state()` / `set_state()` проверяют согласованность снимка (Zero-Trust).
+* `get_state()` возвращает снимок; `set_state()` проверяет его типы и согласованность
+  (Zero-Trust) до изменения состояния. Все восемь полей обязательны: `capacity`,
+  `free_count`, `alive_count` — строго `int`; `data`, `generation`, `free` —
+  `PackedInt32Array`; `status` — `PackedInt64Array`; `alive` — `PackedByteArray`.
+  Строки, `float`, `bool`, обычные `Array`, `null` и пропущенные поля не приводятся к
+  ожидаемым типам: отказ с `push_error` и `false`, прежнее состояние полностью сохранено.
+  При верных типах проверяются ёмкость, размеры, счётчики, free-list, флаги и поколения.
 
 ### DamagePayload и DamagePayloadBuffer (`combat/`)
 
@@ -187,8 +193,13 @@
 
 ## 3. Независимость логики и визуала
 
-* Визуал видит только handle сущностей (через `Damageable`) и события (`EventBus`, сигналы
-  узлов для локальной связи UI). Он не пишет в `StatBlock` и не вызывает логику урона.
+* Чистая логика боя хранит состояние и рассчитывает урон; физический адаптер передаёт ей
+  handle сущностей (через `Damageable`) и события, не рассчитывая урон самостоятельно.
+  Физический FPS-контроллер вправе вызывать существующий `MovementAbilities.try_activate()`
+  из физического тика: этот API изменяет `ENERGY` вне детерминированного контура, как описано
+  выше. Это не разрешает физическому адаптеру напрямую менять HP или рассчитывать урон.
+* Визуал в `_process` получает handle и события (`EventBus`, сигналы узлов для локальной
+  связи UI), не пишет в `StatBlock` и не вызывает логику урона.
 * Логика не держит ссылок на узлы сцены и не наследует `Node`; `LogicIsolationTest` роняет CI
   при новом Node-классе в `core/`, `combat/`, `effects/` или `player/MovementAbilit*` без
   записи в allowlist.
@@ -200,6 +211,7 @@
 ## 4. Эталонные модели
 
 Эталоны golden-тестов считаются независимыми Python-моделями в `3d-shooter/tests/tools/`
-(`acp_ref.py`, `effect_host_ref.py`, `movement_ref.py`, `combat_contracts_ref.py`), запуск —
-`python 3d-shooter/tests/tools/<модель>.py` из корня репозитория. Модели для более ранних
-golden-тестов ещё не в репозитории — см. `docs/notes/follow-ups.md`.
+(`seeded_rng_ref.py`, `fixed_ref.py`, `stat_block_ref.py`, `hit_event_queue_ref.py`,
+`acp_ref.py`, `effect_host_ref.py`, `movement_ref.py`, `combat_contracts_ref.py`), запуск —
+`python 3d-shooter/tests/tools/<модель>.py` из корня репозитория. Пути моделей указаны
+в шапках соответствующих golden-тестов.
