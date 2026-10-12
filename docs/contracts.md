@@ -67,8 +67,9 @@
 
 Переполнение очередей и пулов — ошибка подбора ёмкости, а не штатный режим:
 
-* `push_error` пишется один раз до ближайшего `clear()` / `reset_counters()`; отказ
-  детерминированный, событие или запись отбрасывается;
+* `push_error` пишется один раз до ближайшего `clear()` / `reset_counters()`;
+  для `DamagePayloadBuffer` сброс уведомления также выполняет `reset_dropped_count()`.
+  Отказ детерминированный, событие или запись отбрасывается;
 * счётчик растёт на каждый отказ: `HitEventQueue.dropped_count()`,
   `DamagePayloadBuffer.dropped_count()`, `AttackContextPool.hit_set_overflows` и
   `capacity_refusals`, `EffectHost.capacity_refusals`;
@@ -122,6 +123,13 @@
 * `DamagePayloadBuffer` — кольцевой SoA-буфер записей урона. `source`, `target`,
   `attack_context`, `amount`, `tags` — Int64.
 * FIFO: `push()` в хвост, `front_slot()` / `slot_at(i)` / `pop_front()` с головы.
+* Переполнение: `push()` возвращает `INVALID_SLOT`, не меняет очередь и повышает
+  `dropped_count()` на каждый отказ. `push_error` пишется ровно один раз до ближайшего
+  `clear()` или `reset_dropped_count()`; успешный `push()` и `pop_front()` уведомление
+  не сбрасывают, даже если очередь стала пустой.
+* `clear()` очищает очередь и сбрасывает уведомление, сохраняя `dropped_count()`.
+  `reset_dropped_count()` обнуляет счётчик и сбрасывает уведомление, сохраняя очередь,
+  её голову, порядок FIFO и поля записей.
 * **Аксессоры по слоту не проверяют его валидность**: чтение после `pop_front()` вернёт старые
   данные без ошибки. Обходить только через `front_slot()` или `slot_at(i)` для `i < count()`.
 

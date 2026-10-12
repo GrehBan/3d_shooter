@@ -7,8 +7,9 @@ extends RefCounted
 ## Слот действителен, пока запись не снята pop_front() или clear().
 ##
 ## Переполнение детерминированно: push() возвращает INVALID_SLOT, запись
-## отбрасывается, dropped_count() растёт. Ошибка в лог не пишется, чтобы шторм
-## эффектов не спамил; счётчик проверяет бенчмарк regress.gd (в норме 0).
+## отбрасывается, dropped_count() растёт при каждом отказе. push_error пишется
+## один раз до clear() или reset_dropped_count(); счётчик проверяет regress.gd
+## (в норме 0). clear() сохраняет счётчик, reset_dropped_count() сохраняет очередь.
 ## Ни один метод не выделяет память после конструктора.
 
 const INVALID_SLOT: int = -1
@@ -18,6 +19,7 @@ var _capacity: int = 0
 var _head: int = 0
 var _count: int = 0
 var _dropped: int = 0
+var _overflow_reported: bool = false
 
 var _source: PackedInt64Array = PackedInt64Array()
 var _target: PackedInt64Array = PackedInt64Array()
@@ -61,6 +63,7 @@ func dropped_count() -> int:
 
 func reset_dropped_count() -> void:
 	_dropped = 0
+	_overflow_reported = false
 
 
 ## Добавляет запись в фазе BASE. Возвращает слот или INVALID_SLOT при переполнении.
@@ -68,6 +71,9 @@ func push(source: int, target: int, amount: int, element: DamagePayload.Element,
 		tags: int, flags: int, attack_context: int) -> int:
 	if _count == _capacity:
 		_dropped += 1
+		if not _overflow_reported:
+			_overflow_reported = true
+			push_error("DamagePayloadBuffer: переполнение, записи отбрасываются")
 		return INVALID_SLOT
 	var slot: int = (_head + _count) % _capacity
 	_count += 1
@@ -106,6 +112,7 @@ func pop_front() -> bool:
 func clear() -> void:
 	_head = 0
 	_count = 0
+	_overflow_reported = false
 
 
 func get_source(slot: int) -> int:
