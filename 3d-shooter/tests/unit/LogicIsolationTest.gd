@@ -1,18 +1,19 @@
 extends GdUnitTestSuite
 ## «Логика и визуал независимы» (roadmap M1a): скрипты логики — чистые классы.
 ## Каждый скрипт в core/, combat/, effects/ (рекурсивно, с подпапками) и
-## player/MovementAbilit* должен
+## player/ должен
 ## наследовать RefCounted или Resource. Исключения — только в ALLOWED_NODES,
 ## с причиной; новый Node-класс в логике без записи здесь роняет тест.
 
 const LOGIC_DIRS: PackedStringArray = ["res://core", "res://combat", "res://effects"]
-const LOGIC_FILE_PREFIXES: Dictionary = {"res://player": "MovementAbilit"}
+const LOGIC_FILE_PREFIXES: Dictionary = {"res://player": ""}
 const ALLOWED_BASES: PackedStringArray = ["RefCounted", "Resource"]
 const ALLOWED_NODES: Dictionary = {
 	# Autoload: центральный цикл, принимает _physics_process движка; логики не держит.
 	"res://core/GameLoop.gd": "autoload, тонкая обёртка над LogicClock",
 	# Autoload: шина глобальных сигналов забега и комнат; сигналы требуют Object.
 	"res://core/EventBus.gd": "autoload, только сигналы переходов",
+	"res://player/FPSController.gd": "CharacterBody3D, физический адаптер и ввод M1",
 }
 
 

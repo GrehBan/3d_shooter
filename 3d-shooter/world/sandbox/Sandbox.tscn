@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://de71l3jwdfny"]
 
 [ext_resource type="Script" path="res://player/FPSController.gd" id="1_player"]
+[ext_resource type="Script" path="res://world/sandbox/Sandbox.gd" id="2_root"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
@@ -41,6 +42,7 @@ size = Vector3(4, 1.5, 4)
 size = Vector3(4, 1.5, 4)
 
 [node name="Sandbox" type="Node3D"]
+script = ExtResource("2_root")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")
