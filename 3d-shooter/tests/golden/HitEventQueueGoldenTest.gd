@@ -3,6 +3,7 @@ extends GdUnitTestSuite
 ## поколений, NO_HANDLE и отрицательными payload вставляются в обратном порядке;
 ## эталонный хеш упорядоченной последовательности посчитан на Python
 ## сортировкой по каноническому ключу очереди (префикс, затем полные поля).
+## Модель: tests/tools/hit_event_queue_ref.py.
 
 const FNV_OFFSET: int = 2166136261
 const FNV_PRIME: int = 16777619
