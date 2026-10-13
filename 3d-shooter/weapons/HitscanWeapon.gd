@@ -2,6 +2,8 @@ class_name HitscanWeapon
 extends Node3D
 ## Physics/input adapter. Reused RayCast3D avoids intersect_ray's temporary Dictionary.
 
+signal shot_presented
+
 @export var hardware_input_enabled: bool = true
 var state: WeaponState = WeaponState.new()
 var traces_cast: int = 0
@@ -12,6 +14,14 @@ var _endpoints: PackedVector3Array = PackedVector3Array()
 var _pellets: int = 0
 var _bound: bool = false
 var _focused: bool = true
+var _collided: PackedByteArray = PackedByteArray()
+var _points: PackedVector3Array = PackedVector3Array()
+var _normals: PackedVector3Array = PackedVector3Array()
+var _visual_active: bool = false
+var _visual_source: int = ShotBatch.INVALID
+var _visual_epoch: int = ShotBatch.INVALID
+var _visual_sequence: int = ShotBatch.INVALID
+var _visual_cooldown: int = 0
 
 
 func _ready() -> void:
@@ -29,8 +39,12 @@ func initialize(data: WeaponData, stats: StatBlock, batch: ShotBatch, source: in
 	_stats = stats
 	_batch = batch
 	_pellets = data.pellet_count
+	_visual_cooldown = data.cooldown_ticks
 	_rays.resize(batch.trace_capacity())
 	_endpoints.resize(batch.trace_capacity())
+	_collided.resize(batch.trace_capacity())
+	_points.resize(batch.trace_capacity())
+	_normals.resize(batch.trace_capacity())
 	var distance: float = float(data.range_mm) / 1000.0
 	var radius: float = tan(deg_to_rad(float(data.spread_millidegrees) / 1000.0))
 	for index: int in _rays.size():
@@ -94,10 +108,74 @@ func _physics_process(_delta: float) -> void:
 		var ray: RayCast3D = _rays[index]
 		ray.target_position = local_aim * _endpoints[index]
 		ray.force_raycast_update()
+		_collided[index] = 1 if ray.is_colliding() else 0
+		_points[index] = ray.get_collision_point() if _collided[index] != 0 else Vector3.ZERO
+		_normals[index] = ray.get_collision_normal() if _collided[index] != 0 else Vector3.ZERO
 		_batch.write_trace(ticket, index, Damageable.handle_of(ray.get_collider()))
 		traces_cast += 1
 	var published: bool = _batch.publish(ticket)
-	assert(published, "HitscanWeapon: complete reservation must publish")
+	if not published:
+		_batch.abort(ticket)
+		_batch.reject_configuration()
+		return
+	if published:
+		_visual_source = state.source
+		_visual_epoch = _batch.epoch
+		_visual_sequence = _batch.sequence_for_ticket(ticket)
+		_visual_active = true
+		shot_presented.emit()
+		_visual_active = false
+		_visual_source = ShotBatch.INVALID
+		_visual_epoch = ShotBatch.INVALID
+		_visual_sequence = ShotBatch.INVALID
+
+
+func is_initialized() -> bool:
+	return _bound
+
+
+func visual_burst_limit() -> int:
+	return _batch.shot_capacity() if _bound else 0
+
+
+func visual_stride_limit() -> int:
+	return _batch.trace_capacity() if _bound else 0
+
+
+func visual_cooldown_ticks() -> int:
+	return _visual_cooldown
+
+
+func has_visual_snapshot() -> bool:
+	return _visual_active
+
+
+func visual_source() -> int:
+	return _visual_source if _visual_active else ShotBatch.INVALID
+
+
+func visual_epoch() -> int:
+	return _visual_epoch if _visual_active else ShotBatch.INVALID
+
+
+func visual_sequence() -> int:
+	return _visual_sequence if _visual_active else ShotBatch.INVALID
+
+
+func visual_trace_count() -> int:
+	return _pellets if _visual_active else 0
+
+
+func visual_collided(index: int) -> bool:
+	return _visual_active and index >= 0 and index < _pellets and _collided[index] != 0
+
+
+func visual_point(index: int) -> Vector3:
+	return _points[index] if visual_collided(index) else Vector3.ZERO
+
+
+func visual_normal(index: int) -> Vector3:
+	return _normals[index] if visual_collided(index) else Vector3.ZERO
 
 
 func _has_mouse_capture() -> bool:

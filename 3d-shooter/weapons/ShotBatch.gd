@@ -119,6 +119,12 @@ func publish(ticket: int) -> bool:
 	return true
 
 
+## Read only while a published ticket is still retained, before consume_prepared.
+func sequence_for_ticket(ticket: int) -> int:
+	var slot: int = _find(ticket)
+	return INVALID if slot < 0 or _state[slot] != 2 else _sequence[slot]
+
+
 func abort(ticket: int) -> bool:
 	var slot: int = _find(ticket)
 	if slot < 0 or _state[slot] != 1:

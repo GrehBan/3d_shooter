@@ -18,7 +18,7 @@ The original audited source heads are:
 | [#9](https://github.com/GrehBan/3d_shooter/pull/9) | `4802c805017b7593a4f1e37d2d1d9b83ee1743f8` | Fresh focused 7-file overflow delta PASS | Linux/Windows SUCCESS, [38194634272](https://github.com/GrehBan/3d_shooter/actions/runs/38194634272) |
 | [#10](https://github.com/GrehBan/3d_shooter/pull/10) | `85d75baa01ba23ef2be0f27a1962ab7dac76e019` | Prior full 32-file/metadata PASS plus fresh source audit PASS | Linux/Windows SUCCESS, [38285534384](https://github.com/GrehBan/3d_shooter/actions/runs/38285534384) |
 | [#11](https://github.com/GrehBan/3d_shooter/pull/11) | `d9f1a53175fe32176fac72df195eda27ee18a129` | Full 36-file shotgun PASS and closing 6-MD PASS | Linux/Windows SUCCESS, [38424601880](https://github.com/GrehBan/3d_shooter/actions/runs/38424601880) |
-| [#12](https://github.com/GrehBan/3d_shooter/pull/12) | `6a81bdc50cc95c3c0c10d2398ae319971415f8d1` | Exact 23-file package 4 architecture/QA PASS and closing 6-MD PASS | Published; no final CI verdict recorded here |
+| [#12](https://github.com/GrehBan/3d_shooter/pull/12) | `6a81bdc50cc95c3c0c10d2398ae319971415f8d1` | Exact 23-file package 4 architecture/QA PASS and closing 6-MD PASS | Linux/Windows SUCCESS, [38464462181](https://github.com/GrehBan/3d_shooter/actions/runs/38464462181); not integration-HEAD CI |
 
 Fresh independent source audit covered #8-#11; #12 had separate exact final review.
 Local subagent PASS is not GitHub approval; draft-skipped automated review is not
@@ -62,5 +62,17 @@ PR #10 was squash-merged to master `23677e7fae434e656651b08cb981968329e905ae`.
 Original #11 HEAD received an ordinary merge of that master. Individual conflicts
 in five MD and four runtime/test files were resolved to the advanced accepted
 shotgun versions; inherited integration facts from #9/#10 were preserved.
-All non-MD blobs match original #11 HEAD exactly. New integration review is waived,
-not passed; publication and fresh required CI are pending. #11/#12 are not merged.
+All non-MD blobs match original #11 HEAD exactly. New integration review was waived,
+not passed. The coordinator published HEAD `fefbd9047b869a44ffa71fe0b85089d0f6431db1`;
+required Linux/Windows checks succeeded ([run38466505413](https://github.com/GrehBan/3d_shooter/actions/runs/38466505413)).
+PR #11 was squash-merged to master `da9ee56ed998d31c03c773ce5846291035beb89f`.
+
+## PR 12: Integration Prepared
+
+Original #12 HEAD received an ordinary merge of that master. Seven runtime/test
+and six MD conflicts were individually restored to accepted package 4 versions,
+preserving every incoming integration entry. All non-MD blobs match original #12
+HEAD exactly. Only current-status clarification and integration metadata are new.
+Godot was not rerun; further integration review is explicitly waived, not passed.
+PR #12 awaits publication and fresh required CI of the updated HEAD; it is not
+merged. Package 4 is locally accepted, but package 5 and overall M1 remain open.

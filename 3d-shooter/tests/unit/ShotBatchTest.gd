@@ -1,6 +1,22 @@
 extends GdUnitTestSuite
 
 
+func test_published_ticket_sequence_getter_does_not_expose_pending_or_consumed_slot() -> void:
+	var batch := ShotBatch.new(4, 8, 4)
+	var ticket: int = batch.reserve(40000 * 65536, 1, 6000)
+	assert_int(batch.sequence_for_ticket(ticket)).is_equal(-1)
+	batch.write_trace(ticket, 0, -1)
+	assert_bool(batch.publish(ticket)).is_true()
+	assert_int(batch.sequence_for_ticket(ticket)).is_equal(0)
+	assert_int(batch.prepare()).is_equal(1)
+	batch.consume_prepared()
+	assert_int(batch.sequence_for_ticket(ticket)).is_equal(-1)
+	var next: int = batch.reserve(40000 * 65536, 1, 6000)
+	batch.abort(next)
+	assert_int(batch.sequence_for_ticket(next)).is_equal(-1)
+	assert_int(batch.sequence_for_ticket(ticket)).is_equal(-1)
+
+
 func test_atomic_publication_indices_abort_and_tail() -> void:
 	var batch := ShotBatch.new(2, 9, 4)
 	var ticket: int = batch.reserve(1, 3, 6000)

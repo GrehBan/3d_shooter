@@ -1,9 +1,10 @@
 # Дизайн-документ (GDD) и Архитектурный манифест, версия 0.2
 
-Актуальная интеграция 2026-10-13: PR #8–#10 слиты; #11 готовится к публикации нового
-HEAD/fresh required CI, #12 не слит. Пакет4 принят локально в отдельной ветке,
-пакет5 и общая M1 не завершены. Publication/review статусы ниже относятся к исходным
-снимкам; текущие факты — [журнал интеграции](docs/notes/pr-integration-log.md).
+Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
+опубликован в #12 (original `6a81bdc`, required CI SUCCESS run38464462181).
+Обновление #12 ожидает публикации/fresh required CI; новые reviews отменены
+пользователем. Ниже прежние draft/pending статусы — история исходных версий.
+Пакет5/общая M1 не завершены; [факты интеграции](docs/notes/pr-integration-log.md).
 
 **Проект:** Rogue Calibre
 **Движок:** Godot 4.7
@@ -102,16 +103,37 @@ Apply/PostHit одной дробины полностью завершаетс�
 targets и mesh дробовика с прицелом. На 2026-10-13 runtime пакета 3 принят локально:
 независимый full-diff review `b73a4be` → `9a4fead` и QA дали PASS, обязательные
 Linux/Windows CI точного `9a4feade15e98d6c870f89163e659572b7ecb9a0` — SUCCESS.
-Пользователь возобновил работу по плану; новая запись приёмки ожидает отдельного
-документационного ревью перед пакетом 4. PR #11 OPEN/DRAFT, merge не выполнялся.
+Closing docs пакета3 получили отдельный независимый PASS и опубликованы в
+`d9f1a53` с mandatory Linux/Windows SUCCESS (run38424601880).
+PR #11 OPEN/DRAFT, merge не выполнялся.
 Сохранённый Windows all: exit0,230/230 tests, synthetic3032385286 PASS; runtime-проверки
-в этом docs-only шаге не повторялись. VFX pools пакета 4, реальные enemy/effects storms,
+в closing-docs шаге не повторялись. VFX pools пакета4 приняты локально после
+независимых архитектурного и QA PASS; реальные enemy/effects storms,
 ручные OS mouse/плавность/60 FPS и приёмка всей M1 остаются впереди.
 Транспорт ShotBatch, жизненный цикл и ёмкости описаны в
 [контракте пакета 3](docs/contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3);
 порядок приёмки и проверки — в [плане M1](docs/m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий).
 Пакет 3 использует существующие пулы/AttackContext и минимальный resolver;
 полный M2 EffectRunner, карточки и элементы остаются за пределами M1.
+
+### Назначенный визуальный пакет M1 — 2026-10-13
+
+В `codex/m1-visual-pools` от `d9f1a53` реализованы локально только визуальные пулы
+существующего shotgun: холодная muzzle/contact вспышка и отдельный тёмный
+surface mark настоящим Decal. Lifetime3/6/180physics, размеры0.16/0.08/0.14м,
+projection depth0.04м утверждены координатором, игровой баланс не меняется.
+Contact presentation следует физической геометрии независимо NO_HANDLE/dead/stale;
+miss только muzzle. Capacities5/40/80 и правила overflow/reset —
+[контракт пакета4](docs/contracts.md#8-m1-presentation-pools-пакет-4).
+Final Windows all: import PASS, scripts64/0,249/249 tests в32suites;
+active120/960/960 с2040reuse/expiry, zero deltas/config/dropped и
+synthetic3032385286 PASS. Все boundary tests входят в итоговый all.
+Graphical Forward+/D3D12 corrected interpolationOFF live proof прошёл (RTX4050,
+1280x720, live1/8/8 и displayed muzzle pose error0). Независимые архитектурное и QA
+final-diff review дали PASS для23file snapshot; source
+`ff26428d51c024ad693c916982738d96fba4096d` принят локально и закоммичен.
+PR/CI/merge этой версии не выполнены; новая docs-only запись ожидает отдельного ревью.
+Пакет5, enemy/effectstorm budget и ручная OS mouse/плавность/60FPS не подтверждены.
 
 ---
 

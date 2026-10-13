@@ -61,3 +61,20 @@ func test_one_subscription_resolves_shots_before_landing_then_regen() -> void:
 	_scene.call(&"_on_logic_tick", GameLoop.get_logic_tick())
 	assert_int(mobility.stats.get_stat(player, StatBlock.Stat.ENERGY)).is_equal(50)
 	assert_int(resolver.resolved_shots).is_equal(1)
+
+
+func test_invalid_visual_disables_room_before_stores_binding_or_subscription() -> void:
+	_scene = SANDBOX.instantiate() as Node3D
+	var data := ShotVisualData.new()
+	data.mark_capacity = 79
+	_scene.set(&"visual_data", data)
+	(_scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
+	var subscribers: int = GameLoop.logic_tick.get_connections().size()
+	assert_error(func() -> void: add_child(_scene)).is_push_error("Sandbox: invalid visual preset or room capacity")
+	assert_int(_scene.process_mode).is_equal(Node.PROCESS_MODE_DISABLED)
+	assert_int(GameLoop.logic_tick.get_connections().size()).is_equal(subscribers)
+	assert_object(_scene.get(&"mobility")).is_null()
+	assert_object(_scene.get(&"shots")).is_null()
+	assert_object(_scene.get(&"resolver")).is_null()
+	assert_object(_scene.get(&"visuals")).is_null()
+	assert_bool((_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).is_initialized()).is_false()

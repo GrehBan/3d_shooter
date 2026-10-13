@@ -1,9 +1,10 @@
 # План разработки
 
-Актуальная интеграция 2026-10-13: PR #8–#10 слиты; #11 ожидает публикации нового HEAD
-и fresh required CI, #12 не слит. Пакет4 принят отдельно локально, пакет5/общая M1
-не завершены. Ниже publication/review статусы исходных версий сохранены как история;
-текущее состояние — [журнал интеграции](docs/notes/pr-integration-log.md).
+Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
+опубликован в #12 (original `6a81bdc`, required CI SUCCESS run38464462181).
+Обновление #12 ожидает публикации/fresh required CI; новые reviews отменены
+пользователем. Ниже прежние draft/pending статусы — история исходных версий.
+Пакет5/общая M1 не завершены; [факты интеграции](docs/notes/pr-integration-log.md).
 
 Сроков нет, поэтому вехи заданы не датами, а строгими техническими и продуктовыми критериями готовности. **Работа начинается с нуля.** Разработка ведется с применением «четырехтактного цикла» (Разработка → Валидация → Самокритика → Коммит). Технический долг приравнивается к инциденту и блокирует переход к следующей вехе. Любая фича, нарушающая лимиты производительности (Scope Creep), безжалостно отклоняется Product Owner-ом.
 
@@ -226,6 +227,22 @@ HEAD `9a4feade15e98d6c870f89163e659572b7ecb9a0` SUCCESS
 PR #11 OPEN/DRAFT, зависимости #8/#9/#10 не слиты; merge не выполнялся.
 В этом docs-only шаге runtime-проверки не повторялись, CI результата будущего HEAD
 нет. Точные review/логи/ограничения — [журнал приёмки](docs/notes/work-log.md#возобновление-работы-и-локальная-приёмка-runtime-пакета-3--2026-10-13).
+
+*Пакет4 назначен 2026-10-13:* после приёмки closing docs пакета3 база `d9f1a53`
+имеет mandatory Linux/Windows SUCCESS (run38424601880). В `codex/m1-visual-pools`
+единственный writer реализовал actual shotgun flashes/Decal, immutable preset,
+bounded pools5/40/80 и physical snapshots без изменения pure damage/goldens.
+Final Windows all: import PASS, scripts64/0,249/249 tests в32suites;
+active120muzzle/960impact/960marks,2040reuse/expiry,
+object/node/resource/orphan/static delta0, config/dropped0, synthetic3032385286 PASS.
+Corrected interpolationOFF native Forward+/D3D12 live proof
+прошёл на RTX4050LaptopGPU1280x720: active1/8/8, displayed pose error0, floor/wall
+marks и reset проверены. Независимые архитектурное и QA final-diff review23files PASS;
+source `ff26428d51c024ad693c916982738d96fba4096d` принят локально и закоммичен.
+Новая docs-only запись ожидает отдельного ревью; publication/CI/merge этой версии
+отсутствуют. Вся M1 и пакет5 не завершены.
+Details — [план](docs/m1-plan.md#4-пулы-используемых-vfx-и-декалей),
+[журнал](docs/notes/work-log.md#2026-10-13--назначение-визуальных-пулов-m1).
 
 * FPS-контроллер как машина состояний.
 * **Разделение тиков (Tick vs Frame):** Передвижение, физика и hitscan — в физическом тике 60 Гц с интерполяцией. Таймеры способностей и боевая логика — в логическом тике 30 Гц. Визуальная часть (покачивание камеры, интерполяция оружия) — в Frame (`_process`).

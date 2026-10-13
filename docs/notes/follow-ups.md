@@ -1,9 +1,10 @@
 # Отложенные доработки (follow-up)
 
-Актуальная интеграция 2026-10-13: PR #8–#10 слиты; обновление #11 ожидает публикации
-и fresh required CI, #12 ещё не слит. Пакет4 принят локально в отдельной ветке,
-пакет5/ручные input/плавность/FPS gates открыты. Ниже статусы source-review и draft
-сохраняются как история; текущие факты — [журнал интеграции](pr-integration-log.md).
+Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
+опубликован в #12 (original `6a81bdc`, required CI SUCCESS run38464462181).
+Обновление #12 ожидает публикации/fresh required CI; новые reviews отменены
+пользователем. Ниже прежние draft/pending статусы — история исходных версий.
+Пакет5/ручные input/плавность/FPS gates открыты; [факты интеграции](pr-integration-log.md).
 
 Небольшие известные долги, которые не вошли в текущий шаг. Каждый пункт закрывается
 отдельным PR с тестом.
@@ -38,16 +39,31 @@ boundary-test. Исправление кода в текущий шаг доку
 Пакет3 в `codex/m1-current-plan` (2026-10-13) добавляет минимальные physics rays/shot
 resolver и активный zero-allocation test. Native rendering smoke подтверждает видимые
 оружие/цели/прицел; ручная проверка OS mouse, плавности и60FPS ещё требуется при приёмке
-M1. VFX pools и общая интеграционная приёмка остаются работой пакетов4/5; real-combat7ms
+M1. VFX pools пакета4 приняты локально после независимых архитектурного и QA PASS;
+общая интеграционная приёмка остаётся работой пакета5; real-combat7ms
 с40enemies/effect storms относится к M3. Эти gates не доказаны shotgun тестом.
 На 2026-10-13 итоговый independent
 full-diff review `b73a4be` → `9a4fead` и QA дали PASS без блокеров, runtime пакета3 принят
-локально. Обязательные Linux/Windows CI точного `9a4feade15e98d6c870f89163e659572b7ecb9a0`
+локально. Closing docs также получили независимый PASS. Обязательные Linux/Windows CI
+точного опубликованного HEAD `d9f1a53175fe32176fac72df195eda27ee18a129`
 завершились SUCCESS; PR #11 OPEN/DRAFT, зависимости #8/#9/#10 не слиты.
-Пользователь возобновил работу по плану; текущая запись приёмки ожидает независимого
-документационного ревью перед пакетом4. Windows all exit0 (230/230 tests,
-synthetic3032385286 PASS) сохранён; runtime-проверки в этом docs-only шаге не повторялись.
+Windows all пакета3 exit0 (230/230 tests,synthetic3032385286 PASS) сохранён;
+closing-docs шаг runtime-проверки не повторял. Результаты runtime пакета4 ниже.
 Подробности — [журнал](work-log.md#возобновление-работы-и-локальная-приёмка-runtime-пакета-3--2026-10-13).
+
+## Проверки визуальных пулов M1 — 2026-10-13
+
+Пакет4 реализован локально в `codex/m1-visual-pools` от принятой базы `d9f1a53`.
+Final Windows all: import PASS, scripts64/0,249/249 tests в32suites;
+active300+3600physics:120muzzle/960impact/960marks,2040reuse/expiry,
+zero monitor deltas/config/dropped; synthetic3032385286 PASS.
+Corrected interpolationOFF native Forward+/D3D12 live/moving-camera proof прошёл
+на RTX4050,1280x720. Независимые final-diff архитектурное и QA-ревью дали PASS;
+source `ff26428d51c024ad693c916982738d96fba4096d` принят локально и закоммичен.
+Новая docs-only запись ожидает отдельного ревью; PR/CI/merge пакета4 ещё нет. Пакет5 остаётся
+отдельной общей проверкой integration; ручные OS mouse/плавность/60FPS и real-combat
+7ms с40enemies/effect storms не подтверждены этими проверками.
+Последующие доказательства — [журнал](work-log.md#2026-10-13--назначение-визуальных-пулов-m1).
 
 ## История локально закрытых долгов
 

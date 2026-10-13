@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://player/FPSController.gd" id="1_player"]
 [ext_resource type="Script" path="res://world/sandbox/Sandbox.gd" id="2_root"]
 [ext_resource type="Script" path="res://weapons/HitscanWeapon.gd" id="3_weapon"]
+[ext_resource type="Script" path="res://visuals/ShotVisualPool.gd" id="4_visual"]
 
 [sub_resource type="StandardMaterial3D" id="Material_target"]
 albedo_color = Color(0.8, 0.12, 0.16, 1)
@@ -70,6 +71,9 @@ size = Vector3(4, 1.5, 4)
 
 [node name="Sandbox" type="Node3D"]
 script = ExtResource("2_root")
+
+[node name="ShotVisualPool" type="Node3D" parent="."]
+script = ExtResource("4_visual")
 
 [node name="Reticle" type="CanvasLayer" parent="."]
 
@@ -183,12 +187,17 @@ script = ExtResource("3_weapon")
 position = Vector3(0.27, -0.24, -0.5)
 mesh = SubResource("Mesh_receiver")
 cast_shadow = 0
+layers = 2
 
 [node name="Barrel" type="MeshInstance3D" parent="Player/Camera3D/HitscanWeapon"]
 position = Vector3(0.27, -0.2, -0.9)
 rotation = Vector3(1.5707963, 0, 0)
 mesh = SubResource("Mesh_barrel")
 cast_shadow = 0
+layers = 2
+
+[node name="MuzzleSocket" type="Node3D" parent="Player/Camera3D/HitscanWeapon"]
+position = Vector3(0.27, -0.2, -1.2)
 
 [node name="Targets" type="Node3D" parent="."]
 
