@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MovementAbilityData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://player/MovementAbilityData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+kind = 2
+energy_cost = 500
+cooldown_ticks = 6
+usable_on_ground = true
+usable_in_air = false

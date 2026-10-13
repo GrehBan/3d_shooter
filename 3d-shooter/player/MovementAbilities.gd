@@ -167,6 +167,19 @@ func regen_energy(stats: StatBlock) -> void:
 					stats.get_stat(entity, StatBlock.Stat.MAX_ENERGY))
 
 
+## Explicit room clock transfer to origin 0. Caller supplies exact old logical time,
+## including physics activations before the first logic subscriber invocation.
+## Preserves grants, costs and energy; active cooldown keeps its remaining duration.
+func rebase_clock(old_now_tick: int) -> void:
+	assert(old_now_tick >= 0, "MovementAbilities.rebase_clock: negative old tick")
+	for i: int in _active_count:
+		var slot: int = _active[i] % HandlePool.INDEX_SPAN
+		for kind: int in KIND_COUNT:
+			var cell: int = slot * KIND_COUNT + kind
+			if _granted[cell] == 1:
+				_ready_tick[cell] = maxi(_ready_tick[cell] - old_now_tick, 0)
+
+
 func _slot_of(entity: int) -> int:
 	if entity < 0:
 		return -1

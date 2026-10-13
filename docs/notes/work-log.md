@@ -4,6 +4,20 @@
 открытые долги — в [follow-ups.md](follow-ups.md), гарантии API — в [contracts.md](../contracts.md).
 Локальная проверка и независимое ревью не означают публикацию, прохождение GitHub CI или слияние.
 
+## 2026-10-13 — интеграция PR #10 после слияния #9
+
+Координатор подтвердил required Linux/Windows SUCCESS HEAD #9
+`a918115ebd3b6c718c3bf2c1577df88800935e3f` (run38465077469) и squash merge:
+`master` — `1d9f9aa4ba1031af7d12bbc50cd4f78f5b0fdd27`.
+Новое прямое поручение пользователя отменило дальнейшие integration-review cycles
+для #10–#12; это исключение не является новым PASS и не отменяет обязательный CI.
+В отдельном checkout original #10 `85d75baa01ba23ef2be0f27a1962ab7dac76e019`
+подготовлен ordinary merge master; четыре MD-конфликта разрешены индивидуально,
+advanced mobility history/contracts и журнал/запись интеграции #9 сохранены.
+Runtime/tests/config/assets/CI побайтно original #10; Godot не повторялся.
+Публикация нового HEAD и его required CI ожидаются, #10 не слит. Полные факты —
+[журнал интеграции](pr-integration-log.md).
+
 ## 2026-10-13 — начало последовательной интеграции PR после пакета4
 
 После локальной приёмки пакета4 пользователь поручил разобрать и слить PR,
@@ -319,3 +333,554 @@ Windows — в 02:03:52 UTC, тот же run `38194279712`. PR #9 остаётс
 независимое ревью. Runtime, unit-тесты, contracts и follow-ups сохранены побайтно;
 Godot повторно не запускался. Следующий шаг — ревью записи публикации, затем решение
 координатора о её фиксации и дальнейших prerequisites. M1 и FPS-контроллер не начаты.
+
+## 2026-10-12 — M1, пакет 1: физический FPS-контроллер
+
+### Принятая база и постановка
+
+Запись публикации buffer fix прошла отдельное независимое ревью, закоммичена и отправлена.
+Итоговый HEAD PR #9 `4802c805017b7593a4f1e37d2d1d9b83ee1743f8` получил SUCCESS обеих
+обязательных CI Linux/Windows ([run 38194634272](https://github.com/GrehBan/3d_shooter/actions/runs/38194634272)).
+PR #8/#9 остаются OPEN/DRAFT и не слиты. Это уточняет прежние pending-записи выше.
+По поручению пользователя продолжить следующий пункт координатор на `medium` согласовал
+зависимую базу `4802c805`, отдельный worktree и ветку `codex/m1-fps-controller`;
+исполнитель пакета работает на `high`. Основной checkout и пользовательские изменения
+сохранены. Публикация и слияние нового пакета этим шагом не выполняются.
+
+Объём ровно девять файлов: `FPSController.gd` и `FPSControllerTest.gd` с двумя Godot UID,
+`Sandbox.tscn`, [контракты](../contracts.md), [план M1](../m1-plan.md),
+[roadmap](../../roadmap.md) и этот журнал. Назначен только пакет 1: ходьба, мышь, обычный
+прыжок, состояния земля/воздух и прототипный полигон. Оружие, способности, боевые статы,
+GameLoop, input map и остальные пакеты не меняются.
+
+### Реализация и первичная проверка
+
+Контроллер — `CharacterBody3D`, физический адаптер вне детерминированного контура.
+Командный API и аппаратный ввод используют единственный `_physics_process`; look
+накапливается, диагональ ограничена единичной длиной, edge-запрос обычного прыжка
+потребляется на следующем физическом тике и не переживает воздушный отказ или паузу.
+Состояния обновляются из реальных контактов после `move_and_slide()`. Сохранены
+60 Гц/интерполяция и логические 30 Гц. Стартовые exports согласованы координатором:
+8 м/с, прыжок 5.5 м/с, мышь 0.002 рад/пиксель, pitch ±85°, gravity ProjectSettings9.8.
+Это параметры физического прототипа, не утверждённые балансные числа GDD.
+
+Sandbox сохраняет пол 40×40 и освещение; добавлены player-капсула с камерой, стена,
+пологий склон и платформа. Первый targeted-прогон подтвердил восемь тестов и выявил
+два assertion failure теста склона: нижний край коробки был выше пола и блокировал вход.
+Склон опущен до пересечения нижнего края с полом; автоматическое преодоление ступеней
+не добавлялось. Импорт успешен, проверены 43 скрипта, ошибок 0. Полный итоговый прогон
+и независимое ревью ещё не завершены; собственный Linux/GitHub CI пакета не запускался.
+Headless не доказывает графическую плавность или ощущение управления; вся M1 не готова.
+
+### Итоговые самопроверки точной локальной версии
+
+Пауза проверяется с pausable test viewport, независимо от always-процесса самого suite;
+контроллер наследует обычный pausable режим сцены. Headless input-bridge прямо вызывает
+обработчик событий и `Input.action_press()`, используя намерение захвата курсора после
+клика, поскольку headless DisplayServer фактический курсор не захватывает. В графическом
+режиме контроллер проверяет фактический mouse mode. Это проверка маршрута команд,
+не доказательство транспортировки ввода от ОС или ручной оценки плавности.
+
+Первый успешный targeted suite — 13/13. Затем добавлены тесты аналоговой длины и
+настраиваемой скорости, отказа от NaN/Inf и аппаратного направления; итог — 15 FPS-тестов.
+Три контролируемые подмены runtime подтвердили силу регрессии: отсутствие нормализации
+диагонали дало 2 failures (5.656853 м вместо 4 м, 11.313708 м/с вместо 8 м/с), прыжок
+по удержанию вместо edge — 3 failures, удерживаемая аллокация на каждом физическом тике —
+2 failures. Каждый отрицательный прогон завершился ожидаемым exit 100, runtime errors и
+orphans — 0. Leak-прогон за 3600 измеренных тиков дал objects +3600 и memory +1425832 B,
+что превысило 1 МиБ. После каждой подмены точные runtime-байты восстановлены; SHA256
+`FPSController.gd` совпал с резервной копией:
+`754D87A802C44DB5951B7B5DF52D2906452603FAF5979BEC439FFA6C6E8BE35F`.
+
+Единственный итоговый `ci/run_checks.sh all` после восстановления завершился exit 0 на
+Windows / Godot `4.7.2.stable.mono.official.ed1daf0bf`: импорт успешен, 43 скрипта без
+ошибок; 157/157 unit/golden-тестов в 22/22 suite, errors/failures/flaky/skipped/orphans — 0.
+FPS suite — 15/15, включая 300 физических тиков прогрева и 3600 тиков реального движения
+при обычных 60 Гц: distance 500.60 м, 30 прыжков, 30 приземлений; дельты objects/nodes/
+resources/orphans/static memory — 0. Снимки сняты внутри test-only physics driver до
+сигнала завершения и до assert-объектов gdUnit; измеряемый цикл не содержит coroutine.
+Штатный per-test `_timeout = 120000` мс не меняет общие CI-пороги или частоту физики.
+
+Существующий синтетический `regress.gd` — PASS: checksum `3032385286`, dropped/config
+errors — 0, дельты objects/nodes/resources/orphans/static memory — 0. За 1800 логических
+тиков среднее 659.2 мкс, максимум 2088 мкс; 7000 мкс остаётся выводимой метрикой,
+не жёстким порогом синтетики. Бенчмарк реального боя пакета 5 и графическое профилирование
+этим не заменяются. Логи и доказательства сохранены локально в `ci-logs/fps-controller/`.
+После успешного полного прогона обновлены только эти MD, runtime-байты сохранены.
+Относительные ссылки и whitespace проверены; `git diff --check` успешен. Две прежние
+ссылки integration-логов доступны только в исходном checkout, как указано в старой записи.
+
+### Ограничение дальнейшей работы и передача на ревью
+
+Пользователь уточнил: «как закончите текущий пакет коммитьте и закругляйтесь».
+Завершается только пакет 1: после независимого ревью точной итоговой версии и закрытия
+замечаний координатор организует локальный commit, затем работа останавливается.
+Пакет 2 и новые фичи не начинаются; новый push/PR FPS не требуется и не выполнялся.
+На момент передачи исполнителем commit отсутствует, независимое ревью этой версии
+ожидается; собственный Linux/GitHub CI нового пакета не запускался. SUCCESS базы `4802`
+на новую версию не распространяется. Проверка графической плавности/мыши не проводилась;
+общая M1 остаётся незавершённой. Координатор назначает отдельного ревьюера на `high`.
+
+### Независимое ревью: P2 и исправление мирового направления
+
+Независимый ревьюер пакета на `high` рассмотрел точную девятифайловую версию
+(patch SHA256 `BBF48E2B3A26A86E2AACB6CC06523708571106C5C0DAD9D08FCDE7104C69CD1A`)
+и нашёл один блокирующий P2: `FPSController.gd:115` преобразовывал ввод локальным basis,
+хотя `CharacterBody3D.velocity` выражена в мировых координатах. При yaw родителя 90°
+камера смотрела вдоль world −X, а W двигал тело вдоль world −Z. Остальных блокеров
+в рассмотренной версии не найдено; это не PASS пакета. Координатор вернул замечание
+исполнителю в рамках текущего пакета, без расширения M1.
+
+Добавлен реальный Jolt-тест с yaw родителя 90° и положительным uniform scale 2:
+проверяются смещение по направлению камеры, мировая скорость 8 м/с и аналоговый ввод
+0.5 со скоростью 4 м/с. На прежнем runtime SHA256 `754D87A8…` тест дал ожидаемый
+exit 100 и 2 failures: проекция смещения на forward камеры равна 0 вместо 4 м/2 м;
+runtime errors и orphans — 0. Затем локальный basis заменён на
+`global_transform.basis.orthonormalized()`: поворот родителя учитывается, масштаб
+не увеличивает мировую скорость. Поддержка ограничена вертикальным yaw-телом/родителями
+и положительным равномерным масштабом; pitch живёт в дочерней камере. Произвольный
+affine transform и наклонённые/неравномерно масштабированные physics parents не обещаны.
+
+Ранние три отрицательных доказательства (диагональ, удержание прыжка, аллокация) относятся
+именно к runtime `754D87A802C44DB5951B7B5DF52D2906452603FAF5979BEC439FFA6C6E8BE35F`.
+Эти алгоритмы и identity-сценарии не менялись; повторные подмены не выполнялись.
+UID и геометрия Sandbox сохранены. Новая версия требует полного `all` после исправления
+горячего пути и повторного независимого ревью; предыдущие 157/157 описывают первую версию.
+
+После исправления выполнен один финальный `ci/run_checks.sh all`: exit 0, импорт успешен,
+43 скрипта без ошибок; 158/158 unit/golden-тестов в 22/22 suite, errors/failures/flaky/
+skipped/orphans — 0. FPS suite — 16/16, новый parent regression PASS. Контроллер снова
+прошёл 300 тиков прогрева и 3600 тиков замера: 500.60 м, 30 прыжков и 30 приземлений,
+дельты objects/nodes/resources/orphans — 0, static memory +1152 B при допуске 1 МиБ.
+Этот прирост не объявляется нулём или приписывается определённой причине без измерений.
+Существующий synthetic regress
+PASS: checksum `3032385286`, dropped/config errors — 0, все дельты аллокаций — 0;
+1800 логических samples, среднее 666.6 мкс, максимум 1484 мкс (7000 мкс по-прежнему
+не жёсткий порог синтетики). Итоговые логи — `ci-logs/fps-controller/final-parent-fix/`,
+отрицательный parent case — `ci-logs/fps-controller/proof-parent-old-basis.log`.
+
+SHA256 runtime после исправления и полного прогона:
+`743F4D3102200FA6192AB4D3AAE2632BD520BDC3AFF99A4E6C0FA7949A123FDD`;
+тестов — `CC730659161D000B186C6E6F9BAF954536B8CD76B9FC15C2727C06D5F8C79E9F`.
+После этого обновлены только MD с результатами; runtime/test/UID/scene байты сохранены.
+Ссылки и whitespace проверены, `git diff --check` успешен. Точная новая девятифайловая
+версия передаётся на повторное независимое ревью. Commit/push/PR FPS пока отсутствуют;
+Linux/GitHub CI нового кода и графическая плавность не подтверждены. После принятия
+и локального commit работа останавливается по поручению пользователя; пакет 2 не начат.
+
+### Повторное независимое ревью и локальное принятие
+
+Независимый ревьюер на `high` повторно рассмотрел точный девятифайловый diff относительно
+базы `4802c805017b7593a4f1e37d2d1d9b83ee1743f8`, включая исправление и документацию:
+PASS, блокеров не найдено, прежний P2 закрыт. SHA256 рассмотренного полного patch:
+`93E3E98EEA35E5F1E4F6BD6BE42E1BE88D81021A9ABC77B7451FC32972ED0233`.
+Runtime `743F4D31…` и tests `CC730659…` сохранены; их полные SHA256 указаны выше.
+Пакет 1 принят локально, результаты Windows 158/158 и FPS 16/16 подтверждены логами;
+static memory +1152 B укладывается в 1 МиБ, остальные четыре дельты — 0.
+Графическая плавность/мышь и собственный Linux/GitHub CI нового пакета не проверены;
+общая M1 остаётся незавершённой. PR #8/#9 по-прежнему OPEN/DRAFT, слияния не выполнялись.
+
+После PASS обновлены только этот журнал, roadmap и план M1. Runtime, tests, UID,
+Sandbox и contracts не менялись; Godot повторно не запускался. Эта небольшая запись
+результата и её точный трёхфайловый diff передаются на отдельное независимое ревью;
+PASS указанного девятифайлового patch на новые байты MD автоматически не переносится.
+Следующий шаг после metadata-review — локальный commit `M1: add physics FPS controller and sandbox`,
+запись фактического SHA и остановка по поручению пользователя. Commit/push/PR FPS ещё
+не выполнены; публикация не требуется, пакет 2 не начат.
+
+### Локальный commit пакета 1
+
+Отдельное независимое ревью записи PASS в трёх MD и итоговой девятифайловой версии
+завершилось PASS, блокеров не найдено. Проверен manifest SHA256
+`E1476672499C63606F343EA1589EF2A1FA4D4708A6E0E6A0F46F870BCD164912`;
+runtime/tests/UID/Sandbox/contracts сохранены побайтно относительно принятой версии.
+Перед stage исполнитель повторно сверил manifest и все девять SHA256, убедился в пустом
+index, проверил точный список девяти staged файлов и `git diff --cached --check`.
+
+Создан локальный commit `cf141eb166e0013d7566c46bfdb44da14a4d7672`
+(`M1: add physics FPS controller and sandbox`) в ветке `codex/m1-fps-controller`.
+База — согласованный зависимый `4802c805017b7593a4f1e37d2d1d9b83ee1743f8`;
+commit содержит ровно девять назначенных файлов. Сразу после commit worktree чистый.
+Push/PR FPS и merge не выполнялись; основной checkout не изменён. После фиксации
+подготовлены только журнал, roadmap и план M1 для записи фактического SHA.
+Эта трёхфайловая delta относительно `cf141eb` ещё требует отдельного quick-review и
+локального docs-only commit; прежний PASS автоматически на новые байты не переносится.
+
+Runtime не менялся, Godot не запускался повторно. Последние фактические проверки остаются
+Windows 43 scripts / 158 tests / FPS 16, memory +1152 B в пределах 1 МиБ и synthetic PASS.
+Собственный Linux/GitHub CI FPS и графическая плавность/мышь не проверены; вся M1
+остаётся незавершённой. После локальной фиксации записи commit работа останавливается
+по поручению пользователя. Пакет 2 и новые фичи не начаты, публикация FPS не требуется.
+
+### Последующее поручение продолжить 2026-10-12
+
+После локального sourcecommit `cf141eb` пользователь явно отменил остановку:
+«не останавливаемся работаем дальше». Прежние записи stop-after-commit выше отражают
+действовавшее тогда поручение и сохранены как история. Актуальный следующий шаг —
+закончить отдельное quick-review и локальный docs-only commit трёх MD о фиксации пакета 1,
+затем координатор передаёт пакет 2 другому исполнителю на `high` после приёмки пакета 1.
+Пакет 2 пока не начат; текущий исполнитель самостоятельно его не начинает.
+
+Sourcecommit остаётся локальным в `codex/m1-fps-controller`; push/PR FPS без следующего
+указания Git-потока не выполняются. Runtime/test/UID/scene/contracts не менялись,
+Godot повторно не запускался. Windows-проверки сохраняются; собственный Linux/GitHub CI
+FPS и графическая плавность/мышь по-прежнему не подтверждены. Слияния нет, вся M1 не готова.
+
+## 2026-10-12 — пакет 2 M1: постановка движения и падения
+
+Назначен отдельный исполнитель `high`; branch `codex/m1-mobility`, worktree
+`m1-mobility/3d_shooter`, база `081d9ae627ca62c7ff4a9e833a5310580c488ad0` с принятой
+metadata пакета 1. Координатор проверил Git и переключил main checkout на master,
+сохранив чужой `.gitignore`; исполнитель пишет только в свой worktree. Владение:
+FPSController, Sandbox, data/movement, чистые mobility/landing классы, минимальный
+DamageApply, связанные тесты и затронутые MD. GameLoop/synthetic не меняются.
+
+До fall-кода записано решение пользователя в [GDD](../../gdd.md) и
+[контрактах](../contracts.md): 10 HP/метр сверх 8 м, floor mm от world peak центра
+тела до центра при приземлении; окно успешного dash 12 физических тиков включительно,
+либо успешный post-landing slide из бесплатного воздушного edge prearm. Щит первым,
+броня снижает остаток на процент ×1000, не расходуется; HP clamp. Dash 24 м/с ×9 тиков,
+slide ≥4 м/с, 5 м/с² ×36 тиков, double jump один на эпизод; цены 1000/500/1000,
+cooldown 6/6/0. ENERGY 3000, regen 50 raw/logic tick в общем хранилище.
+
+Пользователь разрешил после ПОЛНОГО M1 (все пять пакетов) отдельное финальное
+независимое subagent review и squash merge по общему решению координатора/ревьюера
+только при зелёных обязательных Linux и Windows CI точного последнего PR HEAD.
+Это продолжение ранее отменённой остановки; историю ограничений выше сохраняем.
+Текущий пакет ещё не принят, commit/push/PR отсутствуют; PR #8/#9 OPEN/DRAFT не слиты.
+Пакеты 3–5 не начаты, M1 не объявляется готовой.
+
+Первый импорт source успешен. Первый focused-прогон выявил тестовую ошибку имени
+CollisionShape и округление decimal 8.001 чуть ниже целого mm в binary float.
+Имя fixture исправлено; quantizer сохраняет буквальный floor без epsilon (проверка
+целых 7999/8000/8001 в resolver и физического 8.0 м порога остаётся). Первые реальные
+Jolt dash/slide priority/free double-jump tests прошли, полный прогон впереди.
+
+Координатор сообщил graphical startup smoke ПРЕДЫДУЩЕЙ базы 081d: Sandbox пол/стена/
+платформа/рампа отображаются, D3D12 Forward+ RTX4050 Laptop, debug errors пусты.
+Это не проверка live пакета 2, плавности/60 FPS или transport аппаратного ввода;
+короткий click/space не дал наблюдаемого движения, причина ещё не установлена.
+
+### Пакет 2: targeted Jolt и отрицательная самопроверка
+
+Targeted 27/27 (20 physics, 6 pure, 1 golden) прошли: реальный Jolt dash 9 шагов,
+slide 36, inertia/refusals/air loss, world yaw/uniform scale, один double jump при
+free cooldown0/regrant/spam/wall/ceiling, pause/focus/rebind, landing event once и
+dash/slide точные окна 12/13 тиков. Два контроллера подтверждают единственный shared
+regen; subscriber Sandbox снимается при удалении composition root. Integer/Python
+reference hash `2555885940`, щит/броня/HP и полный int64 вход проверены. Лог
+`focused-final.log` локален; финальный полный прогон ещё впереди, добавлены ещё
+регрессии cooldown/energy отказов.
+
+Активный замер: 300 тиков прогрев, 3600 реальных физических тиков после него,
+distance 557.12 м, dash 30, slide 15, double jump 15, landing 15, regen 1800;
+objects/nodes/resources/orphans delta 0, static memory +1152 B ≤1 МиБ, dropped 0.
+Снимки сняты внутри test-only physics driver до signal/coroutine/assert allocations.
+Отрицательная подмена сбросила air-used флаг после успешного прыжка: ожидаемый exit100,
+2 failures (16 вместо 1 прыжка, 17 вместо 2 после посадки), errors/orphans 0.
+Runtime восстановлен побайтно, SHA256 `5C43C97310243A62B5096D73C2E010A5CF257C05ADD68990579829B60A6758FD`;
+proof log `ci-logs/mobility/proof-air-limit.log`. Leak selfcheck в работе.
+
+Уточнение GUI предыдущей базы от координатора и независимого ревьюера: typed/physical
+probe подтверждает по одному прыжку vy 5.5, maxY 2.490499 и посадке, errors нет.
+OS sky Space даёт keycode32, physical_keycode4194313 вместо InputMap physical32;
+mouse captured/focused, paused false, jump_action0. Ограничение автоматизированного
+physical-key transport объясняет отсутствие наблюдаемого прыжка; FPS/InputMap не меняют
+ради инструмента. Это не manual keyboard/smoothness/60FPS proof и не проверка live
+пакета 2. Graphical startup smoke остаётся только для принятой базы081d, все GUI
+процессы остановлены до измерений пакета2. Probe source отдельно независимо reviewed PASS.
+
+Отрицательная активная утечка: удерживаемый RefCounted на каждом physics tick дал
+objects +3600, static memory +1425832 B (>1 МиБ), ожидаемый exit100 и 2 failures,
+errors/orphans 0; действия оставались активными (30/15/15/15/1800). Лог
+`ci-logs/mobility/proof-active-leak.log`. Runtime восстановлен побайтно с тем же SHA256
+`5C43C97310243A62B5096D73C2E010A5CF257C05ADD68990579829B60A6758FD`.
+Следом запущен полный `ci/run_checks.sh all` на восстановленной версии; итог ещё ожидается.
+
+При самопроверке теста LandingEventQueue усилена проверка числа уведомлений через
+тот же pinned gdUnit logger, что уже применяется DamagePayloadBufferTest; добавлен
+реальный wrap кольца через head1 и явная silent проверка после reset_dropped_count.
+Runtime не менялся. Уже выполняющийся all на предыдущих test bytes считается
+предварительным; итоговая версия с этим усилением будет заново проверена full all.
+
+Предварительный полный all завершился exit100: import/script50 PASS и прежний FPS16
+PASS; single-shared-regen test получил 33 logic ticks вместо 30 (1650 вместо1500),
+поскольку helper ожидал process_frame между physics_frame и под полной нагрузкой
+движок выполнял несколько physics steps за один process frame. Это ошибка тестового
+счёта, не доказательство двойного regen. Helper заменён test-only barrier priority1100
+после GameLoop: каждый await соответствует одному реальному physics step, including
+paused always barrier. Active measured driver и runtime не изменены. Требуется новый
+full all на исправленных test bytes; прежний all не объявляется PASS.
+
+### Итоговый полный all после test-only barrier
+
+`ci/run_checks.sh all` на Windows / Godot4.7.2.stable.mono.official.ed1daf0bf завершён
+exit0: import PASS, 50 scripts failed0, 189/189 unit/golden в25/25suite, errors/failures/
+flaky/skipped/orphans0. Mobility physics24/24, pure6/6, golden1/1; free/cooldown0/spam,
+regrant/ceiling/wall/landing, stale/rebind/pause, 9/36 steps, 12/13 window, prearm energy/
+speed/cooldown/incompatibility/focus, world peak, hardware dash/slide echo/held и shared
+subscriber lifecycle подтверждены. Python reference `2555885940` повторно совпал.
+
+Активный mobility driver: warm300+measure3600 real physics ticks, 557.12 м, dash30,
+slide15, double15, landing15, regen1800. Все дельты objects/nodes/resources/orphans/
+static memory0, dropped0. Legacy FPS16/16 также прошли: 500.60 м, jumps30/landings30,
+все5дельт0. Final logs `ci-logs/mobility/final-barrier/{import,scripts,tests,regress}.log`
+и `ci-logs/mobility/final-barrier-run.log` локальны.
+
+Existing synthetic regress PASS: checksum3032385286, dropped/config errors0,
+allocation deltas0; 1800 samples avg664.9/max1354 мкс. 7000 мкс остаётся выводимой
+метрикой synthetic, не proof бюджета реального оружия пакета5. Runtime сохранён
+SHA256 `5C43C97310243A62B5096D73C2E010A5CF257C05ADD68990579829B60A6758FD`.
+После full all выполняется повтор отрицательных probes на точных final test bytes;
+они восстанавливают runtime побайтно. Далее обновляются только MD/manifest для review.
+
+Независимый PASS итогового пакета2 ещё отсутствует, commit/push/PR пакета2 не выполнялись.
+Linux/GitHub CI этой версии и manual GUI/smoothness/60FPS не подтверждены; пакет3
+не начинается до независимой приёмки пакета2. Вся M1 остаётся незавершённой.
+
+Повтор отрицательных probes на точных final test bytes завершён: air-used regression
+`proof-final-air-limit.log` exit100/2 failures (16 вместо1 и17 вместо2), leak
+`proof-final-active-leak.log` exit100/2 failures, objects+3600 и static memory+1425832 B.
+Оба отрицательных прогона: errors/orphans0; leak retained real действия30/15/15/15/1800.
+Runtime повторно восстановлен побайтно; SHA256 совпал с backup и полным успешным all:
+`5C43C97310243A62B5096D73C2E010A5CF257C05ADD68990579829B60A6758FD`.
+После полного прогона и восстановления изменены только затронутые MD с фактами;
+source/tests/UID/resources/Sandbox bytes финального all сохранены. Diff/ссылки
+проверяются перед freeze manifest полного diff включая новые файлы; независимое
+ревью ожидается. Commit/push/PR пакета2 отсутствуют, пакеты3–5 не начинаются.
+
+### 2026-10-12 — независимое ревью пакета 2: есть блокеры (3 P2)
+
+Ревьюер `high`, не автор, рассмотрел точный 27-file snapshot: patch
+`2ED0F36C1773E63438F79FAD01570DFBA8941460305452FD9E9CC39D57F0DE8C`, manifest
+`D35579890444DD05DA33B9640C1AD3176FD78B551D8E2C6D9FDCFB9D76DA7A0F`.
+Итог: есть блокеры. Исходные artifact bytes сохранены локально как
+`ci-logs/mobility/review-blocked-1.patch` и `review-blocked-1-manifest.json`.
+Проверки189/189 и allocation delta0 выше относятся к этому blocked снимку,
+не являются PASS исправлений. Commit/push/PR отсутствуют.
+
+P2 MobilityRuntime.reset_clock сохранял absolute ready_tick1006 после переноса
+clock1000→0, вызывая лишнюю блокировку1006. Координатор выбрал явное сохранение
+remaining cooldown без изменения energy/grants/physical episode: новый узкий
+MovementAbilities.rebase_clock(old_now), origin0, max(ready-old_now,0). Точный OLD tick
+обязан передать caller до GameLoop.reset_clock, включая activations до первого
+logic_step; Sandbox composition-root helper фиксирует последовательность. Pending
+landings отбрасываются только явным room clock reset, duplicate guard сбрасывается.
+
+P2 grant_content ошибочно считал Registry.freeze/type/count gameplay validation.
+Добавлена полная cold проверка ДО любого grant: уникальные обязательные три kinds,
+0..Int32max cost/cooldown, точные prototype flags. Invalid preset даёт atomic false
+без изменения прежних grants/prices/cooldowns; caller пишет configuration error.
+Отдельный player-preset ресурс ревьюер не требует: HP/energy Sandbox literals допустимы.
+
+P2 bind_mobility same identity сбрасывал velocity/peak/air-used и позволял повторный
+jump или занижение падения. Координатор выбрал same runtime reference AND full handle
+idempotent NO-OP. Новое поколение/full handle или runtime начинает новый lifecycle;
+явный detach сохраняется. Добавлены реальные Jolt регрессии air limit/peak/action/input,
+new generation и same-full-handle/different-runtime, а также unit reset/validator
+boundaries/atomicity и allocation rebase. Остальных блокеров ревьюер не нашёл.
+Новый focused/full all и повторное независимое ревью впереди, пакет3 не начинается.
+
+### Исправления трёх P2: новые проверки точной версии
+
+Focused первоначального исправления: exit0,38/38 (28Jolt/10pure), errors/failures/orphans0.
+Следом усилены same-full-handle/different-runtime, valid regrant и invalid registry/type/
+null cases, затем выполнен НОВЫЙ `ci/run_checks.sh all`: exit0, import PASS, scripts50
+failed0,197/197 tests в25/25suite, errors/failures/flaky/skipped/orphans0. Новый all
+проверяет собственно исправленные bytes, а не старый reviewed-blocked27file снимок.
+Логи: `ci-logs/mobility/review-fixes/final/{import,scripts,tests,regress}.log` и
+`ci-logs/mobility/review-fixes/final-run.log`.
+
+Active warm300+measure3600 real ticks:557.12м, dash30/slide15/double15/landing15/regen1800,
+objects/nodes/resources/orphans delta0, static memory+1152B≤1МиБ, dropped0. LegacyFPS16/16
+также PASS (500.60м,30jump/30landing, все5delta0). Allocation unit нового rebase PASS.
+Synthetic checksum3032385286 сохранён: PASS, allallocation/config/dropped0,
+1800samples avg664.6/max1449мкс; 7000мкс по-прежнему не жёсткий порог synthetic.
+Damage Python/golden2555885940 сохранён, UID/resources/согласованный GDD не менялись.
+
+Отрицательные прогоны точных final tests подтвердили регрессии: отключение rebase
+(proof-clock.log) exit100/7failures; прежний непроверенный content grant
+(proof-content.log) exit100/17failures; удаление same-identity guard (proof-bind.log)
+exit100/6failures; отключение air-used guard (proof-air.log) exit100/2failures.
+Errors/orphans0 во всех четырёх. Runtime каждый раз восстановлен из exact byte backup;
+активный leak probe последовательно выполняется отдельно, его итог/restore ниже.
+
+Следующий шаг — повторное независимое ревью полного28file diff с новыми manifest/hash.
+Старая reviewed-blocked версия сохранена отдельно; код/tests после нового full all
+менялись только контролируемыми negative probes и восстанавливаются побайтно.
+Commit/push/PR отсутствуют, пакет3 не начат, M1 не готова. Linux/GitHub CI и manual GUI
+новой версии по-прежнему не подтверждены.
+
+### Новое поручение остановиться после локального commit пакета2
+
+2026-10-12 пользователь: «Коммитим текущее состояние и останавливаемся».
+Координатор поручил завершить уже запущенные negative probes, восстановить runtime
+побайтно, freeze точный diff/manifest и повторное независимое ревью исправленных3P2.
+До PASS commit запрещён. После PASS — локальный source commit текущего пакета2,
+отдельно проверенная/принятая запись его фактического SHA, затем остановка.
+Пакеты3–5, push/PR/merge сейчас не выполнять. Прежнее разрешение final review/squash
+после ПОЛНОГО M1 выше сохранено как история; оно не запускает следующие пакеты сейчас.
+На этой записи commit ещё отсутствует, повторный независимый PASS ожидается.
+
+Завершённый active leak probe финальных bytes (review-fixes/proof-leak.log): ожидаемый
+exit100/2failures, errors/orphans0, objects+3600 и memory+1426984B>1МиБ; реальные
+действия557.12м/30dash/15slide/15double/15landing/1800regen/dropped0 сохранены.
+Все5negative probes завершены, исходные runtime восстановлены из byte backups;
+доказательство совпадения SHA256 и новая версия snapshot передаются координатору.
+После final all изменены только затронутые MD с фактами/актуальным поручением.
+
+В snapshot по явному поручению «текущее состояние» включён ранее пользовательский
+`.gitignore` из main checkout, который прежде не принадлежал исполнителю. Координатор
+расширил владение этим файлом; источник — main HEAD081d9ae, main не изменён. Проверено,
+что delta относительно базы содержит ровно5 ignore строк: `.mcp.json`,
+`.agentsroom/handoff-transcript-*.txt`, `.agentsroom/handoff-summary-*.md`,
+`.agentsroom/fork-context-*.txt`, `.agents/mcp_config.json`. Скопированы точные source bytes,
+SHA256 `5BA25EFD03D0727F0D3BFB07084DA9A41AA83A85CD3D7704CC66BD7828DD50D4`.
+Вместе с MovementAbilities API snapshot теперь29files; .gitignore входит в полный
+manifest/diff и независимое review. Изменение ignore/MD не меняет Godot runtime/tests.
+
+До остановки сохранена future постановка пакета3 в [плане M1](../m1-plan.md):
+8дробин×6HP (6000raw),40м, fixed central+7ring/5°, semi-auto rising edge/cd15logic=0.5с,
+без ammo/reload в минимальном M1; один root на shot включаяmiss, sibling-child на
+каждую попавшую дробину, damage perpellet. Read-only план3 был получен, реализации нет.
+Read-only план4 предварительный, presets не утверждены; дальнейшее планирование
+остановлено. Пакеты3–5 не начаты, новые implementation файлы для них не создавались.
+
+Exact restore после всех5negative probes подтверждён: FPSController SHA256
+`D4BBE625313E36429A8436F5673CB45A926522FDCFD1AC91D754476058F08D53`, MobilityRuntime
+`B8CA16F7668DD3BD466074C45ED0D448E798EA357971134557A31BE5F86BEFDC` совпали с byte backups.
+Корректный memory итог нового leak probe +1426984B; +1425832B выше — история прежних
+probe bytes. После восстановления runtime/tests/resources не менялись; MD и .gitignore
+проверяются и frozen29-file версия передаётся на повторное независимое ревью.
+
+### Исправление двух P2 после второго архитектурного ревью — 2026-10-12
+
+По поручению менеджера проектов в worktree `m1-mobility/3d_shooter` исправляется
+точный незакоммиченный snapshot пакета 2. При отклонении mobility preset Sandbox
+теперь отключает process_mode корня, тем самым останавливая контроллер и всё
+поддерево, и гарантированно снимает logic_tick subscription при abort. Добавлен
+регрессионный тест с invalid dash preset (все три ресурса загружены, у dash `usable_in_air=false`): проверяет ошибку grant, отключённый
+process mode, отсутствие подписки и отсутствие физического движения контроллера.
+Многофазные кейсы slide теперь сбрасывают lifecycle через detach/rebind вместо
+same-identity NO-OP; перед landing проверяют активный prearm и нужную горизонтальную
+скорость. Focus-кейс очищен от прежнего cooldown. Итоговые проверки и новые SHA256
+будут внесены после локального прогона; commit запрещён до повторного PASS ревью.
+
+### Проверки исправленного снимка
+
+PowerShell: `$env:GODOT='C:\Program Files\Godot\Godot_v4.7.2-stable_mono_win64_console.exe'; $env:LOG_DIR='ci-logs/mobility/review-fixes'; & 'C:\Program Files\Git\bin\bash.exe' ci/run_checks.sh all`
+завершился с exit code 0 на Windows: import PASS; `check_scripts` — 50 скриптов,
+0 ошибок; gdUnit4 — 198/198 тестов в 25/25 suite, 0 errors/failures/flaky/skipped/orphans;
+`MobilityPhysicsTest` — 29/29, включая abort Sandbox и отрицательные prearm-фазы.
+Активный замер мобильности прошёл 3900 тиков: 557.12 м, 30 dash, 15 slide, 15 double jump,
+15 landing, 1800 regen; object/node/resource/orphan/memory delta — 0, dropped — 0.
+`regress.gd` — PASS, checksum 3032385286, objects/nodes/resources/orphans delta 0,
+`MEMORY_STATIC` +1152 B (≤ 1 МиБ), dropped/config errors 0,
+средний logic tick 678.9 мкс, максимум 1495 мкс (synthetic-бюджет 7000 мкс не является порогом).
+Логи этого прогона: `ci-logs/mobility/review-fixes/{import,scripts,tests,regress}.log`.
+
+После обновления этой записи точный diff, включая новые файлы, передаётся архитектору ПО
+на повторное независимое ревью. Изменений кода после прогона не вносилось. Commit до
+результата PASS ревью не выполняется; Linux/GitHub CI этой версии ещё не запускался.
+
+### Восстановление физического покрытия slide cooldown — 2026-10-12
+
+Последний независимый read-only разбор 32-file снимка закрыл прежние два P2 о
+Sandbox abort и lifecycle/prearm. Оставшийся P2: выделение focus-only сценария
+удалило физическую проверку отказа slide по cooldown; store unit её не заменяет.
+В `MobilityPhysicsTest.gd` восстановлен отдельный cooldown-only Jolt-сценарий:
+120 logic ticks и проверяемый future ready_tick до/после landing; ENERGY 3000;
+свежий false→true edge; активный prearm и скорость ≥4 м/с. Дополнительные
+preconditions подтверждают AIR до landing, отсутствие активных dash/slide и
+достаточную энергию; после landing — ровно один event, скорость ≥4 м/с и возраст
+prearm ровно 12 физических тиков. Поэтому другой отказ не маскирует cooldown.
+Отказ не запускает slide, не расходует энергию, не меняет ready_tick и не выставляет
+cancel flags. Production-код в этом шаге не менялся. Уточнены прежние записи:
+invalid preset содержит три ресурса с неверным dash air flag; synthetic memory
+прошлого прогона +1152 B, а не все дельты 0. Исправлена воспроизводимость команды
+с путём Godot, содержащим пробелы; исторические результаты сохранены.
+
+Фактическая команда нового полного прогона, PowerShell из корня worktree:
+
+```powershell
+$env:GODOT='C:/Program Files/Godot/Godot_v4.7.2-stable_mono_win64_console.exe'
+$env:LOG_DIR='ci-logs/mobility/cooldown-fix'
+& 'C:/Program Files/Git/bin/bash.exe' ci/run_checks.sh all
+```
+
+Итог Windows Godot 4.7.2: all exit code 0, все четыре шага завершились успешно;
+import PASS, scripts50/failed0, gdUnit4 199/199 в 25/25 suite, errors/failures/flaky/
+skipped/orphans0. MobilityPhysics30/30, новый cooldown тест PASS (195 мс).
+Active mobility 3900 ticks (300 warmup +3600 measure): 557.12 м, dash30/slide15/
+double15/landing15/regen1800, objects/nodes/resources/orphans/static delta0,
+dropped0. Synthetic `regress.gd` PASS: checksum3032385286, objects/nodes/resources/
+orphans0, static+248808B≤1МиБ, dropped/config errors0, logic avg723.2/max3826мкс;
+7000мкс остаётся метрикой синтетики, не жёстким CPU-порогом реального конвейера.
+Логи: `ci-logs/mobility/cooldown-fix/{import,scripts,tests,regress}.log`, код выхода
+сохранён в `all.exit-code.txt`. После прогона менялась только документация;
+runtime/test bytes сохранены. Документы проверяются diff/ссылками и `git diff --check`.
+
+Полный frozen diff с untracked source и SHA256 manifest относительно `081d9ae`
+готовится в `ci-logs/mobility/cooldown-fix/` для повторного независимого ревью точной
+версии. В этом шаге обновлены план M1, roadmap и этот журнал; контракты/GDD/follow-ups
+сохраняют прежние bytes. Независимый PASS нового снимка ещё не получен, пакет 2 пока
+не принят. После PASS координатор выполняет локальный source commit, отдельно
+проверенную запись SHA и STOP по последнему поручению пользователя.
+Commit/stage/push/PR/merge в этом шаге не выполнялись. Linux/GitHub CI и графическая
+приёмка этой версии не запускались; headless не подтверждает готовность всей M1.
+
+### Независимая приёмка пакета 2 M1 — 2026-10-12
+
+Отдельный независимый ревьюер `mobility_review` на `high` проверил весь точный
+32-file снимок ветки `codex/m1-mobility` относительно базы
+`081d9ae627ca62c7ff4a9e833a5310580c488ad0`:
+patch SHA256 `8ef6b82144a6cccf545cb6aec7e05321e4e8ddd8985a891a9d8302f488f6ebac`,
+manifest SHA256 `d9dcc99b31de7b89407c7d2970b74c89d41e0f9040463d7d664c1ba40a54c1b6`.
+Снимок включает все новые source-файлы и документацию; runtime artifacts исключены.
+Вердикт — PASS, блокеров не найдено. Последний P2 о восстановленном физическом
+slide cooldown закрыт, все прежние P2 устранены. Пакет 2 принят локально;
+долг «Лимит прыжков в воздухе» перенесён в [историю закрытых](follow-ups.md).
+
+Ревьюер лично прочитал свежие логи `ci-logs/mobility/cooldown-fix/`: Windows
+Godot 4.7.2 all exit0, import PASS, scripts50/0, 199/199 tests в 25/25 suites,
+MobilityPhysics30/30; errors/failures/flaky/skipped/orphans0. Active3900 ticks,
+557.12м, dash30/slide15/double15/landing15/regen1800, все allocation delta0,
+dropped0. Synthetic PASS3032385286, static+248808B≤1МиБ,
+objects/nodes/resources/orphans0, dropped/config errors0, avg723.2/max3826мкс.
+Ревьюер сам Godot не запускал. Linux/GitHub CI и GUI этой версии не проверены;
+headless/synthetic не доказывают готовность всей M1 или реальный CPU-бюджет.
+
+После PASS изменены только `docs/notes/work-log.md`, `docs/m1-plan.md`, `roadmap.md`
+и `docs/notes/follow-ups.md` с записью результата. Runtime/test bytes сохраняются
+по исходному manifest; Godot ради MD не запускается. Новая документация ожидает
+отдельного независимого ревью, PASS кода сохраняется для указанной версии.
+Узкий delta четырёх MD и полный итоговый 32-file diff с SHA256 manifest фиксируются
+в `ci-logs/mobility/cooldown-fix/accepted-review/`, предыдущие артефакты сохранены.
+Source commit ещё не создан; SHA не назначался. После metadata-review координатор
+выполнит локальный source commit, затем отдельно проверенную запись его фактического
+SHA и STOP по последнему поручению пользователя. Stage/commit/push/PR/merge
+в этом doc-only шаге отсутствуют; пакеты3–5 не начаты.
+
+### Source commit принятого пакета 2 M1 — 2026-10-12
+
+После второго независимого PASS точного итогового 32-file снимка относительно
+`081d9ae627ca62c7ff4a9e833a5310580c488ad0`, включая запись приёмки в четырёх MD,
+координатор создал source commit `499fbc2ec414eb8bcf7b13aa4f3bf5d7d44f1410`
+(`M1: implement mobility and resolve review blockers`) в `codex/m1-mobility`:
+32 files, 2295 insertions, 19 deletions. Предшествующее независимое ревью дало PASS
+для patch SHA256 `d7de84eb3bd55c13de2c37e5186ded86b7544bd1f55b9195c841e2b9bd1a5b17`
+и manifest SHA256 `8ae9ffbbe9b69e9224a52d8cca0f17d75beb765bae5bd5ffddf73ad265c98708`.
+Перед stage сверены branch/HEAD/index и все approved SHA; staged ровно 32 файла,
+cached diff-check0. После commit рабочее дерево чистое; SHA, subject и состав
+commit дополнительно прочитаны исполнителем doc-only записи.
+
+Новая запись фактического SHA в плане, roadmap, журнале и текущем статусе закрытого
+AIR-jump debt ещё НЕ проверена независимым ревьюером. Код/тесты/ресурсы не менялись,
+32 исходных SHA совпали с принятым manifest до записи; Godot ради MD не запускался.
+Doc-only diff, ссылки и whitespace проверяются, снимок относительно `499fbc2`
+фиксируется в `ci-logs/mobility/cooldown-fix/commit-record-review/`.
+После независимого PASS эту запись фиксирует координатор отдельным docs commit,
+затем STOP; повторная запись SHA самого docs commit не требуется.
+Windows all199/199/25suite/mobility30/30 остаётся результатом принятых source bytes;
+Linux/GitHub CI и GUI этой версии не запускались. Пакеты3–5/push/PR/merge не начаты.
+Stage/commit в этом doc-only шаге исполнитель не выполнял.

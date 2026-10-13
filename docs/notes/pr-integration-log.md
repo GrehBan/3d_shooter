@@ -4,9 +4,11 @@
 
 After local acceptance of package 4, the user authorized auditing and merging
 the stack in order **8 -> 9 -> 10 -> 11 -> 12**, using squash merges into `master`.
-Each integrated HEAD requires independent review and fresh required Linux/Windows
-CI; earlier-head success does not validate it. No direct master push, force push,
-or rebase is authorized by this workflow.
+Integration #9 received independent review. The user's later explicit instruction
+to merge without further review waives new integration reviews for #10-#12;
+their earlier source reviews remain historical evidence, not new integration PASS.
+Fresh required Linux/Windows CI still applies to every updated HEAD; earlier-head
+success does not validate it. No direct master push, force push, or rebase is used.
 
 The original audited source heads are:
 
@@ -39,5 +41,16 @@ resolved overflow debt. No runtime conflict occurred.
 
 Only this log and its work-log entry add metadata. Runtime/tests/config/assets/CI
 remain identical Git blobs to original #9 HEAD; Godot was not rerun.
-Independent integration review, commit/publication, and new-HEAD CI are pending.
-PR #9 is not merged; later PRs were untouched by this step.
+This prepared state was followed by independent integration PASS and publication
+of HEAD `a918115ebd3b6c718c3bf2c1577df88800935e3f`. Required Linux/Windows checks
+succeeded for that exact HEAD ([run38465077469](https://github.com/GrehBan/3d_shooter/actions/runs/38465077469)).
+The coordinator squash-merged #9 to master `1d9f9aa4ba1031af7d12bbc50cd4f78f5b0fdd27`.
+
+## PR 10: Integration Prepared
+
+Original #10 HEAD received an ordinary merge of the new master above. Four MD
+conflicts were resolved using its advanced contracts/plan/roadmap/history after
+individual comparison, retaining #9's new integration journal and work-log entry.
+Runtime/tests/config/assets/CI remain identical blobs to original #10 HEAD.
+Godot was not rerun; new integration review is explicitly waived, not passed.
+Publication and required CI of the forthcoming HEAD are pending; #10 is not merged.

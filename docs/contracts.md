@@ -1,9 +1,9 @@
 # Контракты ядра боя (M1a)
 
 Справочник по чистым классам логики боя: кто их вызывает, что гарантировано и что
-запрещено. Код лежит в `3d-shooter/` (`res://`). Все классы здесь — `RefCounted` или
+запрещено. Код лежит в `3d-shooter/` (`res://`). Все классы ядра здесь — `RefCounted` или
 `Resource`; это проверяет `tests/unit/LogicIsolationTest.gd`. Исключения (`GameLoop`,
-`EventBus`) перечислены в его allowlist с причиной.
+`EventBus`, физический `FPSController`) перечислены в его allowlist с причиной.
 
 ## 1. Общие правила
 
@@ -72,7 +72,7 @@
   Отказ детерминированный, событие или запись отбрасывается;
 * счётчик растёт на каждый отказ: `HitEventQueue.dropped_count()`,
   `DamagePayloadBuffer.dropped_count()`, `AttackContextPool.hit_set_overflows` и
-  `capacity_refusals`, `EffectHost.capacity_refusals`;
+  `capacity_refusals`, `EffectHost.capacity_refusals`, `LandingEventQueue.dropped_count()`;
 * корректность и детерминизм гарантированы только при нулевых счётчиках; `regress.gd` и
   `CombatContractsGoldenTest` падают при ненулевых.
 
@@ -209,7 +209,7 @@
 * Визуал в `_process` получает handle и события (`EventBus`, сигналы узлов для локальной
   связи UI), не пишет в `StatBlock` и не вызывает логику урона.
 * Логика не держит ссылок на узлы сцены и не наследует `Node`; `LogicIsolationTest` роняет CI
-  при новом Node-классе в `core/`, `combat/`, `effects/` или `player/MovementAbilit*` без
+  при новом Node-классе в `core/`, `combat/`, `effects/` или `player/` без
   записи в allowlist.
 * Сквозной `tests/golden/CombatContractsGoldenTest.gd` проверяет конвейер целиком:
   mock-дробовик → `Damageable` → `HitEventQueue` → `AttackContextPool` → `EffectHost` →
@@ -223,3 +223,134 @@
 `acp_ref.py`, `effect_host_ref.py`, `movement_ref.py`, `combat_contracts_ref.py`), запуск —
 `python 3d-shooter/tests/tools/<модель>.py` из корня репозитория. Пути моделей указаны
 в шапках соответствующих golden-тестов.
+
+## 5. Физический адаптер FPSController (M1, пакет 1)
+
+Исторический контракт пакета 1 ниже расширяется пакетом 2 в §6.
+
+`player/FPSController.gd` наследует `CharacterBody3D` и не относится к чистому ядру
+выше: хранит только физические данные движка и команды ввода. Состояние `GROUND` / `AIR`
+обновляется после `move_and_slide()` по реальному `is_on_floor()`; контакт предыдущего
+физического тика определяет допустимость обычного прыжка. Jolt, движение и эти состояния
+не входят в гарантию побитового детерминизма. В пакете 1 контроллер не рассчитывает урон, не меняет
+`StatBlock`, не вызывает способности и не подписывается на логический тик этого пакета.
+
+* `set_move_input(Vector2)` задаёт сохраняемое направление: x — вправо, y — назад.
+  Длина ограничивается единицей; аналоговый ввод меньшей длины сохраняется.
+  Направление преобразуется ортонормированным мировым basis тела, поэтому yaw родителя
+  учитывается, а положительный равномерный масштаб не меняет скорость в мировых м/с.
+* `add_look_input(Vector2)` накапливает относительные пиксели до следующего физического
+  тика. Тогда изменяются yaw тела и ограниченный pitch дочерней `Camera3D`; pitch
+  не влияет на горизонтальное направление ходьбы. `_process` отсутствует.
+* `set_jump_pressed(bool)` ставит запрос только на переходе false → true.
+  Следующий физический тик потребляет запрос один раз. В воздухе запрос отбрасывается;
+  удержание, повторные true и последующее приземление сами не создают нового прыжка.
+* `set_hardware_input_enabled(bool)` переключает аппаратный ввод и очищает команды.
+  Аппаратные события мыши/прыжка и `Input.get_vector()` используют тот же командный API
+  и единственный физический путь, что и headless-драйвер. Mouse motion использует
+  `screen_relative`; Escape освобождает курсор, левый клик вновь захватывает его.
+* Команды принимаются только внутри дерева и вне паузы; векторы с NaN/Inf отвергаются.
+  Режим узла — `PROCESS_MODE_INHERIT`. Пауза и потеря фокуса очищают запросы, сохраняя
+  transform, velocity и физическое состояние. После паузы отложенного прыжка/поворота нет.
+
+В headless DisplayServer не захватывает курсор: тест обработчика хранит намерение
+захвата после события клика. В графическом режиме используется фактический mouse mode.
+Тест явно вызывает input-обработчик и `Input.action_press()`; транспортировку событий
+от ОС, реальный курсор и субъективное ощущение управления он не подтверждает.
+
+Обычные настраиваемые exports физического слоя: скорость 8 м/с, импульс прыжка 5.5 м/с,
+чувствительность 0.002 рад/пиксель, предел pitch 85°. Гравитация берётся из
+`physics/3d/default_gravity` (по умолчанию 9.8 м/с²). Это стартовые параметры прототипа,
+согласованные координатором, а не утверждённые балансные числа GDD или данные боевого
+контента. Коллизии Sandbox: player layer 2, mask 1 (world); капсула radius 0.35 м,
+height 1.8 м, камера на 0.65 м выше центра. Физика остаётся 60 Гц с интерполяцией,
+`GameLoop` — 30 Гц. Создание узлов и ресурсов допускается только при загрузке.
+
+Поддерживаемая конфигурация физического адаптера: вертикальное тело и его родители
+вращаются только вокруг world-up (yaw), масштаб тела/предков положительный и равномерный.
+Pitch задаётся только дочерней камерой. Наклонённые физические родители и неравномерный
+масштаб не входят в поддерживаемую конфигурацию; произвольный affine transform не обещан.
+
+`tests/unit/FPSControllerTest.gd` проверяет контакты реальных тел Jolt с допусками и
+измеряет активное движение после прогрева. Эти проверки не подтверждают графическую
+плавность, мышь на реальном дисплее или готовность всего M1.
+
+## 6. M1: мобильность и приземление (пакет 2)
+
+Принятые до реализации падения параметры: world peak центра тела → центр при AIR→GROUND,
+целые mm через floor; raw урон ×1000 = `max(mm - 8000, 0) * 10`. Успешный dash отменяет
+падение при разнице физических тиков 0..12 включительно. Slide edge в воздухе бесплатно
+взводится на тот же срок; после move_and_slide подтверждённое приземление проверяет
+скорость ≥4 м/с, совместимость, энергию/кулдаун, затем try_activate(in_air=false).
+Только успех отменяет падение и начинает slide со следующего физического шага.
+Удержание/echo не обновляют окно; pause/focus-out очищают prearm. FPS передаёт событие,
+не считает урон и не меняет HP.
+
+Минимальный чистый M1 DamageApply: shield-first; затем процентная броня, не расходуемая
+уроном. ARMOR — процент ×1000 (10000=10%, 100000=100%), clamp 0..100000;
+`remaining * (100000 - armor) / 100000` с целочисленным trunc-to-zero, HP clamp ≥0.
+Промежуточные значения int64; процент считается точным quotient/remainder:
+`(remaining/100000)*retained + (remaining%100000)*retained/100000`, без переполнения
+для любого неотрицательного int64 raw урона. Высота насыщается до
+`INT64_MAX/10 + 8000 = 922337203685485580` mm перед умножением на 10.
+Полный M2 DamagePipeline, элементы, карточки и реген щита
+не входят в этот пакет; существующие synthetic fixtures/checksum не меняются.
+
+`bind_mobility(runtime, entity)` — новый runtime reference либо новый полный handle
+(включая новое поколение) начинает lifecycle: очищает ввод, velocity, dash/slide,
+prearm, peak/эпизод и лимит двойного прыжка. Same runtime + same full handle — idempotent
+NO-OP: сохраняет velocity/peak/episode, air-used, active ability и queued input. Nullable
+runtime или INVALID_HANDLE явно отсоединяет и очищает физическое состояние/ввод.
+Устаревший StatBlock
+handle автоматически отсоединяется на следующем физическом шаге; regrant способностей
+не сбрасывает физический лимит. Воздушный прыжок сбрасывается только после реального
+AIR→GROUND move_and_slide; стена/потолок не сбрасывают. Ground jump бесплатен.
+
+Edge API `set_dash_pressed`/`set_slide_pressed` совместим с `set_jump_pressed`;
+отказ потребляет запрос без платы/кулдауна и может уступить следующему действию.
+Приоритет dash→slide→jump, максимум одно успешное действие в физическом тике.
+Dash/slide несовместимы и блокируют прыжок, пока активны. Dash фиксирует normalized
+world input direction (или forward при нуле), 24 м/с ровно 9 шагов; gravity/vy сохраняются.
+Slide фиксирует world direction и фактическую горизонтальную скорость ≥4 м/с,
+убывает на 5 м/с², максимум 36 шагов; потеря земли прекращает slide, капсула не меняется.
+Входной `.tres` читается только при cold Registry grant; цены/cooldown/flags копируются
+в MovementAbilities: dash 1000/6/ground+air, slide 500/6/ground, double jump 1000/0/air.
+
+Sandbox — единственный composition-root subscriber на GameLoop.logic_tick для своего
+общего MobilityRuntime; контроллеры не подписываются. Runtime держит ссылки только на
+чистые stores, без Node/time/float. На 30 Гц сначала drain landing events → DamageApply,
+потом regen_energy 50 raw на entity (MAX_ENERGY=3000), то есть 1500 raw/с. logic_step
+игнорирует duplicate/старый tick, поэтому повторный вызов не удваивает regen. Перед
+GameLoop.reset_clock при повторном использовании runtime обязателен
+`runtime.reset_clock(old_logic_tick)` с ТОЧНЫМ старым GameLoop.get_logic_tick(), включая
+physics activation до первого logic_step. Этот явный room reset отбрасывает pending
+landing events, сбрасывает dropped/diagnostic counters и duplicate logic guard;
+MovementAbilities.rebase_clock сохраняет оставшийся cooldown `max(ready-old_now,0)`
+с новым origin0, energy/grants/costs/flags и physical episode не меняются. Истёкший срок0;
+ungranted остаётся ungranted. Последовательность Sandbox.reset_mobility_clock:
+capture old GameLoop tick → runtime.reset_clock(old) → GameLoop.reset_clock().
+Новая комната может создать новый runtime. Обычный same-identity bind ничего не
+отбрасывает и не сбрасывает; lifecycle нового entity отличается от room clock reset.
+
+Cold MobilityRuntime.grant_content валидирует весь M1 preset ДО любого grant:
+ровно три записи, по одному DASH/DOUBLE_JUMP/SLIDE; только эти kinds, cost/cooldown
+0..StatBlock.VALUE_MAX (Int32), flags dash ground+air / double air-only / slide ground-only.
+Invalid missing/duplicate/extra-kind/params/flags → false без частичных grants и без
+изменения ранее выданных параметров/cooldown. Registry type+freeze сами по себе не
+валидируют gameplay. Caller считает false конфигурационной ошибкой и не запускает
+такую комнату (Sandbox пишет ясный push_error). Valid regrant сохраняет cooldown.
+Если Registry не загрузил три записи или grant_content отклонил пресет, Sandbox
+отключает process_mode своего корня (и унаследованную обработку всего поддерева),
+не подписывается на logic_tick и удаляет возможную прежнюю подписку при abort.
+
+LandingEventQueue — предвыделенный SoA FIFO ring полного int64 handle, mm, cancel flags.
+Один event на подтверждённое приземление, consumer отвергает stale handle. При overflow
+push=false, первый event сохраняется, каждый отказ увеличивает cumulative dropped;
+один push_error до clear. clear сбрасывает события и report latch, не dropped;
+reset_dropped_count сбрасывает только счётчик. Ненулевой dropped блокирует приёмку.
+Физическое преобразование height→mm = буквальный floor без epsilon; значения binary
+float непосредственно ниже границы остаются ниже (decimal 8.001 может дать 8000).
+Сам resolver и Python golden получают целые mm и проверяют 7999/8000/8001 bit-exact.
+Максимальная float height квантуется с cap выше; NaN/Inf/отрицательная высота дают 0.
+Порядок входных событий от Jolt не обещан bit-exact; integer apply одинаков для одного
+и того же последовательного event stream. Очередь не переносит HP-логику в физику.
