@@ -1,5 +1,12 @@
 # Контракты ядра боя (M1a)
 
+Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
+опубликован в #12 (original HEAD `6a81bdc`, required CI SUCCESS run38464462181).
+Обновлённый integration HEAD #12 ещё ожидает публикации/fresh required CI;
+новые integration-review cycles отменены пользователем. Прежние draft/pending
+статусы ниже — история исходных версий. Пакет5/общая M1 не завершены.
+Точные факты — [журнал интеграции PR](notes/pr-integration-log.md).
+
 Справочник по чистым классам логики боя: кто их вызывает, что гарантировано и что
 запрещено. Код лежит в `3d-shooter/` (`res://`). Реализованные классы ядра здесь — `RefCounted` или
 `Resource`; это проверяет `tests/unit/LogicIsolationTest.gd`. Исключения (`GameLoop`,
@@ -10,7 +17,8 @@
 `9a4feade15e98d6c870f89163e659572b7ecb9a0` завершились SUCCESS.
 Closing docs пакета3 получили отдельный независимый PASS и опубликованы в
 `d9f1a53175fe32176fac72df195eda27ee18a129`; обязательные Linux/Windows CI этого HEAD
-завершились SUCCESS (run38424601880). PR #11 остаётся OPEN/DRAFT, merge не выполнялся.
+завершились SUCCESS (run38424601880). PR #11 впоследствии слит после fresh CI
+integration HEAD; детали актуального слияния приведены в журнале интеграции.
 §8 описывает локально принятый пакет4: final Windows all и native rendering smoke
 пройдены; независимые full-diff архитектурное и QA-ревью дали PASS для source
 `ff26428d51c024ad693c916982738d96fba4096d`. Пакет5 и полный M2
