@@ -2,6 +2,33 @@
 
 [ext_resource type="Script" path="res://player/FPSController.gd" id="1_player"]
 [ext_resource type="Script" path="res://world/sandbox/Sandbox.gd" id="2_root"]
+[ext_resource type="Script" path="res://weapons/HitscanWeapon.gd" id="3_weapon"]
+
+[sub_resource type="StandardMaterial3D" id="Material_target"]
+albedo_color = Color(0.8, 0.12, 0.16, 1)
+roughness = 0.7
+
+[sub_resource type="StandardMaterial3D" id="Material_weapon"]
+albedo_color = Color(0.12, 0.16, 0.18, 1)
+metallic = 0.7
+roughness = 0.35
+
+[sub_resource type="BoxShape3D" id="Shape_target"]
+size = Vector3(1.6, 2.4, 0.5)
+
+[sub_resource type="BoxMesh" id="Mesh_target"]
+size = Vector3(1.6, 2.4, 0.5)
+material = SubResource("Material_target")
+
+[sub_resource type="BoxMesh" id="Mesh_receiver"]
+size = Vector3(0.16, 0.14, 0.34)
+material = SubResource("Material_weapon")
+
+[sub_resource type="CylinderMesh" id="Mesh_barrel"]
+top_radius = 0.035
+bottom_radius = 0.035
+height = 0.6
+material = SubResource("Material_weapon")
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 
@@ -43,6 +70,46 @@ size = Vector3(4, 1.5, 4)
 
 [node name="Sandbox" type="Node3D"]
 script = ExtResource("2_root")
+
+[node name="Reticle" type="CanvasLayer" parent="."]
+
+[node name="Center" type="Control" parent="Reticle"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Left" type="ColorRect" parent="Reticle/Center"]
+offset_left = -10.0
+offset_top = -1.0
+offset_right = -4.0
+offset_bottom = 1.0
+mouse_filter = 2
+
+[node name="Right" type="ColorRect" parent="Reticle/Center"]
+offset_left = 4.0
+offset_top = -1.0
+offset_right = 10.0
+offset_bottom = 1.0
+mouse_filter = 2
+
+[node name="Top" type="ColorRect" parent="Reticle/Center"]
+offset_left = -1.0
+offset_top = -10.0
+offset_right = 1.0
+offset_bottom = -4.0
+mouse_filter = 2
+
+[node name="Bottom" type="ColorRect" parent="Reticle/Center"]
+offset_left = -1.0
+offset_top = 4.0
+offset_right = 1.0
+offset_bottom = 10.0
+mouse_filter = 2
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")
@@ -108,3 +175,52 @@ shape = SubResource("CapsuleShape3D_player")
 [node name="Camera3D" type="Camera3D" parent="Player"]
 position = Vector3(0, 0.65, 0)
 current = true
+
+[node name="HitscanWeapon" type="Node3D" parent="Player/Camera3D"]
+script = ExtResource("3_weapon")
+
+[node name="Receiver" type="MeshInstance3D" parent="Player/Camera3D/HitscanWeapon"]
+position = Vector3(0.27, -0.24, -0.5)
+mesh = SubResource("Mesh_receiver")
+cast_shadow = 0
+
+[node name="Barrel" type="MeshInstance3D" parent="Player/Camera3D/HitscanWeapon"]
+position = Vector3(0.27, -0.2, -0.9)
+rotation = Vector3(1.5707963, 0, 0)
+mesh = SubResource("Mesh_barrel")
+cast_shadow = 0
+
+[node name="Targets" type="Node3D" parent="."]
+
+[node name="TargetLeft" type="StaticBody3D" parent="Targets"]
+position = Vector3(-3, 1.3, -3)
+collision_layer = 64
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Targets/TargetLeft"]
+shape = SubResource("Shape_target")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Targets/TargetLeft"]
+mesh = SubResource("Mesh_target")
+
+[node name="TargetCenter" type="StaticBody3D" parent="Targets"]
+position = Vector3(0, 1.3, -3)
+collision_layer = 64
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Targets/TargetCenter"]
+shape = SubResource("Shape_target")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Targets/TargetCenter"]
+mesh = SubResource("Mesh_target")
+
+[node name="TargetRight" type="StaticBody3D" parent="Targets"]
+position = Vector3(3, 1.3, -3)
+collision_layer = 64
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Targets/TargetRight"]
+shape = SubResource("Shape_target")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Targets/TargetRight"]
+mesh = SubResource("Mesh_target")

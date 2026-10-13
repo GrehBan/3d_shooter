@@ -5,7 +5,7 @@ extends GdUnitTestSuite
 ## наследовать RefCounted или Resource. Исключения — только в ALLOWED_NODES,
 ## с причиной; новый Node-класс в логике без записи здесь роняет тест.
 
-const LOGIC_DIRS: PackedStringArray = ["res://core", "res://combat", "res://effects"]
+const LOGIC_DIRS: PackedStringArray = ["res://core", "res://combat", "res://effects", "res://weapons"]
 const LOGIC_FILE_PREFIXES: Dictionary = {"res://player": ""}
 const ALLOWED_BASES: PackedStringArray = ["RefCounted", "Resource"]
 const ALLOWED_NODES: Dictionary = {
@@ -14,6 +14,7 @@ const ALLOWED_NODES: Dictionary = {
 	# Autoload: шина глобальных сигналов забега и комнат; сигналы требуют Object.
 	"res://core/EventBus.gd": "autoload, только сигналы переходов",
 	"res://player/FPSController.gd": "CharacterBody3D, физический адаптер и ввод M1",
+	"res://weapons/HitscanWeapon.gd": "Node3D, reused raycast and input adapter; pure weapon state/resolver",
 }
 
 

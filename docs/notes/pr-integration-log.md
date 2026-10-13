@@ -52,5 +52,15 @@ Original #10 HEAD received an ordinary merge of the new master above. Four MD
 conflicts were resolved using its advanced contracts/plan/roadmap/history after
 individual comparison, retaining #9's new integration journal and work-log entry.
 Runtime/tests/config/assets/CI remain identical blobs to original #10 HEAD.
-Godot was not rerun; new integration review is explicitly waived, not passed.
-Publication and required CI of the forthcoming HEAD are pending; #10 is not merged.
+Godot was not rerun; new integration review was explicitly waived, not passed.
+The coordinator published integration HEAD `570441c5eb8d1172cac2b89c8a800fb5fb5ef739`;
+both required checks succeeded ([run38465530744](https://github.com/GrehBan/3d_shooter/actions/runs/38465530744)).
+PR #10 was squash-merged to master `23677e7fae434e656651b08cb981968329e905ae`.
+
+## PR 11: Integration Prepared
+
+Original #11 HEAD received an ordinary merge of that master. Individual conflicts
+in five MD and four runtime/test files were resolved to the advanced accepted
+shotgun versions; inherited integration facts from #9/#10 were preserved.
+All non-MD blobs match original #11 HEAD exactly. New integration review is waived,
+not passed; publication and fresh required CI are pending. #11/#12 are not merged.

@@ -1,0 +1,182 @@
+extends GdUnitTestSuite
+
+var _stats: StatBlock
+var _batch: ShotBatch
+var _resolver: ShotResolver
+var _target: int
+var _seen_hits: PackedInt32Array
+var _seen_damage: PackedInt64Array
+var _seen_roots: PackedInt64Array
+var _completion: PackedInt64Array
+var _deferred: int = -1
+var _heal_on_hit: bool = false
+
+
+func before_test() -> void:
+	_stats = StatBlock.new(4)
+	_stats.allocate()
+	_target = _stats.allocate()
+	_stats.set_stat(_target, StatBlock.Stat.HP, 10000)
+	_batch = ShotBatch.new(4, 12, 4)
+	_resolver = ShotResolver.new(_stats, _batch, 64)
+	_seen_hits = PackedInt32Array()
+	_seen_damage = PackedInt64Array()
+	_seen_roots = PackedInt64Array()
+	_completion = PackedInt64Array()
+	_deferred = -1
+	_heal_on_hit = false
+	_resolver.on_fire.connect(_on_fire)
+	_resolver.on_hit.connect(_on_hit)
+	_resolver.on_attack_resolved.connect(_on_resolved)
+
+
+func _shot(target: int, count: int = 8) -> void:
+	var ticket: int = _batch.reserve(0, count, 6000)
+	for trace: int in count:
+		_batch.write_trace(ticket, trace, target)
+	_batch.publish(ticket)
+
+
+func _on_fire(_source: int, _epoch: int, _sequence: int, root: int) -> void:
+	_seen_roots.append(root)
+	assert_int(_resolver.contexts.hit_count(root)).is_equal(0)
+
+
+func _on_hit(_source: int, target: int, _epoch: int, _sequence: int, trace: int,
+		child: int, damage: int) -> void:
+	_seen_hits.append(trace)
+	_seen_damage.append(damage)
+	assert_int(_resolver.contexts.depth_of(child)).is_equal(1)
+	assert_int(_resolver.contexts.parent_of(child)).is_equal(_seen_roots[-1])
+	assert_int(_resolver.contexts.hit_count(_seen_roots[-1])).is_equal(0)
+	if _heal_on_hit:
+		_stats.set_stat(target, StatBlock.Stat.HP, 10000)
+
+
+func _on_resolved(source: int, epoch: int, sequence: int, root: int) -> void:
+	assert_bool(_resolver.contexts.is_valid(root)).is_false()
+	_completion.append(source)
+	_completion.append(epoch)
+	_completion.append(sequence)
+
+
+func test_eight_pellets_death_noop_and_exact_completion() -> void:
+	_shot(_target)
+	_resolver.logic_step(0)
+	assert_int(_resolver.registered_hits).is_equal(2)
+	assert_int(_resolver.kills).is_equal(1)
+	assert_int(_resolver.no_op_traces).is_equal(6)
+	assert_array(_seen_hits).is_equal([0, 1])
+	assert_array(_seen_damage).is_equal([6000, 4000])
+	assert_int(_stats.get_stat(_target, StatBlock.Stat.HP)).is_equal(0)
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
+	assert_int(_resolver.resolved_shots).is_equal(1)
+	assert_bool(_resolver.close_context(_seen_roots[0])).is_false()
+	assert_int(_resolver.contexts.capacity_refusals).is_equal(0)
+
+
+func test_shield_and_full_armor_zero_damage_still_emit_hits() -> void:
+	_stats.set_stat(_target, StatBlock.Stat.SHIELD, 48000)
+	_shot(_target)
+	_resolver.logic_step(0)
+	assert_int(_resolver.registered_hits).is_equal(8)
+	assert_int(_resolver.kills).is_equal(0)
+	assert_int(_stats.get_stat(_target, StatBlock.Stat.HP)).is_equal(10000)
+	assert_int(_stats.get_stat(_target, StatBlock.Stat.SHIELD)).is_equal(0)
+	_stats.set_stat(_target, StatBlock.Stat.ARMOR, DamageApply.ARMOR_SCALE)
+	_shot(_target)
+	_resolver.logic_step(1)
+	assert_int(_resolver.registered_hits).is_equal(16)
+	assert_int(_resolver.kills).is_equal(0)
+	assert_int(_stats.get_stat(_target, StatBlock.Stat.HP)).is_equal(10000)
+	assert_int(_seen_damage[15]).is_equal(0)
+
+
+func test_mixed_shield_then_death_and_stale_dead_guard_before_capacity() -> void:
+	_stats.set_stat(_target, StatBlock.Stat.SHIELD, 6000)
+	_shot(_target)
+	_resolver.logic_step(0)
+	assert_int(_resolver.registered_hits).is_equal(3)
+	assert_int(_resolver.kills).is_equal(1)
+	assert_int(_resolver.no_op_traces).is_equal(5)
+	assert_int(_seen_damage[0]).is_equal(0)
+	_stats.release(_target)
+	var fresh: int = _stats.allocate()
+	_stats.set_stat(fresh, StatBlock.Stat.HP, 10000)
+	_stats.set_stat(fresh, StatBlock.Stat.SHIELD, 9999)
+	var minimal := ShotResolver.new(_stats, _batch, 1)
+	_shot(_target)
+	minimal.logic_step(0)
+	assert_int(minimal.contexts.capacity_refusals).is_equal(0)
+	assert_int(minimal.registered_hits).is_equal(0)
+	assert_int(_stats.get_stat(fresh, StatBlock.Stat.SHIELD)).is_equal(9999)
+	_stats.set_stat(fresh, StatBlock.Stat.HP, 0)
+	_shot(fresh)
+	minimal.logic_step(1)
+	assert_int(minimal.contexts.capacity_refusals).is_equal(0)
+	assert_int(_stats.get_stat(fresh, StatBlock.Stat.SHIELD)).is_equal(9999)
+
+
+func test_miss_root_duplicate_tick_and_pending_reservation() -> void:
+	_shot(-1)
+	_resolver.logic_step(4)
+	assert_int(_resolver.resolved_shots).is_equal(1)
+	assert_int(_resolver.registered_hits).is_equal(0)
+	_shot(-1)
+	_resolver.logic_step(4)
+	_resolver.logic_step(3)
+	assert_int(_batch.count()).is_equal(1)
+	assert_int(_resolver.resolved_shots).is_equal(1)
+	_resolver.logic_step(5)
+	assert_int(_resolver.resolved_shots).is_equal(2)
+	var pending: int = _batch.reserve(0, 2, 6000)
+	_resolver.logic_step(6)
+	assert_int(_batch.pending_count()).is_equal(1)
+	assert_bool(_batch.publish(pending)).is_false()
+
+
+func _hold_descendant(_source: int, _target_handle: int, _epoch: int, _sequence: int,
+		trace: int, child: int, _damage: int) -> void:
+	if trace == 0:
+		_deferred = _resolver.open_child(child)
+
+
+func test_deferred_descendant_closed_children_capacity_and_saved_metadata() -> void:
+	_stats.set_stat(_target, StatBlock.Stat.HP, 100000)
+	_resolver.on_hit.connect(_hold_descendant)
+	_shot(_target)
+	_resolver.logic_step(0)
+	assert_int(_resolver.contexts.alive_count()).is_equal(10)  # root + 8 closed siblings + held child
+	assert_int(_resolver.contexts.open_count(_deferred)).is_equal(1)
+	assert_int(_resolver.resolved_shots).is_equal(0)
+	assert_bool(_resolver.contexts.is_valid(_seen_roots[0])).is_true()
+	assert_bool(_resolver.close_context(_deferred)).is_true()
+	assert_int(_resolver.resolved_shots).is_equal(1)
+	assert_array(_completion).is_equal([0, 0, 0])
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
+	assert_bool(_resolver.close_context(_deferred)).is_false()
+	assert_int(_resolver.contexts.open_child(_seen_roots[0])).is_equal(-1)
+
+
+func test_reset_cancels_pending_and_held_descendant_then_allows_old_tick() -> void:
+	_resolver.on_hit.connect(_hold_descendant)
+	_shot(_target, 1)
+	_resolver.logic_step(1000)
+	_batch.reserve(0, 3, 6000)
+	assert_bool(_resolver.reset_room()).is_true()
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
+	assert_int(_batch.pending_count()).is_equal(0)
+	assert_bool(_resolver.close_context(_deferred)).is_false()
+	_shot(-1)
+	_resolver.logic_step(0)
+	assert_int(_resolver.resolved_shots).is_equal(1)
+	assert_array(_completion).is_equal([0, 1, 0])
+
+
+func test_apply_kill_transition_is_snapshotted_before_onhit_healing() -> void:
+	_heal_on_hit = true
+	_stats.set_stat(_target, StatBlock.Stat.HP, 1000)
+	_shot(_target, 1)
+	_resolver.logic_step(0)
+	assert_int(_resolver.kills).is_equal(1)
+	assert_int(_stats.get_stat(_target, StatBlock.Stat.HP)).is_equal(10000)
