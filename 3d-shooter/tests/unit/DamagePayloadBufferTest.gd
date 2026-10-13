@@ -1,9 +1,43 @@
 extends GdUnitTestSuite
 ## DamagePayloadBuffer: FIFO, перенос через границу кольца, переполнение, int64-поля.
 
+const OVERFLOW_ERROR: String = "DamagePayloadBuffer: переполнение, записи отбрасываются"
+
 
 func _push_simple(buffer: DamagePayloadBuffer, value: int) -> int:
 	return buffer.push(value, value + 1, value * 1000, DamagePayload.Element.NONE, 0, 0, DamagePayload.NO_HANDLE)
+
+
+func _assert_single_overflow(callback: Callable) -> void:
+	var notification: GdUnitGodotErrorAssert = assert_error(callback)
+	await notification.is_push_error(OVERFLOW_ERROR)
+	# gdUnit4 6.2.1: is_push_error ищет совпадение, но не проверяет число сообщений.
+	# Его приватный logger захватывает push/script errors независимо от настроек suite.
+	# Читаем pinned API только в тесте; addon не меняется.
+	var logger: GodotGdErrorMonitor.GdUnitLogger = notification.get("_logger")
+	assert_int(logger.entries().size()).is_equal(1)
+
+
+func _first_overflow(buffer: DamagePayloadBuffer, value: int) -> void:
+	var result: Array[int] = []
+	await _assert_single_overflow(func() -> void: result.append(_push_simple(buffer, value)))
+	assert_array(result).is_equal([DamagePayloadBuffer.INVALID_SLOT])
+
+
+func _silent_overflow(buffer: DamagePayloadBuffer, value: int) -> void:
+	var result: Array[int] = []
+	await assert_error(func() -> void: result.append(_push_simple(buffer, value))).is_success()
+	assert_array(result).is_equal([DamagePayloadBuffer.INVALID_SLOT])
+
+
+func _queue_snapshot(buffer: DamagePayloadBuffer) -> PackedInt64Array:
+	var snapshot := PackedInt64Array([buffer.capacity(), buffer.count(), buffer.front_slot()])
+	for i: int in buffer.count():
+		var slot: int = buffer.slot_at(i)
+		snapshot.append_array(PackedInt64Array([slot, buffer.get_source(slot), buffer.get_target(slot),
+				buffer.get_amount(slot), buffer.get_element(slot), buffer.get_tags(slot),
+				buffer.get_flags(slot), buffer.get_attack_context(slot), buffer.get_phase(slot)]))
+	return snapshot
 
 
 func test_push_stores_all_fields_in_base_phase() -> void:
@@ -52,29 +86,94 @@ func test_slot_at_walks_from_head() -> void:
 
 func test_overflow_drops_new_records_and_counts_them() -> void:
 	var buffer := DamagePayloadBuffer.new(2)
+	var first: int = buffer.push(1, 11, 1_500, DamagePayload.Element.FIRE, 1 << 40,
+			DamagePayload.Flag.CRIT, 40_000 * StatBlock.HANDLE_INDEX_SPAN)
+	buffer.set_phase(first, DamagePayload.Phase.APPLY)
+	buffer.push(2, 22, 10_000_000_000, DamagePayload.Element.ICE, 1 << 41,
+			DamagePayload.Flag.SECONDARY, 33)
+	var before: PackedInt64Array = _queue_snapshot(buffer)
+	await _first_overflow(buffer, 3)
+	assert_int(buffer.dropped_count()).is_equal(1)
+	assert_array(_queue_snapshot(buffer)).is_equal(before)
+	await _silent_overflow(buffer, 4)
+	assert_int(buffer.dropped_count()).is_equal(2)
+	# Все поля, слоты и порядок уже лежащих записей не тронуты обоими отказами.
+	assert_array(_queue_snapshot(buffer)).is_equal(before)
+
+
+func test_clear_rearms_notification_and_preserves_dropped_count() -> void:
+	var buffer := DamagePayloadBuffer.new(2)
 	_push_simple(buffer, 1)
 	_push_simple(buffer, 2)
-	assert_int(_push_simple(buffer, 3)).is_equal(DamagePayloadBuffer.INVALID_SLOT)
-	assert_int(_push_simple(buffer, 4)).is_equal(DamagePayloadBuffer.INVALID_SLOT)
+	buffer.pop_front()
+	_push_simple(buffer, 3)  # голова 1, записи в слотах 1, 0
+	await _first_overflow(buffer, 4)
+	await _silent_overflow(buffer, 5)
+	buffer.clear()
+	assert_int(buffer.count()).is_equal(0)
+	assert_int(buffer.front_slot()).is_equal(DamagePayloadBuffer.INVALID_SLOT)
 	assert_int(buffer.dropped_count()).is_equal(2)
-	# Уже лежащие записи не тронуты.
-	assert_int(buffer.get_source(buffer.slot_at(0))).is_equal(1)
-	assert_int(buffer.get_source(buffer.slot_at(1))).is_equal(2)
+	assert_int(_push_simple(buffer, 6)).is_equal(0)  # clear сбросил и голову кольца
+	assert_int(_push_simple(buffer, 7)).is_equal(1)
+	var before: PackedInt64Array = _queue_snapshot(buffer)
+	await _first_overflow(buffer, 8)
+	assert_int(buffer.dropped_count()).is_equal(3)
+	await _silent_overflow(buffer, 9)
+	assert_int(buffer.dropped_count()).is_equal(4)
+	assert_array(_queue_snapshot(buffer)).is_equal(before)
+
+
+func test_reset_dropped_count_rearms_notification_and_preserves_wrapped_queue() -> void:
+	var buffer := DamagePayloadBuffer.new(3)
+	for value: int in 3:
+		_push_simple(buffer, value)
+	buffer.pop_front()
+	_push_simple(buffer, 3)  # очередь в слотах 1, 2, 0
+	buffer.set_phase(buffer.front_slot(), DamagePayload.Phase.MITIGATION)
+	await _first_overflow(buffer, 4)
+	await _silent_overflow(buffer, 5)
+	assert_int(buffer.dropped_count()).is_equal(2)
+	var before: PackedInt64Array = _queue_snapshot(buffer)
 	buffer.reset_dropped_count()
 	assert_int(buffer.dropped_count()).is_equal(0)
+	assert_array(_queue_snapshot(buffer)).is_equal(before)
+	await _first_overflow(buffer, 6)
+	assert_int(buffer.dropped_count()).is_equal(1)
+	await _silent_overflow(buffer, 7)
+	assert_int(buffer.dropped_count()).is_equal(2)
+	assert_array(_queue_snapshot(buffer)).is_equal(before)
+
+
+func test_pop_and_successful_push_do_not_rearm_notification() -> void:
+	var buffer := DamagePayloadBuffer.new(2)
+	_push_simple(buffer, 1)
+	_push_simple(buffer, 2)
+	await _first_overflow(buffer, 3)
+	assert_bool(buffer.pop_front()).is_true()
+	assert_bool(buffer.pop_front()).is_true()
+	assert_bool(buffer.is_empty()).is_true()
+	assert_int(_push_simple(buffer, 4)).is_equal(0)
+	assert_int(_push_simple(buffer, 5)).is_equal(1)
+	var before: PackedInt64Array = _queue_snapshot(buffer)
+	await _silent_overflow(buffer, 6)
+	assert_int(buffer.dropped_count()).is_equal(2)
+	assert_array(_queue_snapshot(buffer)).is_equal(before)
 
 
 func test_overflow_is_deterministic() -> void:
 	var results: Array[PackedInt64Array] = []
 	for run: int in 2:
 		var buffer := DamagePayloadBuffer.new(5)
-		var trace := PackedInt64Array()
-		for value: int in 40:
-			trace.append(_push_simple(buffer, value))
-			if value % 3 == 0:
-				buffer.pop_front()
-		trace.append(buffer.dropped_count())
-		results.append(trace)
+		await _assert_single_overflow(func() -> void:
+			var trace := PackedInt64Array()
+			for value: int in 40:
+				trace.append(_push_simple(buffer, value))
+				if value % 3 == 0:
+					buffer.pop_front()
+			trace.append(buffer.dropped_count())
+			results.append(trace))
+	assert_int(results[0].size()).is_equal(41)
+	assert_int(results[0][40]).is_equal(22)
 	assert_array(results[0]).is_equal(results[1])
 
 
@@ -134,3 +233,26 @@ func test_hot_path_does_not_allocate() -> void:
 	assert_int(objects_delta).is_equal(0)
 	assert_int(memory_delta).is_equal(0)
 	assert_int(acc).is_not_equal(-1)
+
+
+func test_suppressed_overflow_hot_path_does_not_allocate() -> void:
+	var buffer := DamagePayloadBuffer.new(2)
+	_push_simple(buffer, 1)
+	_push_simple(buffer, 2)
+	# Первую ожидаемую диагностику и объекты gdUnit создаём до замера.
+	await _first_overflow(buffer, 3)
+	for value: int in 200:
+		_push_simple(buffer, value)
+	var dropped_before: int = buffer.dropped_count()
+	var objects_before: int = int(Performance.get_monitor(Performance.OBJECT_COUNT))
+	var memory_before: int = int(Performance.get_monitor(Performance.MEMORY_STATIC))
+	var acc: int = 0
+	for value: int in 20000:
+		acc += _push_simple(buffer, value)
+	var objects_delta: int = int(Performance.get_monitor(Performance.OBJECT_COUNT)) - objects_before
+	var memory_delta: int = int(Performance.get_monitor(Performance.MEMORY_STATIC)) - memory_before
+	assert_int(objects_delta).is_equal(0)
+	assert_int(memory_delta).is_equal(0)
+	assert_int(acc).is_equal(20000 * DamagePayloadBuffer.INVALID_SLOT)
+	assert_int(buffer.dropped_count() - dropped_before).is_equal(20000)
+	assert_int(buffer.count()).is_equal(2)
