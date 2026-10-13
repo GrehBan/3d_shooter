@@ -94,12 +94,14 @@ Apply/PostHit одной дробины полностью завершаетс�
 
 Игровая семантика ратифицирована. Минимальная реализация пакета 3 подготовлена в
 `codex/m1-current-plan`: pure stores/resolver, физические rays/input, видимые static
-targets и mesh дробовика с прицелом. Итоговая независимая runtime приёмка ожидается;
-VFX pools пакета 4, реальные enemy/effects storms и приёмка всей M1 не завершены.
-Пользователь остановил дальнейшую работу из-за лимитов; текущий снимок готовится
-как draft PR без финального full-diff independent PASS и без приёмки пакета3.
-Уже запущенный Windows all завершился exit0:230/230 tests, synthetic3032385286 PASS;
-эти проверки не снимают оставшиеся review/графические/real-combat gates M1.
+targets и mesh дробовика с прицелом. На 2026-10-13 runtime пакета 3 принят локально:
+независимый full-diff review `b73a4be` → `9a4fead` и QA дали PASS, обязательные
+Linux/Windows CI точного `9a4feade15e98d6c870f89163e659572b7ecb9a0` — SUCCESS.
+Пользователь возобновил работу по плану; новая запись приёмки ожидает отдельного
+документационного ревью перед пакетом 4. PR #11 OPEN/DRAFT, merge не выполнялся.
+Сохранённый Windows all: exit0,230/230 tests, synthetic3032385286 PASS; runtime-проверки
+в этом docs-only шаге не повторялись. VFX pools пакета 4, реальные enemy/effects storms,
+ручные OS mouse/плавность/60 FPS и приёмка всей M1 остаются впереди.
 Транспорт ShotBatch, жизненный цикл и ёмкости описаны в
 [контракте пакета 3](docs/contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3);
 порядок приёмки и проверки — в [плане M1](docs/m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий).

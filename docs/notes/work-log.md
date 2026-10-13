@@ -1092,3 +1092,54 @@ Merge не выполнялся; пакеты4/5 не начаты. По пор�
 Существующий кадр финального rendering smoke сохранён как документальный asset:
 [скриншот Sandbox](../images/m1-shotgun-sandbox.png). Runtime/configuration/assets
 проекта Godot этим шагом не менялись; runtime-проверки не повторялись.
+
+## Возобновление работы и локальная приёмка runtime пакета 3 — 2026-10-13
+
+Новое прямое поручение пользователя: «работаем дальше по плану». Оно отменяет прежний
+limit-stop; исторические записи остановки и незавершённого ревью выше сохраняются
+как состояние на момент записи. Координатор завершил приёмку реализованного runtime
+пакета3 перед передачей shared files пакету4, без начала нового runtime в этом шаге.
+
+Независимый архитектурный reviewer `/root/packet3_final_review` проверил полный итоговый
+diff 36 файлов от согласованной зависимой базы
+`b73a4be701276373b3704b7f8c801a8815939872` до
+`9a4feade15e98d6c870f89163e659572b7ecb9a0`, включая код, integration, тесты, MD и
+документальный PNG. Verdict: PASS, блокеров не найдено. Это итоговый whole-diff обзор,
+а не ранее полученная приёмка только договора. Независимый QA `/root/packet3_qa`
+проверил покрытие и сохранённые логи этой версии, подтвердил неизменность runtime
+от source `9c88a7b6556bbbbde21dce2a407df88ee18af920` и самостоятельно выполнил Python
+oracle `shotgun_ref.py`: checksum `3770191677`, PASS. QA не повторял тяжёлые Godot-прогоны.
+
+Сохранённая локальная Windows-проверка source: `ci/run_checks.sh all` exit0;
+import PASS, scripts61/0,230/230 tests в31suites, без errors/failures/flaky/skipped/orphans.
+FPS16/16, MobilityPhysics30/30, ShotgunPhysics11/11; активные 300 warmup +3600 measure
+physics ticks:120shots,960traces/hits,120resolved, object/node/resource/orphan/static
+deltas0, configuration0. Synthetic regress checksum `3032385286` PASS, dropped0/config0,
+object/node/resource/orphan deltas0, static+1152B≤1MiB. Логи
+`ci-logs/shotgun/{import,scripts,tests,regress}.log`, report_8 прочитаны; это сохранённые
+результаты, не новый runtime-прогон. Отрицательная orphan probe и rendering smoke
+подробно зафиксированы выше; прежние deterministic references сохранены.
+
+Координатор свежей проверкой GitHub подтвердил SUCCESS обеих обязательных Linux/Windows
+CI именно для HEAD `9a4feade15e98d6c870f89163e659572b7ecb9a0`
+([run 38421912445](https://github.com/GrehBan/3d_shooter/actions/runs/38421912445)).
+Source/runtime/tests этого HEAD совпадают с локально проверенным `9c88a7b`; между
+ними добавлены только публикационные MD и документальный PNG. PR #11 остаётся
+OPEN/DRAFT в `master`, зависимости #8/#9/#10 не слиты; merge не выполнялся.
+Runtime пакета3 принят локально, это не приёмка всей M1 и не слияние в `master`.
+
+Настоящий docs-only delta обновляет ровно `docs/contracts.md`, `docs/m1-plan.md`,
+`gdd.md`, `docs/notes/follow-ups.md`, `roadmap.md`, `docs/notes/work-log.md`.
+Новая запись приёмки ожидает отдельного независимого документационного ревью точных
+bytes; PASS для `9a4fead` и его CI не подтверждают новый незакоммиченный delta или
+будущий HEAD. Проверки этого шага: структура Markdown, относительные ссылки/anchors,
+фактическая согласованность и `git diff --check`; Godot/runtime-проверки не повторяются,
+поскольку runtime/configuration/assets проекта не меняются. Stage/commit/push/merge
+автором этого шага не выполняются.
+
+После независимого PASS текущей записи следующий шаг — договор и назначение пакета4
+с единым владельцем shared files; реализация пакетов4/5 ещё не начата. Ручные проверки
+OS input/мыши, визуальной плавности и60FPS не подтверждены. Пулы VFX/декалей пакета4,
+реальный интеграционный benchmark/общая приёмка пакета5 и real-combat CPU≤7ms с40enemies
+и effect storms по M3 остаются впереди. Native rendering PASS и headless-результаты
+не закрывают эти ограничения; M2/cards/content не расширены.
