@@ -231,8 +231,10 @@ active120muzzle/960impact/960marks,2040reuse/expiry,
 object/node/resource/orphan/static delta0, config/dropped0, synthetic3032385286 PASS.
 Corrected interpolationOFF native Forward+/D3D12 live proof
 прошёл на RTX4050LaptopGPU1280x720: active1/8/8, displayed pose error0, floor/wall
-marks и reset проверены. Independent final-diff review ожидается, пакет4 не принят;
-commit/publication/CI/merge этой версии отсутствуют. Вся M1 и пакет5 не завершены.
+marks и reset проверены. Независимые архитектурное и QA final-diff review23files PASS;
+source `ff26428d51c024ad693c916982738d96fba4096d` принят локально и закоммичен.
+Новая docs-only запись ожидает отдельного ревью; publication/CI/merge этой версии
+отсутствуют. Вся M1 и пакет5 не завершены.
 Details — [план](docs/m1-plan.md#4-пулы-используемых-vfx-и-декалей),
 [журнал](docs/notes/work-log.md#2026-10-13--назначение-визуальных-пулов-m1).
 

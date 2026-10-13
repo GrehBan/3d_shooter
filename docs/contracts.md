@@ -11,8 +11,9 @@
 Closing docs пакета3 получили отдельный независимый PASS и опубликованы в
 `d9f1a53175fe32176fac72df195eda27ee18a129`; обязательные Linux/Windows CI этого HEAD
 завершились SUCCESS (run38424601880). PR #11 остаётся OPEN/DRAFT, merge не выполнялся.
-§8 описывает локально реализованный пакет4: final Windows all и native rendering
-smoke пройдены, независимое итоговое ревью ещё ожидается. Пакет5 и полный M2
+§8 описывает локально принятый пакет4: final Windows all и native rendering smoke
+пройдены; независимые full-diff архитектурное и QA-ревью дали PASS для source
+`ff26428d51c024ad693c916982738d96fba4096d`. Пакет5 и полный M2
 не реализованы; вся M1 не завершена.
 
 ## 1. Общие правила
@@ -595,7 +596,8 @@ ShotVisualPool instance (raw int не является global identity). Пок�
 
 Реализация этого договора локально проверена final Windows all (64 scripts,
 249/249 tests,32suites, active3900ticks zero monitor deltas/config/dropped) и
-native Forward+/D3D12 live/moving-camera smoke. Независимое ревью точного итогового
-diff ещё ожидается; локальный PASS не является приёмкой пакета4, PR/CI/merge или
-общей M1. Точные результаты и ограничения —
+native Forward+/D3D12 live/moving-camera smoke. Независимые архитектурное и QA-ревью
+точного23file snapshot дали PASS; source `ff26428d51c024ad693c916982738d96fba4096d`
+принят локально. Это не PR/CI/merge пакета4 и не приёмка общей M1; новая docs-only
+запись результата ожидает отдельного независимого ревью. Точные результаты и ограничения —
 [журнал](notes/work-log.md#итоговая-локальная-проверка-пакета4).

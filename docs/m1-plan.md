@@ -25,8 +25,9 @@ Native rendering smoke оружия/целей/прицела пройден; р
 не подтверждены, вся M1 не завершена. PR #11 OPEN/DRAFT; зависимости #8/#9/#10 не слиты.
 Merge не выполнялся. Пакет4 локально реализован в `codex/m1-visual-pools`:
 final Windows all (scripts64/0,249/249 tests32suites,synthetic3032385286) и native
-Forward+/D3D12 live smoke PASS; independent final-diff review ещё ожидается.
-Пакет4 не объявлен принятым; пакет5 не начат. После завершения пакета4 пользователь
+Forward+/D3D12 live smoke PASS; независимые final-diff архитектурное и QA-ревью PASS.
+Source `ff26428d51c024ad693c916982738d96fba4096d` принят локально; пакет5 не начат.
+Эта docs-only запись результата ожидает отдельного независимого ревью. Пользователь
 поручил аудит/слияние PR, затем отдельную тестовую сцену дробовика/мишеней.
 Точные версии, review и ограничения — [журнал](notes/work-log.md#возобновление-работы-и-локальная-приёмка-runtime-пакета-3--2026-10-13).
 Источники:
@@ -422,9 +423,11 @@ pose error0 и active1/8/8; world marks остаются после flash и о�
 Final Windows all завершён: import PASS, scripts64/0,249/249 tests в32suites;
 active300warmup+3600measure:120muzzle/960impact/960marks,2040reuse/expiry,
 object/node/resource/orphan/static deltas0, configuration/dropped0.
-Synthetic checksum3032385286 сохранён, regress PASS. Независимое ревью точного
-итогового diff ещё ожидается; пакет4 не объявлен принятым, PR/CI/merge этой версии
-не выполнены. Пакет5 не начат.
+Synthetic checksum3032385286 сохранён, regress PASS. Независимые архитектурное и
+QA-ревью точного итогового23file snapshot дали PASS; пакет4 принят локально,
+source `ff26428d51c024ad693c916982738d96fba4096d` закоммичен.
+PR/CI/merge этой версии не выполнены; новая docs-only запись приёмки ожидает
+отдельного независимого ревью. Пакет5 не начат.
 
 Владелец: исполнитель визуальных пулов; области используемых сцен/ресурсов эффектов,
 их пулов, интеграции оружия/Sandbox и тестов. Предсоздавать только реальные эффекты

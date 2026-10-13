@@ -101,8 +101,8 @@ Closing docs пакета3 получили отдельный независи�
 `d9f1a53` с mandatory Linux/Windows SUCCESS (run38424601880).
 PR #11 OPEN/DRAFT, merge не выполнялся.
 Сохранённый Windows all: exit0,230/230 tests, synthetic3032385286 PASS; runtime-проверки
-в closing-docs шаге не повторялись. VFX pools пакета4 реализованы локально и ожидают
-независимого итогового ревью; реальные enemy/effects storms,
+в closing-docs шаге не повторялись. VFX pools пакета4 приняты локально после
+независимых архитектурного и QA PASS; реальные enemy/effects storms,
 ручные OS mouse/плавность/60 FPS и приёмка всей M1 остаются впереди.
 Транспорт ShotBatch, жизненный цикл и ёмкости описаны в
 [контракте пакета 3](docs/contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3);
@@ -123,8 +123,10 @@ Final Windows all: import PASS, scripts64/0,249/249 tests в32suites;
 active120/960/960 с2040reuse/expiry, zero deltas/config/dropped и
 synthetic3032385286 PASS. Все boundary tests входят в итоговый all.
 Graphical Forward+/D3D12 corrected interpolationOFF live proof прошёл (RTX4050,
-1280x720, live1/8/8 и displayed muzzle pose error0). Independent final-diff
-acceptance пока ожидается, пакет4 не принят и PR/CI/merge этой версии не выполнены.
+1280x720, live1/8/8 и displayed muzzle pose error0). Независимые архитектурное и QA
+final-diff review дали PASS для23file snapshot; source
+`ff26428d51c024ad693c916982738d96fba4096d` принят локально и закоммичен.
+PR/CI/merge этой версии не выполнены; новая docs-only запись ожидает отдельного ревью.
 Пакет5, enemy/effectstorm budget и ручная OS mouse/плавность/60FPS не подтверждены.
 
 ---

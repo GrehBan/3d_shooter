@@ -33,7 +33,7 @@ boundary-test. Исправление кода в текущий шаг доку
 Пакет3 в `codex/m1-current-plan` (2026-10-13) добавляет минимальные physics rays/shot
 resolver и активный zero-allocation test. Native rendering smoke подтверждает видимые
 оружие/цели/прицел; ручная проверка OS mouse, плавности и60FPS ещё требуется при приёмке
-M1. VFX pools локально реализованы в пакете4 и ожидают independent acceptance;
+M1. VFX pools пакета4 приняты локально после независимых архитектурного и QA PASS;
 общая интеграционная приёмка остаётся работой пакета5; real-combat7ms
 с40enemies/effect storms относится к M3. Эти gates не доказаны shotgun тестом.
 На 2026-10-13 итоговый independent
@@ -52,8 +52,9 @@ Final Windows all: import PASS, scripts64/0,249/249 tests в32suites;
 active300+3600physics:120muzzle/960impact/960marks,2040reuse/expiry,
 zero monitor deltas/config/dropped; synthetic3032385286 PASS.
 Corrected interpolationOFF native Forward+/D3D12 live/moving-camera proof прошёл
-на RTX4050,1280x720. Independent final-diff acceptance ещё ожидается;
-локальные результаты не подтверждают PR/CI/merge пакета4. Пакет5 остаётся
+на RTX4050,1280x720. Независимые final-diff архитектурное и QA-ревью дали PASS;
+source `ff26428d51c024ad693c916982738d96fba4096d` принят локально и закоммичен.
+Новая docs-only запись ожидает отдельного ревью; PR/CI/merge пакета4 ещё нет. Пакет5 остаётся
 отдельной общей проверкой integration; ручные OS mouse/плавность/60FPS и real-combat
 7ms с40enemies/effect storms не подтверждены этими проверками.
 Последующие доказательства — [журнал](work-log.md#2026-10-13--назначение-визуальных-пулов-m1).
