@@ -1,25 +1,36 @@
 # Контракты ядра боя (M1a)
 
 Справочник по чистым классам логики боя: кто их вызывает, что гарантировано и что
-запрещено. Код лежит в `3d-shooter/` (`res://`). Все классы ядра здесь — `RefCounted` или
+запрещено. Код лежит в `3d-shooter/` (`res://`). Реализованные классы ядра здесь — `RefCounted` или
 `Resource`; это проверяет `tests/unit/LogicIsolationTest.gd`. Исключения (`GameLoop`,
-`EventBus`, физический `FPSController`) перечислены в его allowlist с причиной.
+`EventBus`, физические `FPSController` и `HitscanWeapon`) перечислены в его allowlist с причиной.
+§7 описывает реализованный минимальный пакет 3 M1 в `codex/m1-current-plan`.
+Договор прошёл отдельное независимое архитектурное ревью; итоговый runtime/docs diff
+не получил собственной финальной независимой приёмки. По поручению пользователя о
+лимитах дальнейшая работа остановлена, готовится draft PR текущего снимка. Пакет3
+не объявляется принятым. Пакеты 4/5 и полный M2 не реализованы.
 
 ## 1. Общие правила
 
 ### Время и порядок внутри кадра
 
 * **Физический тик, 60 Гц** (`_physics_process`): FPS-контроллер, Jolt, hitscan, снаряды.
-  Здесь вызываются `HitEventQueue.push()` и `MovementAbilities.try_activate()`.
+  Общий событийный транспорт — `HitEventQueue.push()`; здесь также вызывается
+  `MovementAbilities.try_activate()`. Для hitscan-дробовика пакета 3 оговорено отдельное
+  weapon-specific исключение: полная запись выстрела в ShotBatch (§7),
+  а не поштучные `HitEventQueue.push()` для дробин.
 * **Логический тик, 30 Гц**: `GameLoop` испускает `logic_tick(tick)` на каждом втором
   физическом тике. У `GameLoop` `process_physics_priority = 1000`, поэтому логика идёт после
   всех физических обработчиков этого тика и видит их события: попадание raycast-hitscan
   из `_physics_process` попадает в тот же тик. Сигналы контактов Jolt (`body_entered` и т. п.
   у снарядов и зон) приходят после шага физики, поэтому логика видит их только в следующем
-  физическом тике. Подписчики логического тика
-  вызывают `HitEventQueue.prepare()` → обход → `clear()`, разрешают `AttackContext`, обходят
-  `EffectHost`, применяют `DamagePayloadBuffer` к `StatBlock`, вызывают
+  физическом тике. Существующий событийный конвейер логического тика
+  вызывает `HitEventQueue.prepare()` → обход → `clear()`, разрешает `AttackContext`, обходит
+  `EffectHost`, применяет `DamagePayloadBuffer` к `StatBlock`, вызывает
   `MovementAbilities.regen_energy()`.
+  M1 weapon-path использует один Sandbox composition-root subscriber:
+  ShotBatch resolver → `MobilityRuntime.logic_step(tick)` (landing damage → regen).
+  Его порядок и coordinated reset описаны в §7; legacy-конвейер/синтетика сохраняются.
 * **Кадр** (`_process`): только визуал. В логику не пишет.
 * Логическое время — номер логического тика из `GameLoop.get_logic_tick()`. Кулдауны
   считаются в логических тиках, а не в секундах или кадрах.
@@ -34,6 +45,9 @@
   handle сущностей и события.
 * Детерминизм каждого буфера и пула гарантирован только при нулевых счётчиках ошибок
   конфигурации (см. ниже).
+* ShotBatch канонизирует полные source/sequence, затем trace index (§7).
+  Его integer resolver детерминирован для одинаковых завершённых записей выстрелов;
+  физический raycast и input не приобретают побитовую гарантию.
 
 ### Аллокации
 
@@ -67,7 +81,7 @@
 
 Переполнение очередей и пулов — ошибка подбора ёмкости, а не штатный режим:
 
-* `push_error` пишется один раз до ближайшего `clear()` / `reset_counters()`;
+* В существующих классах `push_error` пишется один раз до ближайшего `clear()` / `reset_counters()`;
   для `DamagePayloadBuffer` сброс уведомления также выполняет `reset_dropped_count()`.
   Отказ детерминированный, событие или запись отбрасывается;
 * счётчик растёт на каждый отказ: `HitEventQueue.dropped_count()`,
@@ -75,6 +89,9 @@
   `capacity_refusals`, `EffectHost.capacity_refusals`, `LandingEventQueue.dropped_count()`;
 * корректность и детерминизм гарантированы только при нулевых счётчиках; `regress.gd` и
   `CombatContractsGoldenTest` падают при ненулевых.
+* Для ShotBatch (§7) отказ атомарен для всего запроса ДО принятия выстрела;
+  диагностическое сообщение однократно до явного reset, счётчик растёт на каждый отказ.
+  Ненулевые ошибки транспорта/пулов блокируют приёмку пакета.
 
 Штатные ограничители игры (глубина цепи, бюджет ударов атаки, повторная цель в ветке) — не
 ошибки: они отказывают без лога и считаются отдельно (`depth_refusals`, `budget_refusals`).
@@ -142,11 +159,16 @@
   создаётся один раз); при спавне из пула — только перезапись.
 * `detach(collider)` пишет `NO_HANDLE`, запись не удаляется: повторное использование узла
   не выделяет память.
-* `handle_of(collider)` — что физика кладёт в `HitEventQueue`.
+* `handle_of(collider)` — что физика кладёт в `HitEventQueue`, либо в trace record
+  ShotBatch для weapon-specific M1 hitscan (§7).
 
 ### HitEventQueue (`combat/HitEventQueue.gd`)
 
-Попадания из физики для логического тика.
+Существующий транспорт отдельных попаданий из физики для логического тика.
+Mock/golden/synthetic используют его прежний контракт. Weapon-specific hitscan пакета 3
+использует ShotBatch (§7): четыре поля и target-first sort этой очереди не сохраняют
+идентичность полного выстрела и его trace-order. API, payload, сортировка и эталоны
+`HitEventQueue` не меняются; shot identity/index не упаковываются в legacy payload.
 
 * Физика: `push(source, target, kind, payload)`. Логика: `prepare()` → обход
   `get_*(i)` для `i < count()` → `clear()`.
@@ -160,6 +182,7 @@
 ### AttackContextPool (`effects/AttackContextPool.gd`)
 
 Атака — дерево: корень на выстрел, дочерние контексты на вторичные удары.
+Пакет 3 использует тот же API для sibling-child прямых дробин (§7), без изменения MAX_DEPTH.
 
 * `open_root(source, hit_budget)`, `open_child(parent)`: глубина ≤ 4; бюджет ударов общий на
   дерево. `open_child` от уже закрытого родителя разрешён, пока дерево живо (отложенные
@@ -327,8 +350,10 @@ physics activation до первого logic_step. Этот явный room rese
 landing events, сбрасывает dropped/diagnostic counters и duplicate logic guard;
 MovementAbilities.rebase_clock сохраняет оставшийся cooldown `max(ready-old_now,0)`
 с новым origin0, energy/grants/costs/flags и physical episode не меняются. Истёкший срок0;
-ungranted остаётся ungranted. Последовательность Sandbox.reset_mobility_clock:
+ungranted остаётся ungranted. Последовательность реализованного пакета 2 Sandbox.reset_mobility_clock:
 capture old GameLoop tick → runtime.reset_clock(old) → GameLoop.reset_clock().
+Расширение composition root для пакета 3 добавляет reset shot resolver
+до существующего mobility reset (§7); точный old tick и cooldown rebase сохраняются.
 Новая комната может создать новый runtime. Обычный same-identity bind ничего не
 отбрасывает и не сбрасывает; lifecycle нового entity отличается от room clock reset.
 
@@ -354,3 +379,159 @@ float непосредственно ниже границы остаются н
 Максимальная float height квантуется с cap выше; NaN/Inf/отрицательная высота дают 0.
 Порядок входных событий от Jolt не обещан bit-exact; integer apply одинаков для одного
 и того же последовательного event stream. Очередь не переносит HP-логику в физику.
+
+## 7. M1: hitscan-дробовик и ShotBatch (пакет 3)
+
+### Статус и границы
+
+Договорённости подготовлены 2026-10-13 от `b73a4be701276373b3704b7f8c801a8815939872`.
+Игровая семантика ратифицирована, значение 8 относится только к утверждённому
+[пресету GDD](../gdd.md#принято-для-m1-минимальный-hitscan-дробовик--2026-10-13).
+После независимого PASS уточнённого договора минимальные ShotBatch, WeaponData,
+WeaponState, ShotResolver и физический HitscanWeapon реализованы в `res://weapons/`.
+Их итоговая независимая приёмка ещё ожидается; ранний PASS документов не одобряет код.
+Объём M1: проверенные данные оружия, input/physics adapter, минимальные чистые
+transport/resolver и существующие stores/пулы/AttackContext. Полный M2 DamagePipeline,
+EffectRunner, карточки и элементы не переносятся в пакет 3; synthetic fixtures,
+legacy очереди и checksum `3032385286` сохраняются.
+
+### WeaponData и атомарный транспорт
+
+* `N` — число дробин из утверждённых immutable WeaponData, полностью проверенных
+  при cold загрузке. Параметры пресета не читаются из изменяемого контента в бою.
+  Число дробин, raw damage, дальность, рисунок/spread и cooldown валидируются до
+  запуска комнаты; Registry freeze сам по себе не заменяет gameplay validation.
+* `C_trace = max(N)` всех разрешённых в комнате пресетов, отдельно проверенный по
+  явно заданным room trace/memory cap. `C_shots` — независимая ёмкость записей выстрелов.
+  Пределы памяти, безопасные размеры массивов и ёмкости пулов валидируются при загрузке;
+  универсальные числовые максимумы этим контрактом не назначаются.
+* ShotBatch предвыделяется при загрузке: фиксированный stride `C_trace`, header
+  с `trace_count = N` и ровно N результатов, включая промахи. Неиспользуемый хвост
+  записи не читается. Каждый trace хранит stable index `0..N-1` и полный int64 target
+  либо `NO_HANDLE`; header хранит безопасную shot identity, полный int64 source
+  и монотонную sequence. Единственный room-owner allocator выдаёт для каждого полного
+  source строго возрастающую, неповторяющуюся sequence для всех его оружий совместно.
+  Identity = (room epoch, full source, sequence); переиспользование entity slot не стирает
+  поколение source. Переполнение sequence/epoch не допускает wrap и отвергает запрос
+  до acceptance, cooldown, ресурсов, VFX и трасс с тем же диагностическим контрактом.
+* Полная запись публикуется атомарно: consumer видит только завершённые выстрелы.
+  Канонический порядок — полный source, sequence, затем stable trace index;
+  порядок колбэков/целей не меняет порядок дробин внутри выстрела.
+* Invalid preset или невозможная room-конфигурация блокирует инициализацию комнаты.
+  В бою отсутствие свободного слота или `N > C_trace` отвергает ВЕСЬ запрос до
+  acceptance, cooldown, оплаты ресурсов, VFX и записи трасс. Отказ не оставляет
+  частичной записи; усечение числа дробин и горячий resize запрещены.
+  Диагностика — однократно до явного reset, накопительный счётчик — на каждый отказ;
+  ненулевые ошибки конфигурации блокируют приёмку.
+
+### Дробины, смерть и контексты
+
+Один accepted shot открывает один root depth0, включая полный miss; hit-set root
+остаётся пустым. Все N trace results обходятся по stable trace index.
+Перед каждой дробиной resolver проверяет full target handle и `HP > 0`.
+Stale/`NO_HANDLE`/`HP <= 0` — полный no-op ДО child, регистрации hit budget,
+DamageApply, расхода щита и триггеров. `StatBlock.is_valid()` проверяет поколение,
+а не HP; отдельная проверка живой цели обязательна. Death-policy принадлежит resolver,
+не физике и не `DamageApply`; auto-release entity в DamageApply не добавляется.
+
+Для живой цели создаётся отдельный sibling-child depth1 и регистрируется hit только
+в нём через существующий `try_register_hit()`. Повторные дробины могут поражать
+ту же живую цель в соседних ветвях; регистрация цели в root нарушила бы этот контракт.
+Зарегистрированное живое попадание даёт `OnHit`, даже при нулевом HP damage из-за
+щита/брони. Урон применяется минимальной M1 shield-first/armor политикой (§6);
+`OnKill` — только переход HP>0→0. Apply и PostHit одной дробины полностью завершены
+до проверки следующей, поэтому последующие дробины по убитой цели не создают
+контекстов и не расходуют бюджет/щит. Это словарь и последовательность событий
+минимального resolver, не реализация полного M2 engine.
+
+`AttackContextPool.MAX_DEPTH = 4` и существующий API сохраняются: pellet занимает
+depth1, дальнейшие реакции могут занимать depth2–4. Для N прямых дробин без эффектов
+`hit_budget >= N`; будущие реакции требуют отдельного резерва. Cold sizing пула
+учитывает до `1 + N` root/children на выстрел, одновременно живые деревья и удержанные
+descendants. Закрытые children занимают слоты до освобождения всего дерева, даже
+при последовательном обходе. Существующие hit-set/pool limits проверяются при sizing;
+8/9 не становятся универсальными ёмкостями. Capacity/hit-set errors блокируют приёмку.
+
+Root удерживается открытым до обработки всех traces. Каждый owned child/root закрывается
+ровно один раз; отложенный descendant создаётся/удерживается при планировании ДО
+последнего close. Он может продлить жизнь дерева после закрытия root. Любой
+`close(context)`, вернувший `true`, атомарно освобождает всё дерево и делает все handles
+невалидными. Поэтому root/source/shot metadata и итоги сохраняются ДО close;
+единственный `OnAttackResolved` выпускается после `close() == true` по сохранённым
+данным. Чтение освобождённого дерева или создание descendant после final close запрещено.
+Для miss root закрывается без children и также даёт ровно один `OnAttackResolved`.
+Отложенные владельцы создают child только через `ShotResolver.open_child(parent)`
+и закрывают через `close_context(handle)`; прямые мутации его AttackContextPool
+нарушают ownership. Предвыделенный реестр owned handles/root обеспечивает reset,
+не расширяя API существующего AttackContextPool. Read-only inspection пула разрешён.
+Факт HP>0→0 снимается сразу после Apply до синхронных OnHit listeners: их последующее
+исцеление/освобождение цели не стирает OnKill этого Apply.
+
+### Интеграция 60/30 Гц и room reset
+
+Input/raycast adapter работает на физике 60 Гц; чистый shot resolver — на логике 30 Гц.
+Один Sandbox composition-root subscriber вызывает shot resolver, затем существующий
+`MobilityRuntime.logic_step(tick)`: все shots данного тика идут перед landing damage
+и regen. Weapon/controller не добавляют собственных подписок. Resolver игнорирует
+duplicate/старый logic tick, сохраняя единственную обработку событий; mobility guard
+и его существующие гарантии остаются.
+
+Room reset координируется этим же владельцем: capture точного старого
+`GameLoop.get_logic_tick()` → reset shot resolver/ShotBatch (pending, diagnostic counters,
+duplicate guard, новый room epoch и согласованная shot sequence) →
+`weapon.reset_clock(old_tick)` для каждого оружия →
+`MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()`.
+Identity reset не должен смешивать старые и новые записи комнаты. Существующий
+`MovementAbilities.rebase_clock` сохраняет оставшийся cooldown относительно ТОЧНОГО
+old tick, включая physics activation до первого logic_step; energy/grants и физический
+episode не сбрасываются room clock reset. Обычный same-identity bind не заменяет reset.
+Weapon reset переносит remaining = max(ready_tick - old_tick, 0) к новому origin0,
+включая выстрел из physics до первого logic_step. Pending press отбрасывается,
+held-input latch сохраняется: удержание не создаёт новый rising edge после reset.
+Lifecycle нового полного entity handle отдельно сбрасывает weapon state/input;
+room reset не подменяет этот lifecycle.
+Reset выполняется в quiescent boundary composition root: pending shots и retained
+owned trees отменяются без OnAttackResolved. Старые handles после отмены невалидны.
+
+### Реализованная конфигурация Sandbox и физического адаптера
+
+Sandbox задаёт room-specific `C_shots=4`, trace cap32, `C_trace=max(N)=8` для единственного
+разрешённого shotgun.tres, host capacity16, context capacity64, deferred reserve16.
+Cold `WeaponData.validate_room` проверяет все presets до создания stores/bind/subscriber:
+memory cap128KiB покрывает conservative packed-store budget: 64+9*C_trace bytes на
+shot,16 на source allocator,640 на context с HandlePool/hit-set/metadata/owned registry.
+Этот cap относится к packed combat stores, не к внутренней памяти Godot ray/mesh nodes;
+их число фиксируется холодной загрузкой и проверяется активными monitor deltas.
+Context sizing требует `C_shots*(1+C_trace)+deferred_reserve<=context_capacity`;
+удержание сверх назначенного резерва является ошибкой конфигурации, а не новой механикой.
+
+`ShotBatch.reserve` выдаёт монотонный reservation ticket без wrap; `write_trace` принимает
+каждый stable index один раз, `publish` отказывает до всех N результатов. `prepare`
+видит только complete records; `consume_prepared` не удаляет unfinished reservations.
+Аксессоры читаются только в prepared диапазоне, trace только `<trace_count`.
+Abort освобождает unpublished reservation, но sequence не переиспользуется.
+Room reset повышает epoch и сбрасывает sequences; ticket не переиспользуется, поэтому
+старый незавершённый writer не может записать в новый slot после reset.
+
+HitscanWeapon создаёт `C_trace` RayCast3D при загрузке, исключает тело игрока и использует
+world/enemy/hitbox mask. Physics priority10 следует FPS priority0 и предшествует
+GameLoop1000. Фиксированные central+ring endpoints сохраняют world range40м при yaw/pitch
+и поддержанном положительном uniform scale контроллера; после acceptance все rays
+обновляются и unconditional publish выполняется вне assert, включая release build.
+Hardware route принимает fire только при focus/captured mouse, игнорирует echo;
+release очищает latch и вне capture. Capture loss/focus loss очищают input. Pause
+отбрасывает pending press, hardware resume сверяет held с Input без создания edge;
+driven command release допускается при pause. Headless route tests используют injected
+capture intent и не доказывают доставку событий ОС.
+
+Sandbox содержит три видимые статические damageable цели, mesh оружия и фиксированный
+прицел. Убитые цели становятся серыми общим cold material, остаются видимыми и сохраняют
+collider/full handle. Это inspectable death/no-op полигон, не enemy FSM/контент M2.
+
+Unit/golden/Jolt/аллокационные проверки и команды заданы в
+[плане пакета 3](m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий).
+Результаты реализации записываются отдельно в журнале; приёмка договора не равна
+приёмке runtime, графической плавности или real-combat CPU-бюджета.
+Последний Windows all exit0: scripts61/0,230/230 tests31suites, active120shots/960hits
+zero deltas/config0; synthetic3032385286 PASS. Это инструментальные проверки,
+не финальный independent full-diff PASS и не приёмка пакета3.

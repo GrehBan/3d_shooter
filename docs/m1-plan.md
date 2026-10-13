@@ -6,8 +6,16 @@
 `081d9ae627ca62c7ff4a9e833a5310580c488ad0`: «блокеров не найдено».
 Это отдельный code verdict, а не прежний внутренний PASS или ревью MD.
 Все P2 закрыты; сохранённые Windows-проверки подтверждены чтением логов,
-ревьюер сам Godot/тесты/benchmark не запускал. Новые четыре MD ожидают отдельного
-архитектурного ревью. Linux/GitHub CI и GUI не подтверждены, вся M1 не завершена. Источники:
+ревьюер сам Godot/тесты/benchmark не запускал. Четыре MD с официальной записью PASS
+также получили отдельный официальный PASS Архитектора ПО и локально зафиксированы
+в `b73a4be701276373b3704b7f8c801a8815939872`. От этой базы уточнённый договор пакета3
+получил независимый subagent архитектурный PASS и по новому поручению реализован в
+`codex/m1-current-plan`; повторный Windows all exit0 (scripts61/0,230/230 tests31suites,
+synthetic3032385286 PASS), финальный independent runtime review
+не получен. По новому поручению пользователя о лимитах дальнейшая разработка/новые
+проверки остановлены, текущий неприёмочный снимок готовится для draft PR. Native rendering
+smoke оружия/целей/прицела пройден; Linux/GitHub CI и ручные mouse/smoothness проверки
+не подтверждены, вся M1 не завершена. Пакеты4/5 не начаты. Источники:
 [roadmap.md](../roadmap.md), [GDD](../gdd.md), [технический манифест](../tech_manifest.md),
 [контракты](contracts.md), [процесс работы](../AGENTS.md), [открытые долги](notes/follow-ups.md).
 Сам план не разрешает автоматически публикацию, PR или слияние; новое явное поручение
@@ -240,12 +248,12 @@ push/PR/merge отсутствуют, пакеты3–5 не начаты, вс�
 
 ## 3. Дробовик hitscan и разрешение попаданий
 
-Текущий следующий шаг на 2026-10-13 — фиксация согласованной игровой семантики
-пакета 3 в документах после официального source PASS пакета 2 и завершение согласования
-транспортного контракта, ёмкостей и критериев тестов до реализации.
-Игровые решения подтверждены архитектором и ратифицированы геймдизайнером;
-транспортная ёмкость не должна назначать игровое число дробин.
-Runtime пакетов 3–5 не начат; этот шаг не разрешает его автоматически.
+Статус на 2026-10-13: уточнённый договор пяти MD получил независимый архитектурный PASS;
+координатор назначил реализацию всего пакета 3 в зависимом `codex/m1-current-plan`
+от `b73a4be701276373b3704b7f8c801a8815939872`. Минимальные weapons/transport/resolver,
+Sandbox и проверки реализованы; итоговые проверки/независимый runtime review ожидаются.
+Сведения прежнего `codex/m1-shotgun-contract` ниже сохраняют исторический смысл:
+официальный app-вердикт не объявляется полученным. Пакеты 4/5 не начаты.
 Официальный PASS, сопоставление 32 content-файлов и ограничения сохранённых проверок —
 [журнал](notes/work-log.md#официальный-source-pass-архитектора-по-для-пакета-2-m1--2026-10-13).
 Неблокирующий P3 о точности предельной высоты вынесен в отдельный
@@ -256,25 +264,119 @@ Runtime пакетов 3–5 не начат; этот шаг не разреш�
 с spread5°, semi-auto rising edge, cooldown15logic (0.5с), без ammo/reload в минимальном
 M1. Один root на shot, включая miss, sibling-child для каждой попавшей дробины,
 damage per pellet. Эти решения не разрешают начинать пакет3 при текущей остановке.
-Окончательный транспортный контракт и ёмкости требуют отдельного согласования;
-эта историческая запись не разрешает runtime.
+Историческое состояние на момент той постановки: окончательный транспортный контракт
+и ёмкости требовали отдельного согласования. Текущий договор ниже не разрешает runtime
+до отдельной приёмки документации и назначения реализации.
 
 Владелец: исполнитель оружия; области `weapons/`, физическая интеграция в Sandbox,
-существующие очереди/пулы контрактов и unit/golden/интеграционные тесты оружия.
-Состояние и данные оружия — чистые классы; физический trace ставит события в очередь,
-чистая логика разрешает их на 30 Гц. Число дробин, разброс и другие новые игровые параметры
-этим планом не назначаются.
+минимальные чистые ShotBatch/resolver, существующие stores/пулы контрактов и
+unit/golden/интеграционные тесты оружия. Состояние и данные оружия — чистые классы;
+input/raycast adapter работает на 60 Гц, resolver — на 30 Гц. Полный M2 DamagePipeline,
+EffectRunner, карточки и элементы в пакет не входят; API/MAX_DEPTH4 AttackContextPool
+не меняются. Пакеты 4/5 этим договором не расширяются.
 
-До соответствующего подпункта определить и записать семантику нескольких дробин по одной цели и жизненный цикл
-root/child-контекстов выстрела. Схема root-per-hit из `SyntheticCombatLoad` не переносится
-автоматически в игровую реализацию. Приёмка: несколько целей и дробин, промах, препятствие,
-устаревший handle, детерминированный порядок событий, бюджет/глубина/повторная цель ветки,
-закрытие дерева и освобождение контекстов, нулевые ошибки ёмкости и аллокации.
+Утверждённый конкретный WeaponData — сохранённый выше пресет: 8 дробин ×6000 raw,
+40 м, central +7 ring, spread5°, semi-auto rising edge, cooldown15logic.
+Таким образом, число дробин/разброс этого пресета уже назначены; они не являются
+универсальными техническими максимумами. Подробности игровой семантики —
+[GDD](../gdd.md#принято-для-m1-минимальный-hitscan-дробовик--2026-10-13),
+транспорт, контексты и интеграция — [контракт §7](contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3).
+Реализованный Sandbox назначает room-specific shots4/trace cap32/stride8, hosts16,
+contexts64/deferred reserve16 и128KiB conservative packed-store cap. RayCast3D
+предсозданы холодно; world range сохраняется при supported yaw/pitch/uniform scale.
+Shared ACP API/MAX_DEPTH и legacy stores/эталоны сохранены. Deferred owners используют
+только resolver.open_child/close_context; quiescent reset отменяет owned trees без
+completion events. Sandbox показывает оружие, прицел и видимые серые defeated targets.
+
+Для N из immutable cold-валидированных данных оружия транспорт предвыделяется с
+`C_trace = max(N)` разрешённых пресетов комнаты и независимой `C_shots`, проверенными
+по явным room trace/memory cap. В запись входят все N traces, включая miss; публикация
+атомарная, tail не читается. Нехватка slots/`N > C_trace` отвергает весь запрос до
+acceptance/cooldown/resources/VFX/трасс; partial write, truncation и hot resize запрещены.
+Единственный room-owner allocator выдаёт strictly increasing nonrepeat sequence всем
+оружиям одного full source; identity=(room epoch, full source, sequence). Wrap запрещён:
+exhaustion отказывает до acceptance/cooldown/resources/VFX/traces. Порядок —
+source/sequence, затем stable trace index. Числовые universal capacity cap не назначаются.
+Legacy HitEventQueue/payload/target-first sort/goldens и synthetic3032385286 сохраняются;
+M1 hitscan→ShotBatch — явное исключение из общего событийного маршрута.
+
+Root на accepted shot, включая miss, имеет пустой hit-set; live-hit каждой дробины
+идёт через sibling-child depth1. Stale/dead no-op проверяется до child/budget/щита/триггеров;
+Apply/PostHit завершаются до следующей дробины. OnHit живой зарегистрированной цели
+сохраняется при HP damage0; OnKill только HP>0→0. Root держится до всех traces,
+отложенные descendants — до final close. Metadata сохраняются до любого close;
+OnAttackResolved ровно один после close()==true, освобождённое дерево не читается.
+Для direct N hit_budget≥N; pool sizing учитывает 1+N, закрытые children, одновременно
+живые деревья и отложенные descendants. Схема root-per-hit из SyntheticCombatLoad
+не переносится в игровой resolver и не переписывается в синтетике.
+
+Один Sandbox subscriber вызывает shot resolver → MobilityRuntime.logic_step:
+shots перед landing damage/regen. Duplicate/старый tick игнорируется resolver.
+Room reset: capture old GameLoop tick → reset batch pending/guard/identity с новым epoch →
+weapon.reset_clock(old) → existing mobility.reset_clock(old) → GameLoop.reset_clock();
+weapon remaining=max(ready_tick-old,0) переносится к origin0, включая physics fire до
+первого logic_step. Pending press очищается, held latch сохраняется, удержание не
+создаёт rising edge после reset; lifecycle нового full entity handle отдельный.
+Точный old tick и
+сохранение оставшегося mobility cooldown, energy/grants/physical episode обязательны.
+
+### Будущие проверки пакета 3 (в этом шаге не запускались)
+
+Заголовок и перечень ниже сохраняют исторический docs-only договор и его ссылки.
+При реализации добавлены ShotBatchTest, WeaponStateTest, ShotResolverTest,
+ShotgunPhysicsTest, ShotgunSandboxTest и ShotgunGoldenTest с independent shotgun_ref.py.
+Focused pure/Sandbox/golden20/20 и Jolt9/9 пройдены до полного финального прогона.
+Active3900ticks: shots120/traces960/hits960/resolved120, все object/node/resource/orphan
+дельты0, static0, configuration0; intentional orphan probe обнаружен и очищен.
+Эти результаты не заменяют all последней версии и независимый exact-diff review.
+Итог уже запущенного all завершился после limit-stop: exit0,230/230 tests31suites,
+Jolt11/11, active120shots/960hits/120resolved с нулевыми дельтами/config0, synthetic
+3032385286 PASS/static+1152B. Source после прогона не менялся; итоговый full-diff
+independent review не получен, текущий снимок остаётся draft без приёмки пакета3.
+
+* Unit/golden транспорта: WeaponData validation и invalid room init; параметризуемые
+  C_trace/C_shots, fixed stride/нечитаемый tail, все N trace results включая miss,
+  whole-shot публикация. Нехватка capacity и N>C_trace не меняют cooldown/resources/VFX
+  и не оставляют записи; каждый отказ увеличивает счётчик, диагностика однократна
+  до reset, горячего resize нет. Ненулевые ошибки конфигурации блокируют приёмку.
+* Identity/order: общий owner sequence allocator нескольких оружий одного source,
+  no-wrap exhaustion без acceptance/cooldown/traces, полные source/target поколения,
+  уникальная shot identity, канонические source/sequence/trace index независимо от
+  порядка поступления; несколько целей, препятствие, stale handle и miss.
+* Resolver: 8×6000 raw по HP10000 при shield/armor0 → два живых hits, один OnKill,
+  шесть no-op. Щит/броня, давшие HP damage0, сохраняют OnHit без OnKill.
+  Stale/dead цель не расходует контекстную capacity, hit budget или shield и не
+  испускает триггеров; повторные дробины по живой цели проходят sibling-ветвями.
+* Context lifecycle: пустой hit-set root, miss root, budget≥N, MAX_DEPTH4 и pool sizing
+  с удержанием закрытых children. Каждый owned context закрывается ровно один раз;
+  отложенный descendant удержан до final close, завершение даёт один OnAttackResolved
+  по сохранённым metadata, операции с freed handles отвергаются.
+* Integration/reset: один subscriber, duplicate/old tick, shot-before-landing/regen,
+  сброс pending/guard/identity; mobility cooldown сохраняет remaining от точного old
+  GameLoop tick, включая activation до первого logic_step. Weapon remaining cooldown
+  также сохраняется; pending press очищается, held-input не создаёт свежий edge.
+  Identity старой комнаты
+  не смешивается с новой; существующие mobility lifecycle/grant гарантии сохраняются.
+* Реальный Jolt/input adapter: raycasts и rising-edge выстрелы на физике 60 Гц,
+  cooldown15logic и resolver на 30 Гц; удержание не повторяет semi-auto edge.
+  Headless не подтверждает GUI/плавность или доставку ввода ОС.
+* Активные 60 с после прогрева: подтверждённые счётчики выстрелов/hits/resolved,
+  objects/nodes/resources delta0, static memory≤1МиБ, config/dropped errors0;
+  проверки горячих путей и прежние unit/golden/эталоны остаются. Synthetic checksum
+  3032385286 не меняется и не заменяет реальный CPU-бюджет/приёмку всей M1.
+
+При проверке реализации используется существующая gdUnit4 система и команды из
+[CLAUDE.md](../CLAUDE.md): импорт/скрипты, unit/golden и `regress.gd` через
+`GODOT=/путь/к/godot bash ci/run_checks.sh all` из корня репозитория;
+focused gdUnit suites запускаются существующей командой `GdUnitCmdTool.gd --add`.
+Новая тестовая система не требуется. После проверок — независимое ревью точного
+итогового кода и затронутых MD; приёмка документационного договора не доказывает
+реализацию, отсутствие аллокаций или прохождение будущих тестов.
 
 ## 4. Пулы используемых VFX и декалей
 
 Предварительный read-only план пакета4 получен; presets не утверждены. Планирование
-теперь остановлено по текущему поручению, реализация пакетов3–5 не начата.
+пакета4 ранее остановлено; реализация пакетов4/5 не начата. Пакет3 описан выше.
 
 Владелец: исполнитель визуальных пулов; области используемых сцен/ресурсов эффектов,
 их пулов, интеграции оружия/Sandbox и тестов. Предсоздавать только реальные эффекты

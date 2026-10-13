@@ -165,12 +165,42 @@ source PASS — «блокеров не найдено» — для `499fbc2ec41
 all exit0, scripts50/0, 199/199 tests в25suite, mobility30/30, active3900 ticks
 с allocation/static delta0 и dropped0; synthetic3032385286 PASS, static+248808B≤1МиБ.
 Сам ревьюер Godot/тесты/benchmark не запускал; синтетика не подтверждает полный CPU-бюджет M1.
-Новые четыре MD в `codex/m1-mobility-official-pass` от `85d75ba` ожидают отдельного
-архитектурного ревью. Linux/GitHub CI и GUI не подтверждены, вся M1 не завершена.
-Следующий шаг — фиксация согласованной игровой семантики пакета 3 (hitscan-дробовик)
-в документах и завершение согласования транспортного контракта и ёмкостей до runtime.
-Транспортная ёмкость не назначает игровое число дробин; runtime пакетов 3–5 не начат.
+Четыре MD официальной записи PASS также получили отдельный официальный PASS Архитектора
+и локально зафиксированы в `b73a4be701276373b3704b7f8c801a8815939872`.
+Linux/GitHub CI и GUI не подтверждены, вся M1 не завершена.
 Push/PR/merge этого шага не выполняются; факты и привязка логов — [журнал](docs/notes/work-log.md#официальный-source-pass-архитектора-по-для-пакета-2-m1--2026-10-13).
+
+*Подготовка договора пакета 3, 2026-10-13:* от согласованной зависимой базы `b73a4be`
+в `codex/m1-shotgun-contract` подготовлен docs-only delta пяти MD, PENDING официального
+архитектурного ревью. Сохранённый утверждённый WeaponData: 8×6000 raw, 40 м, central +7 ring, spread5°,
+semi-auto rising edge, cooldown15logic; это конкретный пресет, а не universal capacity cap.
+Зафиксированы ратифицированные sibling-pellet semantics, будущий атомарный ShotBatch,
+live/dead guard минимального resolver, lifecycle AttackContext и shots→landing→regen.
+Уточнения после P2 ревью: единый allocator sequence всех оружий каждого full source,
+identity=(room epoch, source, sequence), отказ без wrap до acceptance; coordinated reset
+сохраняет remaining weapon cooldown и held latch при очистке pending press.
+Договор и будущие проверки — [план M1](docs/m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий)
+и [контракт §7](docs/contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3).
+Код/тесты не реализованы и не запускались в этом шаге; legacy synthetic/goldens сохранены.
+Следующий кодовый шаг — только после приёмки точной документации и отдельного назначения
+реализации. Runtime пакетов3–5 не начат, пакеты4/5 не расширены; вся M1 не завершена.
+Stage/commit/push/PR/merge текущего договора не выполняются; ограничения —
+[журнал](docs/notes/work-log.md#подготовка-договора-hitscan-и-shotbatch-пакета-3-m1--2026-10-13).
+
+*Реализация пакета 3, 2026-10-13:* уточнённый договор получил независимый архитектурный
+PASS, затем координатор назначил весь пакет в `codex/m1-current-plan` от `b73a4be`.
+WeaponData/State, atomic ShotBatch, pure resolver и reused RayCast3D adapter интегрированы
+в Sandbox. Focused20/20 и Jolt9/9 PASS, active3900ticks подтвердил120shots/960hits,
+zeroobject/node/resource/orphan/static deltas и config0; independent golden3770191677.
+Финальный all и exact-diff independent runtime review ещё ожидаются. Пакеты4/5 не начаты,
+M2/cards/VFX-pools не расширены, commit/push/PR/merge отсутствуют.
+Новое поручение пользователя: записать результаты и оформить PR, затем уточнение
+«нет сейчас мы в лимиты не вместимся». Дальнейшая разработка/новые проверки/review cycles
+остановлены; координатор готовит draft PR текущего частично проверенного снимка.
+Финальный независимый full-diff PASS не получен, пакет3 не принят; merge не разрешён.
+Уже запущенный all завершился exit0: scripts61/0,230/230 tests31suites, shotgun11/11,
+active120shots/960hits/120resolved zero deltas/config0, synthetic3032385286 PASS,
+static+1152B. Source после этого не менялся; ограничения draft/review сохраняются.
 
 * FPS-контроллер как машина состояний.
 * **Разделение тиков (Tick vs Frame):** Передвижение, физика и hitscan — в физическом тике 60 Гц с интерполяцией. Таймеры способностей и боевая логика — в логическом тике 30 Гц. Визуальная часть (покачивание камеры, интерполяция оружия) — в Frame (`_process`).

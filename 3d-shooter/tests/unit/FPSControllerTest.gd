@@ -6,6 +6,20 @@ var _viewport: SubViewport
 var _arena: Node3D
 var _player: FPSController
 var _saved_mouse_mode: Input.MouseMode
+var _barrier: PhysicsStepBarrier
+
+
+class PhysicsStepBarrier extends Node:
+	signal stepped
+
+
+	func _ready() -> void:
+		process_mode = Node.PROCESS_MODE_ALWAYS
+		process_physics_priority = 1100
+
+
+	func _physics_process(_delta: float) -> void:
+		stepped.emit()
 
 
 class MotionMeasure extends Node:
@@ -97,6 +111,8 @@ func before_test() -> void:
 	camera.position.y = 0.65
 	_player.add_child(camera)
 	_arena.add_child(_player)
+	_barrier = PhysicsStepBarrier.new()
+	_arena.add_child(_barrier)
 
 
 func after_test() -> void:
@@ -124,8 +140,7 @@ func _add_box(size: Vector3, origin: Vector3, tilt: float = 0.0) -> StaticBody3D
 
 func _ticks(count: int) -> void:
 	for tick: int in count:
-		await get_tree().physics_frame
-		await get_tree().process_frame
+		await _barrier.stepped
 
 
 func _settle() -> void:

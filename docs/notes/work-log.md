@@ -906,3 +906,173 @@ Godot ради документации не запускается. Во вре
 в документах и завершение согласования транспортного контракта/ёмкости до runtime;
 транспортная ёмкость не назначает игровое число дробин.
 Runtime пакетов3–5 не начат; stage/commit/push/PR/merge в этом шаге не выполняются.
+
+### Подготовка договора hitscan и ShotBatch пакета 3 M1 — 2026-10-13
+
+Предыдущий docs-only delta четырёх MD с официальной записью source PASS пакета 2
+получил отдельный официальный PASS Архитектора ПО и внутреннее независимое ревью;
+координатор локально зафиксировал точную принятую версию в
+`b73a4be701276373b3704b7f8c801a8815939872`, parent `85d75ba`.
+Предыдущие pending-записи выше описывают состояние на момент их подготовки.
+Новая отдельная ветка `codex/m1-shotgun-contract`, worktree
+`m1-shotgun-contract/3d_shooter`, согласованная база/HEAD — этот `b73a4be`.
+Владение текущего docs-only шага: [GDD](../../gdd.md), [контракты](../contracts.md),
+[план M1](../m1-plan.md), [roadmap](../../roadmap.md) и этот журнал; ровно пять MD.
+
+По новой постановке Менеджера проектов и согласованным выводам архитектора/геймдизайнера
+зафиксированы утверждённый конкретный пресет и ратифицированная gameplay семантика.
+8 дробин ×6000 raw, 40 м, central +7 ring, spread5°, semi-auto rising edge, cooldown15logic —
+данные конкретного WeaponData из сохранённой постановки `85d75ba`, не универсальная
+transport capacity. Противоречие «число дробин/разброс не назначены» в текущем §3 плана
+устранено, историческая датированная постановка сохранена.
+
+Будущий [ShotBatch contract](../contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3)
+параметризует N проверенными immutable данными оружия, C_trace максимумом N разрешённых
+пресетов комнаты при явных trace/memory cap, независимой C_shots. Whole-shot публикация,
+miss records, identity/sequence/trace-order и atomic rejection до принятия/оплаты/VFX
+не меняют legacy HitEventQueue/payload/sort/goldens или synthetic3032385286.
+Resolver отвечает за live/dead guard до child/budget/shield/OnHit и завершение Apply/PostHit
+каждой дробины; существующий DamageApply сам не обеспечивает HP>0 guard или триггеры.
+Root имеет пустой hit-set, live pellets — sibling-child depth1; MAX_DEPTH4/API сохранены.
+Сохранение metadata до каждого close исключает чтение освобождённого дерева;
+OnAttackResolved ровно один после завершения, closed children удерживают slots.
+Один composition root задаёт shots→landing damage→regen и coordinated room reset
+с точным old GameLoop tick и сохранением существующего mobility cooldown rebase.
+
+Это подготовка договорённостей, НЕ implementation: ShotBatch/WeaponData/resolver пакета 3
+на базе ещё нет. В [плане](../m1-plan.md#будущие-проверки-пакета-3-в-этом-шаге-не-запускались)
+описаны будущие unit/golden/Jolt, atomic capacity/order/death/lifecycle/reset и активные
+аллокационные проверки через существующие gdUnit4/ci команды; они не запускались.
+Godot/тесты/benchmark/QA, Linux/GitHub CI и GUI для этого шага не запускались.
+Runtime/сцены/ресурсы/настройки не менялись, M2 engine и пакеты4/5 не расширены,
+вся M1 не завершена. Две прежние ссылки этого журнала на ignored integration-артефакты
+отсутствуют в новом worktree и не изменены.
+
+Первая точная версия пяти MD получила отдельный внутренний read-only PASS ревьюера
+на `high`: «блокеров не найдено», автор и ревьюер разные. Проверенный snapshot от
+`b73a4be701276373b3704b7f8c801a8815939872`: patch SHA256
+`e859462d62ece19d3e46a67ae1c0a4c91f7f233e1ad6868a281e041f7f5062a0`, manifest SHA256
+`51b69a94d1324846011f0d1c7de17af98c594284a116806daf7f6f86e85fe304`.
+Ревьюер подтвердил scope пяти MD, 311 добавлений/34 удаления, raw hashes, пустой
+индекс, doc diff-check exit0 и 16 новых ссылок (11 с якорями) PASS.
+Самопроверка diff и согласованности источников/API также пройдена. Godot/тесты/benchmark
+не запускались; две старые ссылки на ignored integration-артефакты остаются ограничением.
+
+Этот PASS относится только к указанному exact snapshot. Новая процессная запись
+результата входит в документацию и вместе с точным итоговым diff подлежит повторному
+внутреннему независимому ревью; прежний PASS не одобряет изменённые bytes автоматически.
+Итоговые документы ожидают отдельного официального архитектурного ревью (PENDING);
+официальный app-Архитекторский verdict пакета 3 пока не получен.
+Snapshot patch/manifest фиксируются вне tracked tree в `m1-shotgun-contract/artifacts/`
+для идентификации версии, артефакты первой проверенной версии сохранены с suffix-v1.
+Следующий кодовый шаг только после приёмки документов и отдельного назначения.
+Stage/commit/push/PR/merge текущего шага не выполнялись; основной и прежние worktree сохранены.
+
+### Уточнение договора пакета 3 после архитектурного ревью — 2026-10-13
+
+В согласованной зависимой ветке `codex/m1-current-plan` от `b73a4be` уточнены два P2
+документационного договора: единственный room-owner sequence allocator для всех оружий
+каждого full source с identity=(room epoch, full source, sequence), без wrap и с отказом
+до acceptance/cooldown/resources/VFX/traces; coordinated weapon.reset_clock(old_tick)
+с точным old GameLoop tick, remaining=max(ready_tick-old_tick,0), очисткой pending press
+и сохранением held latch. Новый full entity handle имеет отдельный lifecycle.
+Будущие тесты включают нескольких оружий одного source, exhaustion, physics fire до
+первого logic_step, remaining cooldown и held input после reset. Это изменение пяти MD,
+runtime ещё не реализуется. Новая версия ожидает архитектурного PASS точного diff;
+Godot и runtime проверки не запускались, commit/push/PR/merge не выполнялись.
+
+### Разработка пакета 3 M1 после независимого PASS договора — 2026-10-13
+
+Координатор получил отдельный архитектурный PASS уточнённых пяти MD от независимого
+reviewer `/root/shotgun_contract_review`, оба P2 allocator/reset закрыты. Source base
+`b73a4be701276373b3704b7f8c801a8815939872`; SHA256 проверенных docs:
+contracts `0e4429d6f7e9bcd9abde63fa240807d20e9530b3df5197bcd1870fd2fac77ca2`,
+m1-plan `bbf29efdac6f42fe102a507c46c509bb937e96e6a0b66284afa569bfc82ea425`,
+gdd `c0b07d8009f7e6c5b8d68db96bc352a694733b959c6c230f1e0a7b35eae390af`,
+roadmap `3919a8f6e307b7dd40dd6ea0fe528e696b53881890db26bca82f67b8d030bda7`,
+work-log `b37af5df0576053f39337ad44be0747f8875ca6852b2c935cfbd2133d1f3330d`.
+Это текущая независимая subagent приёмка, не ранее ожидавшийся app-вердикт и не PASS
+позднее изменённого runtime. После неё назначен единый writer всего пакета3 в
+`codex/m1-current-plan`; основной и старые worktree не менялись.
+
+Реализованы WeaponData/tres, pure WeaponState, atomic ShotBatch с общим source allocator,
+epoch/no-wrap/ticket guard, ShotResolver с sibling children/owned registry/local signals,
+HitscanWeapon с cold RayCast3D вместо temporary intersect_ray Dictionary. Shared ACP API
+и MAX_DEPTH4 сохранены. Sandbox использует один shots→landing→regen subscriber,
+coordinated exact-oldtick reset, visible targets/weapon/reticle и cold gray death material.
+Room-specific caps: shots4, trace cap32/stride8, hosts16, contexts64/reserve16,
+packed-store conservative memory128KiB. Пакеты4/5, M2 engine/cards/content не расширены.
+
+Ранние QA/архитектурные замечания устранены до all: unconditional publish вынесен из
+assert для release; inherited scale больше не расширяет world range; pause fixture
+получила explicit PAUSABLE; hardware capture/focus/release/resume latch уточнены;
+OnKill snapshot снимается до OnHit healing callback. Additive ACP accessor не принят и
+удалён побайтно: reset использует только собственные owned handles и wrapper boundaries.
+Focused suites20/20 PASS, Jolt9/9 PASS; active300warmup+3600measure: shots120,
+traces960/hits960/resolved120, objects/nodes/resources/orphans/static deltas0, config0.
+Отрицательная probe с orphan Node обнаружила objects+1/orphans+1 и освобождена после
+снимков. Independent Python oracle `tests/tools/shotgun_ref.py` даёт3770191677;
+новый golden совпал (hits7/kill1/no-op12/resolved3), legacy references не менялись.
+После этих focused результатов добавлены два actual Jolt death/bind кейса и запущен
+полный Windows `ci/run_checks.sh all`, логи `ci-logs/shotgun/`; итог ещё ожидается.
+
+Координатор отдельно выполнил native Forward+/D3D12 rendering smoke3frames1152x648,
+exit0/stderr empty, PNG `ci-logs/shotgun-graphics/frame00000002.png`: оружие, три красные
+цели и геометрия видимы. Это ранний снимок до добавления прицела, не финальный visual
+PASS и не ручная проверка OS mouse/smoothness/60FPS/CPU7ms. Linux/GitHub CI не запускался,
+commit/push/PR/merge отсутствуют, итоговое независимое runtime/docs review ожидается.
+
+Первый полный Windows all: import PASS, scripts61/0, gdUnit221 cases/31 suites,
+2 assertion failures в прежнем FPSControllerTest yaw-parent distance:4.266668м вместо
+4.0±0.15м. Weapon11/11 (с добавленными death/bind cases), active3900 zero deltas,
+mobility и новые golden/transport/Sandbox проверки пройдены. Runner завершился100
+и regress не запускал. Причина старого теста: _ticks ожидал physics_frame, затем
+process_frame; при отставании rendered frame выполнялись32physicssteps вместо30.
+Исправлена только fixture FPSControllerTest: ALWAYS post-GameLoop barrier priority1100,
+прежние assertions/допуски и production FPSController сохранены. Требуется повторный
+полный all итоговой версии; первая неуспешная проверка не объявляется приёмкой.
+
+Координатор выполнил финальный rendering smoke после прицела: nativeForward+/D3D12,
+3frames1152x648, exit0/stderr empty, sampled560colors/nonblank; визуально видны оружие,
+три цели, геометрия и центральный прицел. PNG
+`ci-logs/shotgun-graphics/final/frame00000002.png`. Это rendering PASS, не smoothness,
+доставка OS mouse,60FPS или gameplay7ms/40enemies. Copied AGENTS.md в isolatedworktree
+восстановлен через apply_patch к точным HEAD bytes: raw Git blob
+`2bbd9abe7f3e72b36c5455aa434a0c3c4ebd128e`, content diff пуст. Это не изменение основного
+пользовательского guide; AGENTS не включается в пакет3.
+
+Независимый QA reviewer `/root/shotgun_qa` выполнил собственный focused FPSControllerTest
+после исправления barrier:15/15 PASS,0errors/failures/flaky/skips/orphans. Длительный
+actual-motion allocation case целенаправленно исключён только из этого независимого
+focused прогона; он остаётся обязательным в повторном all. QA bytes не менял и подтвердил
+причину32vs30 по старой fixture/числам. First failed import/scripts/tests logs сохранены
+в `ci-logs/shotgun/first-all-failure/` до перезаписи. Повторный all итоговых source bytes
+запущен с тем же Godot4.7.2/gdUnit6.2.1; результат ещё ожидается.
+
+### Остановка пакета3 по лимитам и подготовка draft PR — 2026-10-13
+
+Новое прямое поручение пользователя: «записываем результаты делаем pr и закругляемся»;
+затем «нет сейчас мы в лимиты не вместимся». Координатор остановил новые code/tests,
+прогоны и review cycles. Автор завершает только эту запись/текущий MD status и передаёт
+снимок `codex/m1-current-plan` от `b73a4be` для draft PR в master. На момент записи
+повторный all ещё выполняется: import PASS, scripts61/0, исправленный FPS16/16 с active
+measure PASS, mobility PASS, обычные shotgun cases PASS; активный shotgun3900 measure
+ещё не вывел финальный snapshot. После него в уже запущенном runner остаются короткие
+gdUnit cases и synthetic regress. Итогового all exit/verdict на этот момент нет.
+Предыдущие focused20/20, Jolt9/9 с active zero deltas, golden3770191677, независимый QA
+FPS15/15 и финальный rendering smoke сохранены как результаты именно своих версий.
+Финальный независимый full-diff runtime/docs PASS не получен, пакет3 НЕ принят.
+Draft PR готовится координатором как неприёмочный текущий снимок; author не выполнял
+stage/commit/push/PR/merge. Linux/GitHub CI, ручные OS mouse/smoothness/60FPS и real-combat
+7ms/40enemies не подтверждены; пакеты4/5 не начаты. Дальнейшая работа остановлена.
+
+Уже запущенный повторный all завершился до передачи снимка: exit0, import PASS,
+scripts61/0,230/230 tests в31suites,0errors/failures/flaky/skipped/orphans; FPS16/16,
+MobilityPhysics30/30, ShotgunPhysics11/11. Shotgun active3900ticks:120shots,
+960traces/hits,120resolved, objects/nodes/resources/orphans/static deltas0,config0.
+Synthetic regress: checksum3032385286 PASS, dropped0/config0, object/node/resource/orphan
+deltas0, static+1152B≤1MiB, avg926.0/max1692us (выводимая метрика, не real-combat порог),
+wall2650ms. Логи `ci-logs/shotgun/{import,scripts,tests,regress}.log`, report_8.
+Source/runtime/tests после этого не менялись; новые прогоны/review cycles не запускались.
+Последняя MD запись actual exit0 не подменяет отсутствующий independent full-diff PASS:
+пакет3 не принят, координатор готовит draft PR по пользовательскому limit-stop.
