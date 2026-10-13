@@ -4,6 +4,40 @@
 открытые долги — в [follow-ups.md](follow-ups.md), гарантии API — в [contracts.md](../contracts.md).
 Локальная проверка и независимое ревью не означают публикацию, прохождение GitHub CI или слияние.
 
+## 2026-10-13 — интеграция PR #10 после слияния #9
+
+Координатор подтвердил required Linux/Windows SUCCESS HEAD #9
+`a918115ebd3b6c718c3bf2c1577df88800935e3f` (run38465077469) и squash merge:
+`master` — `1d9f9aa4ba1031af7d12bbc50cd4f78f5b0fdd27`.
+Новое прямое поручение пользователя отменило дальнейшие integration-review cycles
+для #10–#12; это исключение не является новым PASS и не отменяет обязательный CI.
+В отдельном checkout original #10 `85d75baa01ba23ef2be0f27a1962ab7dac76e019`
+подготовлен ordinary merge master; четыре MD-конфликта разрешены индивидуально,
+advanced mobility history/contracts и журнал/запись интеграции #9 сохранены.
+Runtime/tests/config/assets/CI побайтно original #10; Godot не повторялся.
+Публикация нового HEAD и его required CI ожидаются, #10 не слит. Полные факты —
+[журнал интеграции](pr-integration-log.md).
+
+## 2026-10-13 — начало последовательной интеграции PR после пакета4
+
+После локальной приёмки пакета4 пользователь поручил разобрать и слить PR,
+затем подготовить отдельную сцену дробовика/мишеней. Свежий независимый source-аудит
+#8–#11 и отдельные exact-diff архитектурное/QA-ревью пакета4 дали PASS.
+Координатор подтвердил required Linux/Windows SUCCESS точного HEAD PR #8
+`3dfddbf0c50bbedcd1aaadaf2036f25236dd59f9` (run38192398071) и выполнил squash merge:
+текущий `master` — `2b7623f77716a262e085323193ed4a64a7ddb406`.
+Это не слияние остальных PR и не завершение всей M1.
+
+Назначенный integration writer в отдельном checkout от original PR #9
+`4802c805017b7593a4f1e37d2d1d9b83ee1743f8` подготовил ordinary merge этого master.
+Четыре MD-конфликта разрешены после сравнения обеих версий: foundation history
+сохранена, overflow history/status добавлены, закрытый overflow debt не возвращён.
+Runtime/tests/config/assets/CI остаются побайтно исходной версии PR #9;
+Godot не запускался повторно. Новый diff и запись журнала ожидают независимого
+review; новый commit/push/CI и merge #9 ещё не выполнены. Последующие PR этим шагом
+не менялись. Точные original source heads, review/CI и фактические состояния —
+[журнал интеграции PR](pr-integration-log.md).
+
 ## 2026-10-11 — процесс, окружение и устранение двух долгов M1a
 
 ### Решения и окружение
