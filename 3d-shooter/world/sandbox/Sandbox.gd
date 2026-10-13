@@ -5,15 +5,20 @@ var mobility: MobilityRuntime
 var player_handle: int = StatBlock.INVALID_HANDLE
 @export_dir var movement_data_directory: String = "res://data/movement"
 @export_dir var weapon_data_directory: String = "res://data/weapons"
+@export var visual_data: ShotVisualData = preload("res://data/visuals/shotgun.tres")
 const ROOM_SHOTS: int = 4
 const ROOM_TRACE_CAP: int = 32
 const ROOM_PACKED_BYTES: int = 131_072
 const ROOM_HOSTS: int = 16
 const ROOM_CONTEXTS: int = 64
 const ROOM_DEFERRED_RESERVE: int = 16
+const ROOM_VISUAL_NODES: int = 128
+const ROOM_VISUAL_PACKED_BYTES: int = 16384
+const ROOM_VISUAL_TEXTURE_BYTES: int = 32768
 var shots: ShotBatch
 var resolver: ShotResolver
 var weapon: HitscanWeapon
+var visuals: ShotVisualPool
 var target_handles: PackedInt64Array = PackedInt64Array()
 var _target_meshes: Array[MeshInstance3D] = []
 var _dead_material: StandardMaterial3D
@@ -38,6 +43,10 @@ func _ready() -> void:
 	if stride < 0:
 		_abort_initialization("Sandbox: invalid weapon preset or room capacity")
 		return
+	if not ShotVisualData.validate_room(visual_data, definitions, ROOM_SHOTS, stride,
+			1, ROOM_VISUAL_NODES, ROOM_VISUAL_PACKED_BYTES, ROOM_VISUAL_TEXTURE_BYTES):
+		_abort_initialization("Sandbox: invalid visual preset or room capacity")
+		return
 	mobility = MobilityRuntime.new(ROOM_HOSTS)
 	player_handle = mobility.stats.allocate()
 	mobility.stats.set_stat(player_handle, StatBlock.Stat.MAX_HP, 100_000)
@@ -53,6 +62,10 @@ func _ready() -> void:
 	weapon = get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon
 	if not weapon.initialize(definitions[0], mobility.stats, shots, player_handle, get_node(^"Player") as FPSController):
 		_abort_initialization("Sandbox: weapon initialization failed")
+		return
+	visuals = get_node(^"ShotVisualPool") as ShotVisualPool
+	if not visuals.initialize(visual_data, weapon, weapon.get_node(^"MuzzleSocket") as Node3D, shots.epoch):
+		_abort_initialization("Sandbox: visual initialization failed")
 		return
 	for body: Node in get_node(^"Targets").get_children():
 		var target: int = mobility.stats.allocate()
@@ -90,5 +103,8 @@ func reset_mobility_clock() -> void:
 		_abort_initialization("Sandbox: room epoch exhausted")
 		return
 	weapon.reset_clock(old_tick)
+	if not visuals.reset_room(shots.epoch):
+		_abort_initialization("Sandbox: visual epoch reset failed")
+		return
 	mobility.reset_clock(old_tick)
 	GameLoop.reset_clock()

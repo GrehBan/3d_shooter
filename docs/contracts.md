@@ -8,9 +8,12 @@
 На 2026-10-13 runtime пакета 3 принят локально: независимый обзор полного diff
 `b73a4be` → `9a4fead` дал PASS без блокеров, обязательные CI Linux/Windows для
 `9a4feade15e98d6c870f89163e659572b7ecb9a0` завершились SUCCESS.
-Пользователь возобновил работу по плану; эта новая запись приёмки ожидает отдельного
-независимого документационного ревью перед передачей пакета 4. PR #11 остаётся
-OPEN/DRAFT, merge не выполнялся. Пакеты 4/5 и полный M2 не реализованы; вся M1 не завершена.
+Closing docs пакета3 получили отдельный независимый PASS и опубликованы в
+`d9f1a53175fe32176fac72df195eda27ee18a129`; обязательные Linux/Windows CI этого HEAD
+завершились SUCCESS (run38424601880). PR #11 остаётся OPEN/DRAFT, merge не выполнялся.
+§8 описывает локально реализованный пакет4: final Windows all и native rendering
+smoke пройдены, независимое итоговое ревью ещё ожидается. Пакет5 и полный M2
+не реализованы; вся M1 не завершена.
 
 ## 1. Общие правила
 
@@ -540,3 +543,59 @@ Unit/golden/Jolt/аллокационные проверки и команды �
 zero deltas/config0; synthetic3032385286 PASS. Это инструментальные проверки,
 они дополнены independent full-diff PASS и CI SUCCESS точного `9a4fead`, но не закрывают
 графические проверки или общую приёмку M1. Runtime-проверки в этом docs-only шаге не повторялись.
+
+## 8. M1 presentation pools (пакет 4)
+
+Назначенный visual preset и room limits — в [плане M1](m1-plan.md#4-пулы-используемых-vfx-и-декалей).
+Presentation outside deterministic combat: collision point/normal не попадают
+в ShotBatch/resolver. HitscanWeapon snapshots предвыделены и доступны только
+синхронному published-shot listener; packed-array references не выдаются.
+Identity — epoch/full source/sequence; unpublished/aborted records и getters
+вне callback не дают presentation. Физический hit отличается от damage:
+wall NO_HANDLE/dead/stale дают marks, miss не даёт contact. Новых OnHit событий нет.
+
+ShotVisualPool — отдельный `visuals/` Node3D adapter с flat packed state.
+Lifetime3/6/180physics, capacity5/40/80 валидируются до room stores/binds/subscriber.
+Expiry priority5 перед weapon10, pause сохраняет age. Release требует
+kind-tagged int64 generation handle; reset освобождает handles с сохранением
+поколений, скрывает nodes, очищает identities/age/counters. Старые releases,
+epoch и duplicate whole-shot callback не трогают текущий occupant. Один shot
+может иметь N contact pairs с одной sequence. Low-level spawn primitives private;
+только synchronous listener служит production entry. Новый full source после
+weapon.bind_source переключает visual producer на следующем accepted callback,
+сохраняя ранее созданные marks до expiry; old-source requests отвергаются.
+Impact+decal pair
+проверяет обе capacity до allocation. Overflow отвергает presentation request,
+повышает собственные dropped/configuration counters на каждый отказ и пишет
+push_error один раз до reset; gameplay shot/cooldown/damage не откатываются.
+Storage не растёт, active nodes не вытесняются, acceptance counters0.
+
+Decal local+Y=outward normal, projection -Y направлена внутрь поверхности;
+depth0.04м и tangent fallback для floor/ceiling. World/targets render layer1,
+weapon/flashes layer2, decal cull mask1 (это не physics mask). Shared cold
+bitmap textures cap32KiB и packed cap16KiB не включают Godot node heap.
+Runtime checks, real Jolt/pool measurement, graphical Forward+/D3D12 inspection
+и independent final-diff acceptance фиксируются отдельными доказательствами.
+
+Pool/pooled nodes имеют physics interpolation OFF: static contact placement и
+reuse не интерполируются из idle identity transform. Muzzle следует displayed
+socket.get_global_transform_interpolated() в presentation _process; getter
+вызывается впервые холодно при initialize для предсоздания interpolation pump,
+а затем каждый frame, включая отсутствие active muzzle. Frame pose не меняет age
+или gameplay. Initialize требует nodes inside tree; pure combat interpolation
+и контроллер не меняются.
+
+Tagged visual handle сохраняет generation*65536, index region содержит
+kind*256+local index (kind0=muzzle,1=impact,2=mark; capacity каждого<256).
+Release декодирует kind и проверяет полный handle соответствующего HandlePool;
+визуальные handles не являются combat/entity handles и принадлежат конкретному
+ShotVisualPool instance (raw int не является global identity). Поколения выше Int32
+не усекутся. Непубликуемая физическая запись отменяется adapter и увеличивает
+существующий ShotBatch configuration counter; snapshot/visual listener не вызывается.
+
+Реализация этого договора локально проверена final Windows all (64 scripts,
+249/249 tests,32suites, active3900ticks zero monitor deltas/config/dropped) и
+native Forward+/D3D12 live/moving-camera smoke. Независимое ревью точного итогового
+diff ещё ожидается; локальный PASS не является приёмкой пакета4, PR/CI/merge или
+общей M1. Точные результаты и ограничения —
+[журнал](notes/work-log.md#итоговая-локальная-проверка-пакета4).

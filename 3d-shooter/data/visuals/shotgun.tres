@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ShotVisualData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://visuals/ShotVisualData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+muzzle_ticks = 3
+impact_ticks = 6
+mark_ticks = 180
+muzzle_size = 0.16
+impact_size = 0.08
+mark_size = 0.14
+mark_depth = 0.04
+muzzle_capacity = 5
+impact_capacity = 40
+mark_capacity = 80

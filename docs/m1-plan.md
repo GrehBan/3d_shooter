@@ -14,16 +14,20 @@
 synthetic3032385286 PASS). На 2026-10-13 пользователь возобновил работу:
 «работаем дальше по плану». Финальный independent whole-diff review `b73a4be` →
 `9a4fead` и независимый QA дали PASS без блокеров; runtime пакета 3 принят локально.
-Новая запись приёмки ожидает отдельного документационного ревью перед передачей пакета 4.
+Closing docs получили отдельный независимый PASS; пакет4 передан единственному writer.
 Опубликованный source commit:
 `9c88a7b6556bbbbde21dce2a407df88ee18af920`,
 [draft PR #11](https://github.com/GrehBan/3d_shooter/pull/11) в `master`.
-Текущий опубликованный HEAD `9a4feade15e98d6c870f89163e659572b7ecb9a0` получил SUCCESS
-обязательных Linux/Windows CI ([run 38421912445](https://github.com/GrehBan/3d_shooter/actions/runs/38421912445)).
-Эта проверка не относится к новым незакоммиченным MD текущего шага.
+Текущий опубликованный HEAD `d9f1a53175fe32176fac72df195eda27ee18a129` получил SUCCESS
+обязательных Linux/Windows CI ([run 38424601880](https://github.com/GrehBan/3d_shooter/actions/runs/38424601880)).
+Эта проверка базы не относится к незакоммиченному runtime/docs пакета4.
 Native rendering smoke оружия/целей/прицела пройден; ручные mouse/smoothness проверки
 не подтверждены, вся M1 не завершена. PR #11 OPEN/DRAFT; зависимости #8/#9/#10 не слиты.
-Merge не выполнялся; пакеты4/5 не начаты, следующий — пакет 4 после ревью записи приёмки.
+Merge не выполнялся. Пакет4 локально реализован в `codex/m1-visual-pools`:
+final Windows all (scripts64/0,249/249 tests32suites,synthetic3032385286) и native
+Forward+/D3D12 live smoke PASS; independent final-diff review ещё ожидается.
+Пакет4 не объявлен принятым; пакет5 не начат. После завершения пакета4 пользователь
+поручил аудит/слияние PR, затем отдельную тестовую сцену дробовика/мишеней.
 Точные версии, review и ограничения — [журнал](notes/work-log.md#возобновление-работы-и-локальная-приёмка-runtime-пакета-3--2026-10-13).
 Источники:
 [roadmap.md](../roadmap.md), [GDD](../gdd.md), [технический манифест](../tech_manifest.md),
@@ -390,9 +394,37 @@ focused gdUnit suites запускаются существующей коман
 
 ## 4. Пулы используемых VFX и декалей
 
-Предварительный read-only план пакета4 получен; presets не утверждены. Пользователь
-возобновил работу по плану; после независимого ревью новой записи локальной приёмки
-пакета 3 следующий шаг — договор и назначение пакета 4. Реализация пакетов4/5 не начата.
+Пакет 3 принят отдельно; пакет 4 назначен единственному исполнителю в
+`codex/m1-visual-pools` от зависимой базы `d9f1a53` 2026-10-13.
+Координатор утвердил visual preset без изменения игрового баланса:
+muzzle/impact/mark живут 3/6/180 физических тиков, размеры 0.16/0.08/0.14 м,
+глубина проекции mark 0.04 м. Настоящие Decal, shared cold RGBA textures64x64
+и MeshInstance3D flashes предсоздаются при загрузке. Room envelope: один producer,
+cooldown не меньше15logic (30physics), stride8, burst4. Conservative capacity
+`4+ceil(lifetime/30)` для muzzle и `stride*(4+ceil(lifetime/30))` для contact
+дают muzzle5/impact40/decal80 (125 nodes при cap128).
+Raw textures cap32768 bytes; presentation packed stores cap16384 bytes отдельно
+от combat cap128KiB. Эти cap не описывают полный внутренний heap/VRAM Godot nodes.
+
+Физический snapshot читается синхронно только после успешного publish; pure
+ShotBatch/resolver не получают float point/normal. Miss даёт muzzle; любой
+physical contact, включая wall NO_HANDLE/dead/stale, даёт flash+surface mark
+независимо damage. Abort/reserve/publish отказ и чтение вне snapshot не дают визуал.
+Impact/decal pair атомарна. Visual overflow повышает собственные counters и
+однократную диагностику, не меняя cooldown/damage/shot; acceptance требует zero.
+Expiry priority5 перед weapon10, pause замораживает age, reset отменяет metadata
+и active nodes с сохранением generation allocator. Kind/full-generation handles
+и epoch/sequence guards защищают повторное использование. Muzzle следует socket
+на конце Barrel; decals исключают weapon/flash render layer2. Реализация присутствует,
+pool/nodes interpolationOFF, muzzle следует displayed socket transform с cold pump.
+Native Forward+/D3D12 live/moving-camera proof прошёл на RTX4050LaptopGPU (1280x720),
+pose error0 и active1/8/8; world marks остаются после flash и очищаются reset.
+Final Windows all завершён: import PASS, scripts64/0,249/249 tests в32suites;
+active300warmup+3600measure:120muzzle/960impact/960marks,2040reuse/expiry,
+object/node/resource/orphan/static deltas0, configuration/dropped0.
+Synthetic checksum3032385286 сохранён, regress PASS. Независимое ревью точного
+итогового diff ещё ожидается; пакет4 не объявлен принятым, PR/CI/merge этой версии
+не выполнены. Пакет5 не начат.
 
 Владелец: исполнитель визуальных пулов; области используемых сцен/ресурсов эффектов,
 их пулов, интеграции оружия/Sandbox и тестов. Предсоздавать только реальные эффекты

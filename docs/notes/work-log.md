@@ -4,6 +4,87 @@
 открытые долги — в [follow-ups.md](follow-ups.md), гарантии API — в [contracts.md](../contracts.md).
 Локальная проверка и независимое ревью не означают публикацию, прохождение GitHub CI или слияние.
 
+## 2026-10-13 — назначение визуальных пулов M1
+
+После отдельной приёмки пакета3 координатор назначил пакет4 единственному lead writer
+в `codex/m1-visual-pools` от `d9f1a53175fe32176fac72df195eda27ee18a129`.
+Принят только visual preset: lifetime3/6/180physics, sizes0.16/0.08/0.14м,
+depth0.04м, pools5/40/80 по burst4+ceil(L/30) для одного producer/stride8.
+Предсозданные mesh flashes и настоящие Decal используют две shared cold bitmap
+textures64x64; budgets128nodes/32KiB raw textures/16KiB packed presentation state.
+Physical snapshots после publish отделены от pure damage; overflow визуала
+не меняет shot/cooldown/damage. Рендеринг и expiry вне deterministic guarantee.
+Договор записан до реализации. Координатор подтвердил prerequisite CI точного
+base `d9f1a53`: Linux/Windows SUCCESS, GitHub run38424601880, completion
+15:48:43/15:49:07UTC. Это проверка базы, не packet4 HEAD.
+
+Первый focused прогон: 27/27 (pool7/Jolt17/Sandbox3), active3900ticks подтвердил
+120 muzzle/960 impact/960 marks и2040 reused/2040 expired; object/node/resource/
+orphan/static delta0, visual config/dropped0, shots120/hits960/resolved120 сохранены.
+Negative orphan probe обнаружен и очищен. Первое discovery обнаружило ошибку
+размещения последних assert в Sandbox test; scope исправлен до этого PASS.
+После focused PASS добавлены два boundary tests (mark-full/impact-free и generation
+40000>Int32), диагностика publish rejection; они ещё ожидают итогового all.
+Ignored native-smoke.gd подготовлен для графической Forward+/D3D12 inspection.
+Первый native smoke после исправления ignored helper на normal Node scene
+подтвердил Forward+/D3D12 на NVIDIA RTX4050LaptopGPU, 1280x720, visible target/wall/
+floor marks, отдельные flashes и reset. Это pause-capture, не live interpolation
+или OS input/FPS test. Architect early audit выявил interpolation risk при reuse
+IDENTITY→contact и raw socket frame following. До all внесён cold modeOFF для pool/
+nodes и cold interpolation-pump priming; muzzle теперь следует interpolated
+display socket, getter вызывается каждый presentation frame. Focused pool10+
+ShotBatch6 =16/16 PASS после этого fix. Ignored helper расширен live unpaused
+moving-camera shot; повтор native именно исправленной версии ожидается.
+API основание fix: [Godot Node3D interpolated transform](https://docs.godotengine.org/en/stable/classes/class_node3d.html#class-node3d-method-get-global-transform-interpolated)
+и [physics interpolation guidance](https://docs.godotengine.org/en/stable/tutorials/physics/interpolation/using_physics_interpolation.html).
+Повторный native smoke исправленной версии: exit0, stderr empty, actual NVIDIA
+RTX4050LaptopGPU, D3D12/Forward+,1280x720. Live unpaused moving-camera shot имеет
+active1/8/8, muzzle displayed pose error0.00000000 и mode2OFF; восемь cyan contacts
+видимы на target. После expiry active0/0/8, marks остаются world-anchored при движении
+камеры. Wall NO_HANDLE и floor marks видимы отдельно от flash, оба reset дают0/0/0.
+Координатор независимо просмотрел PNG и проверил ROI2px sampling: baseline→shot
+changed305/cyan27 samples, baseline→marks dark96; blank renderer исключён.
+Viewport renderCPU/GPU snapshots и video bytes записаны в ignored native stdout;
+image capture I/O повышает TIME_PROCESS, это не FPS или7ms real-combat измерение.
+OS input/ручная плавность не проверены. Actual corrected-version proofs:
+
+![Live shotgun muzzle and contacts](../images/m1-visual-live-shot.png)
+![Persistent floor surface marks](../images/m1-visual-floor-marks.png)
+![Persistent wall surface marks](../images/m1-visual-wall-marks.png)
+
+### Итоговая локальная проверка пакета4
+
+Final Windows `ci/run_checks.sh all` с LOG_DIR=`ci-logs/visual-pools` завершился
+exit0: import PASS, scripts64/0,249/249 tests в32suites,0errors/failures/flaky/
+skipped/orphans. Итоговая версия включает boundary generation40000>Int32,
+mark-full/impact-free, publish rejection и interpolation fix; ранние ожидаемые
+результаты выше теперь закрыты. ShotVisualPool10/10, ShotgunPhysics18/18,
+ShotBatch6/6, ShotgunSandbox3/3, FPS16/16, MobilityPhysics30/30 PASS.
+Логи `ci-logs/visual-pools/{import,scripts,tests,regress}.log`, XML/HTML report_3
+сохранены локально и исключены из коммита.
+
+Активный настоящий Jolt/weapon/resolver/pool прогон после300warmup измерил3600ticks:
+120shots/960traces/960hits/120resolved;120muzzle/960impact/960marks,
+2040reuse/2040expiry; objects/nodes/resources/orphans/static deltas0,
+combat configuration0, visual configuration/dropped0. Counters сняты до assertions.
+Отрицательный injected-orphan case обнаружил objects+1/orphans+1 и очистил probe.
+Synthetic regress сохранён отдельно: checksum3032385286 PASS, dropped0/config0,
+object/node/resource/orphan/static deltas0;1800logic samples avg693us/max1244us,
+wall2173ms. Выводимая CPU метрика не является порогом real-combat7ms.
+Прежние golden references не менялись; все golden suites входят в249/249.
+
+После этих прогонов обновляются только шесть MD с actual results; runtime/config/
+project assets не менялись и Godot повторно не запускался. Проверяются Markdown,
+новые относительные ссылки/anchors, согласованность и `git diff --check`, затем
+полный code/tests/docs/PNG snapshot передаётся независимому reviewer по raw hashes.
+Independent final-diff acceptance ещё не получена: пакет4 не принят; commit/push/
+PR/CI/merge текущей версии отсутствуют. CI базы `d9f1a53` не валидирует этот diff.
+Пакет5/M2 не начаты. Ручные OS input/плавность/60FPS и real-combat≤7ms с40enemies
+и effect storms остаются неподтверждёнными; native smoke и headless не закрывают их.
+Пользователь отдельно поручил после завершения пакета4 разобрать и слить PR,
+затем подготовить тестовую сцену с дробовиком/мишенями; это последующие назначения,
+а не выполненная публикация, слияние или расширение текущего пакета.
+
 ## 2026-10-11 — процесс, окружение и устранение двух долгов M1a
 
 ### Решения и окружение

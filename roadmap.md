@@ -222,6 +222,20 @@ PR #11 OPEN/DRAFT, зависимости #8/#9/#10 не слиты; merge не 
 В этом docs-only шаге runtime-проверки не повторялись, CI результата будущего HEAD
 нет. Точные review/логи/ограничения — [журнал приёмки](docs/notes/work-log.md#возобновление-работы-и-локальная-приёмка-runtime-пакета-3--2026-10-13).
 
+*Пакет4 назначен 2026-10-13:* после приёмки closing docs пакета3 база `d9f1a53`
+имеет mandatory Linux/Windows SUCCESS (run38424601880). В `codex/m1-visual-pools`
+единственный writer реализовал actual shotgun flashes/Decal, immutable preset,
+bounded pools5/40/80 и physical snapshots без изменения pure damage/goldens.
+Final Windows all: import PASS, scripts64/0,249/249 tests в32suites;
+active120muzzle/960impact/960marks,2040reuse/expiry,
+object/node/resource/orphan/static delta0, config/dropped0, synthetic3032385286 PASS.
+Corrected interpolationOFF native Forward+/D3D12 live proof
+прошёл на RTX4050LaptopGPU1280x720: active1/8/8, displayed pose error0, floor/wall
+marks и reset проверены. Independent final-diff review ожидается, пакет4 не принят;
+commit/publication/CI/merge этой версии отсутствуют. Вся M1 и пакет5 не завершены.
+Details — [план](docs/m1-plan.md#4-пулы-используемых-vfx-и-декалей),
+[журнал](docs/notes/work-log.md#2026-10-13--назначение-визуальных-пулов-m1).
+
 * FPS-контроллер как машина состояний.
 * **Разделение тиков (Tick vs Frame):** Передвижение, физика и hitscan — в физическом тике 60 Гц с интерполяцией. Таймеры способностей и боевая логика — в логическом тике 30 Гц. Визуальная часть (покачивание камеры, интерполяция оружия) — в Frame (`_process`).
 * Оружие: дробовик через hitscan-конвейер.
