@@ -13,9 +13,13 @@
 `codex/m1-current-plan`; повторный Windows all exit0 (scripts61/0,230/230 tests31suites,
 synthetic3032385286 PASS), финальный independent runtime review
 не получен. По новому поручению пользователя о лимитах дальнейшая разработка/новые
-проверки остановлены, текущий неприёмочный снимок готовится для draft PR. Native rendering
-smoke оружия/целей/прицела пройден; Linux/GitHub CI и ручные mouse/smoothness проверки
-не подтверждены, вся M1 не завершена. Пакеты4/5 не начаты. Источники:
+проверки остановлены. Текущий неприёмочный снимок опубликован: source commit
+`9c88a7b6556bbbbde21dce2a407df88ee18af920`,
+[draft PR #11](https://github.com/GrehBan/3d_shooter/pull/11) в `master`.
+На первой проверке CI этого source Linux QUEUED, Windows IN_PROGRESS; PASS не подтверждён.
+Native rendering smoke оружия/целей/прицела пройден; ручные mouse/smoothness проверки
+не подтверждены, пакет3 не принят, вся M1 не завершена. Merge не выполнялся;
+пакеты4/5 не начаты. Источники:
 [roadmap.md](../roadmap.md), [GDD](../gdd.md), [технический манифест](../tech_manifest.md),
 [контракты](contracts.md), [процесс работы](../AGENTS.md), [открытые долги](notes/follow-ups.md).
 Сам план не разрешает автоматически публикацию, PR или слияние; новое явное поручение

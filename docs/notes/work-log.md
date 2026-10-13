@@ -1076,3 +1076,19 @@ wall2650ms. Логи `ci-logs/shotgun/{import,scripts,tests,regress}.log`, repor
 Source/runtime/tests после этого не менялись; новые прогоны/review cycles не запускались.
 Последняя MD запись actual exit0 не подменяет отсутствующий independent full-diff PASS:
 пакет3 не принят, координатор готовит draft PR по пользовательскому limit-stop.
+
+## Публикация текущего снимка M1 — 2026-10-13
+
+Ветка `codex/m1-current-plan` опубликована: source commit
+`9c88a7b6556bbbbde21dce2a407df88ee18af920`, открыт
+[draft PR #11](https://github.com/GrehBan/3d_shooter/pull/11) в `master`.
+Сохранённый Windows all для этого source: 61 скрипт без ошибок, 230/230 тестов,
+synthetic regress PASS; подробные результаты приведены выше. Финальный независимый
+whole-diff review не завершён, пакет3 не принят. На первой проверке обязательных CI
+этого source Linux QUEUED, Windows IN_PROGRESS; успешный итог не подтверждён.
+Merge не выполнялся; пакеты4/5 не начаты. По поручению пользователя о лимитах дальнейшая
+работа остановлена, новые прогоны и циклы ревью не запускались.
+
+Существующий кадр финального rendering smoke сохранён как документальный asset:
+[скриншот Sandbox](../images/m1-shotgun-sandbox.png). Runtime/configuration/assets
+проекта Godot этим шагом не менялись; runtime-проверки не повторялись.

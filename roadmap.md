@@ -202,6 +202,14 @@ M2/cards/VFX-pools не расширены, commit/push/PR/merge отсутст�
 active120shots/960hits/120resolved zero deltas/config0, synthetic3032385286 PASS,
 static+1152B. Source после этого не менялся; ограничения draft/review сохраняются.
 
+*Публикация текущего снимка, 2026-10-13:* source commit
+`9c88a7b6556bbbbde21dce2a407df88ee18af920` опубликован в `codex/m1-current-plan`,
+открыт [draft PR #11](https://github.com/GrehBan/3d_shooter/pull/11) в `master`.
+На первой проверке CI source Linux QUEUED, Windows IN_PROGRESS; это не PASS.
+Финальный независимый full-diff review не завершён, пакет3 не принят. Merge не выполнялся,
+пакеты4/5 не начаты; по поручению пользователя работа остановлена. Подробнее —
+[журнал публикации](docs/notes/work-log.md#публикация-текущего-снимка-m1--2026-10-13).
+
 * FPS-контроллер как машина состояний.
 * **Разделение тиков (Tick vs Frame):** Передвижение, физика и hitscan — в физическом тике 60 Гц с интерполяцией. Таймеры способностей и боевая логика — в логическом тике 30 Гц. Визуальная часть (покачивание камеры, интерполяция оружия) — в Frame (`_process`).
 * Оружие: дробовик через hitscan-конвейер.
