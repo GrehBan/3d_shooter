@@ -4,8 +4,9 @@
 Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
 Пакет5 и текущая M1 fixture приняты локально после independent review,
 Windows all, native measurements и качественной ручной проверки movement/mouse.
-M2.1 физический DamagePipeline реализован локально в `codex/m2-combat-plan`;
-Windows all/native PASS, стадия независимой приёмки и точная версия — в журнале.
+M2.1 принят независимо и локально committed в `bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`.
+Зависимый M2.2 реализован локально в `codex/m2-effect-runner`; точные проверки и
+стадия независимой приёмки — в журнале. Публикация M2 не разрешена.
 Полный M2 не реализован.
 Прежние draft/pending статусы ниже сохранены как история исходных версий.
 Точные факты — [журнал интеграции PR](notes/pr-integration-log.md).
@@ -46,7 +47,8 @@ integration HEAD; детали актуального слияния приве�
   `EffectHost`, применяет `DamagePayloadBuffer` к `StatBlock`, вызывает
   `MovementAbilities.regen_energy()`.
   M1 weapon-path использует один Sandbox composition-root subscriber:
-  ShotBatch resolver → `MobilityRuntime.logic_step(tick)` (landing damage → regen).
+  ShotBatch resolver → `EffectRunner.logic_step(tick)` →
+  `MobilityRuntime.logic_step(tick)` (landing damage → regen).
   Его порядок и coordinated reset описаны в §7; legacy-конвейер/синтетика сохраняются.
 * **Кадр** (`_process`): только визуал. В логику не пишет.
 * Логическое время — номер логического тика из `GameLoop.get_logic_tick()`. Кулдауны
@@ -255,6 +257,9 @@ Mock/golden/synthetic используют его прежний контрак�
 * Порядок резолва: фаза, затем priority по возрастанию, затем slot_index, effect_id и handle
   записи. Порядок освобождения записей в `clear_host` (новые первыми) — часть детерминизма.
 * Чтение: `first(host, trigger)` → `next(index)` до `NO_ENTRY`; поля через `*_at(index)`.
+  `entry_index(full_entry)` проверяет поколение и возвращает слот или -1;
+  сохранённый handle разрешается заново перед каждым чтением. `host_capacity()`
+  должен совпадать с `StatBlock.capacity()`; runner проверяет это при загрузке.
   **`next()` и `*_at()` не проверяют индекс**: обходить только через `first()`/`next()`.
   Снимать эффект во время обхода того же списка можно только сохранив `next` заранее.
 
@@ -272,6 +277,83 @@ Mock/golden/synthetic используют его прежний контрак�
   решение зависит только от логического `now_tick` и статов.
 * Энергия — общий пул `StatBlock.ENERGY` (один заряд = 1000); `regen_energy(stats)` раз в
   логический тик.
+
+### EffectRuleData и EffectRunner (`effects/`, M2.2)
+
+This implemented foundation supports only `INCREMENT_COUNTER`, with `ALWAYS` or
+`MIN_VALUE` against a captured nonnegative integer value. `minimum_value >= 0`,
+`counter_increment > 0`, `cooldown_ticks >= 0`; unsupported enums/null definitions
+reject the complete constructor. Definitions are copied into packed scalar columns
+while loading, never retained or mutated. Definition ID is its array index, matching
+`EffectHost.effect_id`; the maximum is 64 definitions. Empty definitions are valid.
+
+`EffectRunner.new(stats, host, definitions, event_capacity=32, max_subscriptions=8,
+work_quota=16)` validates matching host/stat capacities, positive bounded capacities
+(events <=4096, subscriptions <=64), positive quota and every definition before
+allocation. `is_initialized()` reports failure; Sandbox aborts initialization on it.
+No callbacks or general action abstractions are part of this foundation.
+
+`enqueue(owner, trigger, value) -> bool` validates the full live owner handle at
+admission. Invalid owners ordinarily return false; malformed triggers/negative values
+or unknown definition IDs are configuration errors. HP0 with a valid handle is allowed.
+No matching subscription returns true without creating or counting an event. For a
+matching event, capture ordered full entry handles in the existing EffectHost order.
+Admission scans at most `max_subscriptions+1` candidates. Added entries are invisible
+to an accepted snapshot; removed/replaced entries are skipped. Each live entry's
+definition fields cannot be mutated through EffectHost, so an admitted definition ID
+remains valid until that full entry is removed. No raw slot persists across calls.
+
+Queue/snapshot overflow rejects the whole event before queue/state/cooldown writes,
+increments `configuration_errors` and `dropped_events` once per rejected event, and
+uses one constant diagnostic until `reset_diagnostics()`. Other malformed input and
+action-counter overflow increment configuration errors without counting a queue drop.
+Scratch storage may change during rejected admission. Accepted events retain only
+full owner, captured value, and full entry handles: no target or attack handle,
+context reference/lease, dereference, or close/release operation. The current bridge
+captures `OnHit.hp_damage`; later target death/despawn cannot cancel this value.
+
+`logic_step(tick) -> int` returns inspected units, up to fixed `work_quota`. Negative,
+duplicate and backward ticks do nothing. An empty new tick still advances the guard,
+so subsequent admission waits for the next tick. FIFO events preserve a front cursor;
+every candidate costs one unit, including stale, condition/cooldown, and action overflow
+refusals. Exhaustion defers remaining work, without drops/errors. Owner validity is
+rechecked at execution. For successful actions only, write full entry/owner state,
+counter and last-success tick together. Cooldown compares nonnegative elapsed
+`tick - last_success >= cooldown_ticks`, avoiding overflowing future deadlines;
+initial last-success is -1, cooldown0 permits repeated actions on one tick. Check
+`counter > INT64_MAX - increment` before any action/cooldown write.
+
+State belongs to full subscription handles, never `EffectHost.state_slot` or shared
+card state. `counter_for(entry)` returns 0 for removed/replaced entries or stale owners.
+Metrics are cumulative `accepted_events`, `processed_events`, `inspected_candidates`,
+`executed_actions`, `condition_refusals`, `cooldown_refusals`, `stale_skips`, and
+`deferred_steps` (each new step ending pending because quota was exhausted).
+`pending_count()` includes a partially inspected front event. `reset_diagnostics()`
+clears only error/drop counters and the latch, preserving tick/FIFO/state/activity.
+Quiescent `reset_room()` cancels FIFO and clears all runner state/metrics/diagnostics
+and last tick, preserving definitions and subscriptions. There is no save/restore.
+Sandbox first requires successful resolver reset, then resets effects, weapon,
+visuals, mobility and GameLoop; resolver refusal leaves runner state/FIFO/tick intact.
+
+Room capacity is 64 entries, 32 events, 8 handles/event and quota 16. A separate 32768 B
+packed payload cap includes EffectHost/HandlePool and runner; it excludes Godot object,
+Variant and packed-array wrappers, allocator overhead and cold Resource storage.
+Exact payload ledger: host `84*16 + 57*64 = 4992 B`; runner
+`28*definitions + 32*(20+8*8) + 8*8 + 32*64 = 4800 + 28*definitions B`.
+Totals are 9792 B with empty Sandbox definitions, 9904 B with four benchmark definitions,
+11584 B at 64 definitions. Sandbox checks this combined payload before binding gameplay;
+M1's independent weapon/visual caps are unchanged. All tables/scratch allocate cold.
+
+The real benchmark installs four test-only `.tres` rules before Sandbox enters the
+tree: `(ALWAYS,+1,cd0)`, `(MIN_VALUE6000,+2,cd0)`, `(MIN_VALUE6001,+1,cd0)`,
+`(ALWAYS,+3,cd1)`, then subscribes them in order 0..3. Eight hits produce 32 candidates
+per shot, split over two ticks. The measured 120 shots/960 hits require 960 accepted
+and processed events, 3840 inspections, 2160 actions, 960 condition refusals, 720 cooldown
+refusals, 120 deferred steps, counter deltas `[960,1920,0,720]`, and pending 0.
+All diagnostic/drop/host-capacity-refusal/stale counters must be 0. Whole-GameLoop 7000 us
+and allocation gates include this runner. This remains a small counter workload,
+not M3's 40-enemy/effect storm acceptance. Independent oracle:
+`tests/tools/effect_runner_ref.py`, golden 3633298175; original synthetic 3032385286 remains.
 
 ## 3. Независимость логики и визуала
 
@@ -523,8 +605,8 @@ Root удерживается открытым до обработки всех 
 ### Интеграция 60/30 Гц и room reset
 
 Input/raycast adapter работает на физике 60 Гц; чистый shot resolver — на логике 30 Гц.
-Один Sandbox composition-root subscriber вызывает shot resolver, затем существующий
-`MobilityRuntime.logic_step(tick)`: все shots данного тика идут перед landing damage
+Один Sandbox composition-root subscriber вызывает shot resolver, M2.2 counter runner,
+затем `MobilityRuntime.logic_step(tick)`: все shots данного тика идут перед landing damage
 и regen. Weapon/controller не добавляют собственных подписок. Resolver игнорирует
 duplicate/старый logic tick, сохраняя единственную обработку событий; mobility guard
 и его существующие гарантии остаются.
@@ -532,6 +614,7 @@ duplicate/старый logic tick, сохраняя единственную о�
 Room reset координируется этим же владельцем: capture точного старого
 `GameLoop.get_logic_tick()` → reset shot resolver/ShotBatch (pending, diagnostic counters,
 duplicate guard, новый room epoch и согласованная shot sequence) →
+`EffectRunner.reset_room()` только после успешного resolver reset →
 `weapon.reset_clock(old_tick)` для каждого оружия →
 `MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()`.
 Identity reset не должен смешивать старые и новые записи комнаты. Существующий
@@ -651,7 +734,10 @@ native Forward+/D3D12 live/moving-camera smoke. Независимые архи�
 
 `res://tests/perf/RealPipelineBenchmark.tscn` — обычная сцена Node, холодно создающая
 настоящий Sandbox. Production controller, weapon, visual pools, GameLoop и единственная
-подписка Sandbox resolver → mobility используются без изменения. Fixture заменяет
+подписка Sandbox resolver → effects → mobility используются напрямую. M2.2 перед
+входом Sandbox в дерево устанавливает четыре test-only counter definitions и
+подписывает их для OnHit игрока; [точные gates M2.2](#effectruledata-и-effectrunner-effects-m22)
+дополняют сохранённые ниже M1 counters. Fixture заменяет
 только свои floor/center shape и mesh: пол 200×200 м, центр 100×12×0.5 м с HP/MAX_HP
 20_000_000 raw; боковые цели, slope/platform скрыты и выключены из collisions.
 Shared definition resources не мутируются. Горячих HP/clock/position resets нет.

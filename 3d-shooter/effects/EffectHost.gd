@@ -86,8 +86,17 @@ func entry_capacity() -> int:
 	return _entries.capacity()
 
 
+func host_capacity() -> int:
+	return _host_capacity
+
+
 func entry_count() -> int:
 	return _entries.alive_count()
+
+
+## Resolve a full generation handle immediately before reading its slot.
+func entry_index(entry: int) -> int:
+	return _entries.index_of(entry)
 
 
 func reset_counters() -> void:

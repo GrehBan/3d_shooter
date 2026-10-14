@@ -6,6 +6,7 @@ var player_handle: int = StatBlock.INVALID_HANDLE
 @export_dir var movement_data_directory: String = "res://data/movement"
 @export_dir var weapon_data_directory: String = "res://data/weapons"
 @export var visual_data: ShotVisualData = preload("res://data/visuals/shotgun.tres")
+@export var effect_definitions: Array[EffectRuleData] = []
 const ROOM_SHOTS: int = 4
 const ROOM_TRACE_CAP: int = 32
 const ROOM_PACKED_BYTES: int = 131_072
@@ -15,6 +16,13 @@ const ROOM_DEFERRED_RESERVE: int = 16
 const ROOM_VISUAL_NODES: int = 128
 const ROOM_VISUAL_PACKED_BYTES: int = 16384
 const ROOM_VISUAL_TEXTURE_BYTES: int = 32768
+const ROOM_EFFECT_ENTRIES: int = 64
+const ROOM_EFFECT_PACKED_BYTES: int = 32768
+# EffectHost: heads, owner/host lists, HandlePool and ten int32 + one int64 columns.
+const ROOM_EFFECT_HOST_BYTES: int = ROOM_HOSTS * (EffectTrigger.TRIGGER_COUNT * 4 + 12) \
+		+ ROOM_EFFECT_ENTRIES * 57
+var effect_host: EffectHost
+var effects: EffectRunner
 var shots: ShotBatch
 var resolver: ShotResolver
 var weapon: HitscanWeapon
@@ -48,6 +56,11 @@ func _ready() -> void:
 		_abort_initialization("Sandbox: invalid visual preset or room capacity")
 		return
 	mobility = MobilityRuntime.new(ROOM_HOSTS)
+	effect_host = EffectHost.new(ROOM_HOSTS, ROOM_EFFECT_ENTRIES)
+	effects = EffectRunner.new(mobility.stats, effect_host, effect_definitions)
+	if not effects.is_initialized() or effects.packed_bytes() + ROOM_EFFECT_HOST_BYTES > ROOM_EFFECT_PACKED_BYTES:
+		_abort_initialization("Sandbox: invalid effect definitions or room capacity")
+		return
 	player_handle = mobility.stats.allocate()
 	mobility.stats.set_stat(player_handle, StatBlock.Stat.MAX_HP, 100_000)
 	mobility.stats.set_stat(player_handle, StatBlock.Stat.HP, 100_000)
@@ -59,6 +72,7 @@ func _ready() -> void:
 	(get_node(^"Player") as FPSController).bind_mobility(mobility, player_handle)
 	shots = ShotBatch.new(ROOM_SHOTS, stride, ROOM_HOSTS)
 	resolver = ShotResolver.new(mobility.stats, shots, ROOM_CONTEXTS)
+	resolver.on_hit.connect(_on_hit)
 	weapon = get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon
 	if not weapon.initialize(definitions[0], mobility.stats, shots, player_handle, get_node(^"Player") as FPSController):
 		_abort_initialization("Sandbox: weapon initialization failed")
@@ -81,11 +95,17 @@ func _ready() -> void:
 
 func _on_logic_tick(tick: int) -> void:
 	resolver.logic_step(tick)
+	effects.logic_step(tick)
 	mobility.logic_step(tick)
 	# Visible defeated targets preserve an inspectable collider and full handle.
 	for index: int in target_handles.size():
 		if mobility.stats.get_stat(target_handles[index], StatBlock.Stat.HP) <= 0:
 			_target_meshes[index].material_override = _dead_material
+
+
+func _on_hit(source: int, _target: int, _epoch: int, _sequence: int,
+		_trace: int, _child: int, hp_damage: int) -> void:
+	effects.enqueue(source, EffectTrigger.Trigger.ON_HIT, hp_damage)
 
 
 func _abort_initialization(message: String) -> void:
@@ -102,6 +122,7 @@ func reset_mobility_clock() -> void:
 	if not resolver.reset_room():
 		_abort_initialization("Sandbox: room epoch exhausted")
 		return
+	effects.reset_room()
 	weapon.reset_clock(old_tick)
 	if not visuals.reset_room(shots.epoch):
 		_abort_initialization("Sandbox: visual epoch reset failed")

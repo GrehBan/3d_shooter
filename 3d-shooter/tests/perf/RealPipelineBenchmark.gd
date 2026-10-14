@@ -15,6 +15,8 @@ var _mobility: MobilityRuntime
 var _resolver: ShotResolver
 var _batch: ShotBatch
 var _visuals: ShotVisualPool
+var _effects: EffectRunner
+var _effect_entries: PackedInt64Array = PackedInt64Array()
 var _target: int
 var _driver: InputDriver
 var _baseline: PackedInt64Array = PackedInt64Array()
@@ -90,6 +92,12 @@ func _ready() -> void:
 	_baseline.resize(RealPipelineResult.Counter.COUNT)
 	_frame_usec.resize(FRAME_CAPACITY)
 	_sandbox = SANDBOX.instantiate() as Node3D
+	var effect_definitions: Array[EffectRuleData] = [
+		preload("res://tests/fixtures/effects/count_hit.tres"),
+		preload("res://tests/fixtures/effects/min_damage.tres"),
+		preload("res://tests/fixtures/effects/refuse_damage.tres"),
+		preload("res://tests/fixtures/effects/cooldown_hit.tres")]
+	_sandbox.set(&"effect_definitions", effect_definitions)
 	_player = _sandbox.get_node(^"Player") as FPSController
 	_player.hardware_input_enabled = false
 	_camera = _player.get_node(^"Camera3D") as Camera3D
@@ -101,9 +109,15 @@ func _ready() -> void:
 	_resolver = _sandbox.get(&"resolver") as ShotResolver
 	_batch = _sandbox.get(&"shots") as ShotBatch
 	_visuals = _sandbox.get(&"visuals") as ShotVisualPool
+	_effects = _sandbox.get(&"effects") as EffectRunner
 	if _mobility == null or _resolver == null or not _weapon.is_initialized():
 		_abort("Sandbox initialization failed")
 		return
+	var effect_host: EffectHost = _sandbox.get(&"effect_host") as EffectHost
+	var player_handle: int = _sandbox.get(&"player_handle")
+	for index: int in effect_definitions.size():
+		_effect_entries.append(effect_host.add_effect(player_handle, EffectTrigger.Trigger.ON_HIT,
+				EffectTrigger.Phase.MAIN, index, index, index, index))
 	var targets: PackedInt64Array = _sandbox.get(&"target_handles")
 	_target = targets[1]
 	_mobility.stats.set_stat(_target, StatBlock.Stat.MAX_HP, TARGET_HP)
@@ -212,6 +226,17 @@ func _counter(index: int) -> int:
 		RealPipelineResult.Counter.MARKS: return _visuals.emitted_marks
 		RealPipelineResult.Counter.EXPIRED: return _visuals.expired_count
 		RealPipelineResult.Counter.REUSED: return _visuals.reused_count
+		RealPipelineResult.Counter.EFFECT_ACCEPTED: return _effects.accepted_events
+		RealPipelineResult.Counter.EFFECT_PROCESSED: return _effects.processed_events
+		RealPipelineResult.Counter.EFFECT_INSPECTED: return _effects.inspected_candidates
+		RealPipelineResult.Counter.EFFECT_ACTIONS: return _effects.executed_actions
+		RealPipelineResult.Counter.EFFECT_CONDITION: return _effects.condition_refusals
+		RealPipelineResult.Counter.EFFECT_COOLDOWN: return _effects.cooldown_refusals
+		RealPipelineResult.Counter.EFFECT_DEFERRED: return _effects.deferred_steps
+		RealPipelineResult.Counter.EFFECT_COUNTER_0: return _effects.counter_for(_effect_entries[0])
+		RealPipelineResult.Counter.EFFECT_COUNTER_1: return _effects.counter_for(_effect_entries[1])
+		RealPipelineResult.Counter.EFFECT_COUNTER_2: return _effects.counter_for(_effect_entries[2])
+		RealPipelineResult.Counter.EFFECT_COUNTER_3: return _effects.counter_for(_effect_entries[3])
 	return 0
 
 
@@ -248,15 +273,18 @@ func _finish() -> void:
 	for index: int in _baseline.size():
 		result.counters[index] = _counter(index) - _baseline[index]
 	result.configuration_errors = _batch.configuration_errors + _visuals.configuration_errors + _frame_overflows \
-			+ _resolver.damage_configuration_errors()
-	result.dropped = _mobility.landings.dropped_count() + _visuals.dropped_count
+			+ _resolver.damage_configuration_errors() + _effects.configuration_errors
+	result.dropped = _mobility.landings.dropped_count() + _visuals.dropped_count + _effects.dropped_events
 	result.refusals = _resolver.contexts.capacity_refusals + _resolver.contexts.hit_set_overflows \
-			+ _resolver.contexts.budget_refusals + _resolver.contexts.depth_refusals
+			+ _resolver.contexts.budget_refusals + _resolver.contexts.depth_refusals \
+			+ (_sandbox.get(&"effect_host") as EffectHost).capacity_refusals
 	result.stale_landings = _mobility.stale_landings
 	result.no_op_traces = _resolver.no_op_traces
 	result.kills = _resolver.kills
 	result.pending_shots = _batch.pending_count() + _batch.count()
 	result.pending_landings = _mobility.landings.count()
+	result.pending_effects = _effects.pending_count()
+	result.stale_effects = _effects.stale_skips
 	result.live_contexts = _resolver.contexts.alive_count()
 	result.visual_occupancy_delta = _visual_occupancy() - _occupancy
 	result.frame_fps_mean = float(_frame_count) * 1000000.0 / maxf(1.0, float(_frame_usec_sum))
@@ -270,8 +298,12 @@ func _finish() -> void:
 		result.distance, result.peak_abs_x, result.look_radians])
 	print("REAL_PIPELINE visuals: muzzle=%d impact=%d mark=%d expired=%d reused=%d occupancy_delta=%d" % [
 		result.counters[14], result.counters[15], result.counters[16], result.counters[17], result.counters[18], result.visual_occupancy_delta])
-	print("REAL_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=7000 us scope=M1_fixture" % [
+	print("REAL_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=7000 us scope=M2.2_counter_fixture" % [
 		result.logic_samples, float(result.logic_usec_sum) / maxf(1.0, float(result.logic_samples)), result.logic_usec_max])
+	print("REAL_PIPELINE effects: accepted=%d processed=%d inspected=%d actions=%d condition=%d cooldown=%d deferred=%d counters=%d,%d,%d,%d pending=%d" % [
+		result.counters[19], result.counters[20], result.counters[21], result.counters[22],
+		result.counters[23], result.counters[24], result.counters[25], result.counters[26],
+		result.counters[27], result.counters[28], result.counters[29], result.pending_effects])
 	print("REAL_PIPELINE diagnostics: configuration=%d dropped=%d refusals=%d stale=%d noops=%d kills=%d pending=%d landings=%d contexts=%d" % [
 		result.configuration_errors, result.dropped, result.refusals, result.stale_landings, result.no_op_traces,
 		result.kills, result.pending_shots, result.pending_landings, result.live_contexts])

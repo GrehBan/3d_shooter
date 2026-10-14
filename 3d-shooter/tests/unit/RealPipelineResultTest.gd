@@ -85,3 +85,16 @@ func test_graphical_fps_is_separate_from_headless_activity() -> void:
 	assert_array(result.failures()).contains(["graphical mean FPS below 60"])
 	result.frame_fps_mean = 60.0
 	assert_array(result.failures()).is_empty()
+
+
+func test_every_effect_counter_and_pending_state_are_acceptance_gates() -> void:
+	for index: int in range(RealPipelineResult.Counter.EFFECT_ACCEPTED, RealPipelineResult.Counter.COUNT):
+		var result: RealPipelineResult = _valid_result()
+		result.counters[index] += 1
+		assert_array(result.failures()).is_not_empty()
+	var result: RealPipelineResult = _valid_result()
+	result.pending_effects = 1
+	assert_array(result.failures()).is_not_empty()
+	result = _valid_result()
+	result.stale_effects = 1
+	assert_array(result.failures()).is_not_empty()
