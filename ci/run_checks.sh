@@ -48,6 +48,42 @@ run_step() {
 
 "$GODOT" --version
 
+# The real pipeline keeps the synthetic benchmark independent and unchanged.
+run_real_pipeline() {
+	run_step real_pipeline --fixed-fps 60 res://tests/perf/RealPipelineBenchmark.tscn
+	local log="$LOG_DIR/real_pipeline_leak.log"
+	echo "::group::real_pipeline_leak"
+	set +e
+	timeout "$STEP_TIMEOUT" "$GODOT" --headless --path "$PROJECT_DIR" --fixed-fps 60 \
+		res://tests/perf/RealPipelineBenchmark.tscn -- --inject-leak < /dev/null 2>&1 | tee "$log"
+	local code=${PIPESTATUS[0]}
+	set -e
+	echo "::endgroup::"
+	check_script_errors real_pipeline_leak "$log"
+	if [[ $code -ne 1 ]] \
+		|| ! grep -q 'allocations: objects=+1 nodes=+0 resources=+0 orphans=+1' "$log" \
+		|| ! grep -q 'actions: shots=120 traces=960 hits=960 resolved=120 damage=5760000 signal_damage=5760000' "$log" \
+		|| ! grep -q 'leak_cleanup: objects=+0 orphans=+0' "$log" \
+		|| ! grep -q '^REAL_PIPELINE FAIL: object/node/resource/orphan growth$' "$log" \
+		|| [[ $(grep -c '^REAL_PIPELINE FAIL:' "$log") -ne 1 ]]; then
+		echo "::error::real_pipeline_leak: expected one detected and cleaned orphan, exit 1 (see $log)"
+		exit 1
+	fi
+	echo "real_pipeline_leak: OK (expected rejection and cleanup)"
+	log="$LOG_DIR/real_pipeline_unknown_option.log"
+	set +e
+	timeout "$STEP_TIMEOUT" "$GODOT" --headless --path "$PROJECT_DIR" \
+		res://tests/perf/RealPipelineBenchmark.tscn -- --unknown-option < /dev/null > "$log" 2>&1
+	code=$?
+	set -e
+	check_script_errors real_pipeline_unknown_option "$log"
+	if [[ $code -ne 2 ]] || ! grep -q '^REAL_PIPELINE SETUP ERROR: unknown option: --unknown-option$' "$log"; then
+		echo "::error::real_pipeline_unknown_option: expected setup rejection, exit 2 (see $log)"
+		exit 1
+	fi
+	echo "real_pipeline_unknown_option: OK"
+}
+
 case "${1:-all}" in
 	import)
 		run_step import --import
@@ -61,14 +97,18 @@ case "${1:-all}" in
 	regress)
 		run_step regress --fixed-fps 60 -s res://tests/perf/regress.gd
 		;;
+	real_pipeline)
+		run_real_pipeline
+		;;
 	all)
 		run_step import --import
 		run_step scripts -s res://tests/check_scripts.gd
 		run_step tests -s addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode --add res://tests/
 		run_step regress --fixed-fps 60 -s res://tests/perf/regress.gd
+		run_real_pipeline
 		;;
 	*)
-		echo "Использование: GODOT=... ci/run_checks.sh [import|scripts|tests|regress|all]" >&2
+		echo "Использование: GODOT=... ci/run_checks.sh [import|scripts|tests|regress|real_pipeline|all]" >&2
 		exit 2
 		;;
 esac

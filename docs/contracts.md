@@ -1,10 +1,11 @@
 # Контракты ядра боя (M1a)
 
-Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
-опубликован в #12 (original HEAD `6a81bdc`, required CI SUCCESS run38464462181).
-Обновлённый integration HEAD #12 ещё ожидает публикации/fresh required CI;
-новые integration-review cycles отменены пользователем. Прежние draft/pending
-статусы ниже — история исходных версий. Пакет5/общая M1 не завершены.
+Актуальный статус 2026-10-14: PR #8–#12 слиты, база `master` — `cc63554`.
+Последний integration HEAD #12 `4d09` прошёл required Linux/Windows CI
+run38467557300; runtime пакета4 совпадает с принятой исходной версией.
+Пакет5 реализован в `codex/m1-real-pipeline`; final Windows all и graphical gates PASS,
+ручная проверка movement/mouse PASS. Итоговое independent review/приёмка M1 впереди.
+Прежние draft/pending статусы ниже сохранены как история исходных версий.
 Точные факты — [журнал интеграции PR](notes/pr-integration-log.md).
 
 Справочник по чистым классам логики боя: кто их вызывает, что гарантировано и что
@@ -609,3 +610,59 @@ native Forward+/D3D12 live/moving-camera smoke. Независимые архи�
 принят локально. Это не PR/CI/merge пакета4 и не приёмка общей M1; новая docs-only
 запись результата ожидает отдельного независимого ревью. Точные результаты и ограничения —
 [журнал](notes/work-log.md#итоговая-локальная-проверка-пакета4).
+
+## 9. M1 реальный интеграционный бенчмарк (пакет 5)
+
+`res://tests/perf/RealPipelineBenchmark.tscn` — обычная сцена Node, холодно создающая
+настоящий Sandbox. Production controller, weapon, visual pools, GameLoop и единственная
+подписка Sandbox resolver → mobility используются без изменения. Fixture заменяет
+только свои floor/center shape и mesh: пол 200×200 м, центр 100×12×0.5 м с HP/MAX_HP
+20_000_000 raw; боковые цели, slope/platform скрыты и выключены из collisions.
+Shared definition resources не мутируются. Горячих HP/clock/position resets нет.
+
+Driver priority−100 до FPS0/pools5/weapon10 подаёт свежие input edges: каждые240physics
+jump2/14, dash28/170, slide120; направление strafe меняет знак каждые240ticks.
+Парные look deltas ±0.2pixels и fire edge каждые30ticks исполняются настоящими
+engine callbacks. Sampler priority1200 после GameLoop1000 не вызывает физику или
+логику вручную. После300warmup снимает baseline, затем измеряет3600physics ticks.
+Мониторы objects/nodes/resources/orphans/static снимаются до вывода, сигналов,
+сортировки, очистки и изображения; первые четыре delta0, static≤1MiB.
+
+Для measured окна обязательны120accepted shots/960rays/960registered hits/120completion,
+HP loss5_760_000 raw и тот же суммарный on_hit damage; no-op/kills0. Обязательны30dash,
+15slide/15double/15ground jumps/15landings и resolved landings,1800resolver/mobility
+steps и timing samples, distance>450м, |x|≤45м, реальное изменение yaw.
+Visual counters120/960/960, expiry2040, reuse>0, итоговая occupancy равна baseline.
+Все cumulative configuration/drop/capacity/hit-set/budget/depth/stale diagnostics0;
+pending complete/reserved shots, landings и live contexts0. Неподвижная сцена не проходит.
+
+`GameLoop.get_last_logic_tick_usec()` измеряет весь синхронный logic_tick emission,
+включая Sandbox и benchmark damage observer. Максимум≤7000us является жёстким
+порогом этой M1 fixture; это не подтверждение будущих40enemies/effect storms M3.
+Существующий `regress.gd` и checksum3032385286 сохранены без изменения.
+
+`--inject-leak` создаёт один намеренный orphan после baseline; тот же полный workload
+должен завершиться exit1 с objects+1/orphans+1, после snapshot узел освобождается.
+CI отдельно проверяет activity, единственную причину отказа и cleanup0/0; crash или
+произвольный nonzero exit не считаются успехом отрицательной проверки. Unknown option
+даёт setup exit2. Pure `RealPipelineResultTest` проверяет gates без второго60s gdUnit case.
+`ci/run_checks.sh real_pipeline` и `all` запускают positive/negative/setup проверки;
+workflow имеет отдельный real-pipeline step на Linux/Windows.
+
+Headless `--fixed-fps60` — ускоренные3600симулированных physics ticks, не FPS evidence.
+Графический запуск той же сцены требует real-time pacing: fixed-fps/time-scale/max-fps
+CLI отвергаются; time_scale1 и physics60 обязательны. Frame intervals берутся из
+`Time.get_ticks_usec()` между actual `_process` callbacks, хранятся в холодно
+предвыделенном буфере; overflow блокирует приёмку. Выводятся renderer/driver/GPU/
+resolution/vsync, mean FPS (gate≥60), p95/p99/worst interval и доля frames>16667us.
+Mean≥60 не означает minimum60 для каждого кадра или M3 performance reference.
+Опциональный `--capture=<path>` сохраняет PNG только после monitor snapshot и pause.
+Ручной OS input/feel, инструментальный FPS, локальные проверки, independent review,
+publication, required CI и merge фиксируются раздельно в журнале.
+
+Локальные инструментальные gates14Oct пройдены: Windows all67scripts/255tests,
+synthetic3032385286 и joint positive/leak/setupPASS; native whole-emission max319us,
+graphical mean143.846FPS, p95/p99/worst7776/9449/11146us, slow fraction0 и monitor
+deltas0. Условия и разрешение (reported viewport rect отличается от PNG pixel size),
+ручная обратная связь и границы приёмки — [журнал](notes/work-log.md#графическая-проверка-пакета5-и-снимок-перед-ревью).
+Это состояние перед independent exact-diff review; publication/CI/merge нового пакета впереди.

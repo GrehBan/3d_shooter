@@ -1,10 +1,9 @@
 # План M1: движение, стрельба и Zero-Allocation
 
-Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
-опубликован в #12, original `6a81bdc` имеет required CI SUCCESS run38464462181.
-Обновление #12 ожидает публикации/fresh required CI; новые integration-review
-cycles отменены пользователем. Ниже прежние draft/pending статусы сохранены как
-история исходных версий; пакет5/общая M1 не завершены.
+Актуальный статус 2026-10-14: PR #8–#12 слиты; база `master` — `cc63554`.
+Последний integration HEAD #12 `4d09` прошёл required Linux/Windows CI
+run38467557300. Пакет5 реализован в `codex/m1-real-pipeline`, Windows all/native/manual PASS.
+Прежние draft/pending статусы ниже — история; итоговое independent review/приёмка M1 впереди.
 Точные факты — [журнал интеграции](notes/pr-integration-log.md).
 
 Дата плана: 2026-10-11. Текущий статус на 2026-10-13: пакет 1 принят и закоммичен локально;
@@ -445,6 +444,30 @@ PR/CI/merge этой версии не выполнены; новая docs-only 
 `new()`/`instantiate()`/`queue_free()`; визуал не меняет расчёт урона и статы.
 
 ## 5. Бенчмарк реального конвейера и приёмка M1
+
+Реализация2026-10-14: назначен единый writer в `codex/m1-real-pipeline` от свежего
+master `cc63554f9bf63d46737554fd9ecb430d7b02447e`. Добавлены actual Sandbox fixture,
+driver−100/sampler1200, pure acceptance result/test и отдельный CI `real_pipeline`.
+Production callbacks/subscription/stores не меняются; полный набор активности,
+диагностик, allocation/CPU/FPS gates — [контракт§9](contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5).
+Focused6/6 и active positive/negative/setup checks пройдены. Финальный Windows all
+exit0: importPASS, scripts67/0,255/255tests33suites, synthetic3032385286PASS и joint
+positive/leak/setupPASS. Native real-time positivePASS на Windows Forward+/D3D12,
+RTX4050LaptopGPU: mean143.846FPS, p95/p99/worst7776/9449/11146us, slow fraction0,
+logic max319us, all monitor deltas0. Reported viewport rect1152×648, screenshot pixels
+1280×720; измерение60009.8ms после300warmup. Independent exact-diff review ещё ожидается;
+публикация PR разрешена пользователем, выполняется после review, merge не назначен.
+Ручную плавность движения/мыши пользователь подтвердил14Oct на локальном тире с
+тем же production controller/weapon/pools. Это качественная оценка, не численный FPS.
+
+Команды из Git root:
+
+```sh
+# Ускоренный active workload, deliberate leak и unknown option в CI.
+GODOT=/path/to/godot bash ci/run_checks.sh real_pipeline
+# Реальное графическое время; без --headless/--fixed-fps/--max-fps/--time-scale.
+godot --path 3d-shooter --resolution 1280x720 res://tests/perf/RealPipelineBenchmark.tscn
+```
 
 Владелец: исполнитель проверки интеграции; области `tests/perf/`, тестовой сцены реального
 контроллера/оружия/пулов и необходимых интеграционных тестов. Прогон должен доказывать,

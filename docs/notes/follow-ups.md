@@ -1,10 +1,18 @@
 # Отложенные доработки (follow-up)
 
-Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
-опубликован в #12 (original `6a81bdc`, required CI SUCCESS run38464462181).
-Обновление #12 ожидает публикации/fresh required CI; новые reviews отменены
-пользователем. Ниже прежние draft/pending статусы — история исходных версий.
-Пакет5/ручные input/плавность/FPS gates открыты; [факты интеграции](pr-integration-log.md).
+Актуальный статус2026-10-14: PR #8–#12 слиты; `master` — `cc63554`.
+Final integration #12 `4d09` прошёл required Linux/Windows CI run38467557300.
+Пакет5 реализован; пользователь подтвердил качественную плавность movement/mouse.
+Final Windows all PASS:67scripts,255/255tests, synthetic/joint gates.
+Native same-fixture graphical gate PASS: mean143.846FPS, p99 frame9449us/max11146us,
+logic max319us, zero monitor deltas. Итоговое independent review ещё ожидается.
+Прежние draft/pending статусы ниже — история; [факты интеграции](pr-integration-log.md).
+
+Пакет5 не подтверждает M3 performance40enemies/effect storms или Steam Deck-class
+reference. Mean graphicalFPS≥60 на конкретном GPU не гарантирует каждый кадр≤16.67ms;
+хвост p95/p99/worst и slow fraction записываются отдельно. Damaging>8m fall/cancel
+сохраняют пакет2 Jolt tests; joint fixture использует обычные jumps/landings.
+Эти пункты — ограничения доказательств, не новые blockers текущего M1 fixture.
 
 Небольшие известные долги, которые не вошли в текущий шаг. Каждый пункт закрывается
 отдельным PR с тестом.
