@@ -1,11 +1,10 @@
 # Отложенные доработки (follow-up)
 
-Актуальный статус2026-10-14: PR #8–#12 слиты; `master` — `cc63554`.
-Final integration #12 `4d09` прошёл required Linux/Windows CI run38467557300.
-Пакет5 реализован; пользователь подтвердил качественную плавность movement/mouse.
-Final Windows all PASS:67scripts,255/255tests, synthetic/joint gates.
-Native same-fixture graphical gate PASS: mean143.846FPS, p99 frame9449us/max11146us,
-logic max319us, zero monitor deltas. Итоговое independent review ещё ожидается.
+Актуальный статус2026-10-14: PR #8–#13 слиты; `master` — `962741d`.
+Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
+Пакет5 и текущая M1 fixture приняты локально после independent review,
+Windows all/native measurements и qualitative manual movement/mouse PASS.
+M2.1 реализован локально, Windows all/native PASS; стадия независимой приёмки — в журнале.
 Прежние draft/pending статусы ниже — история; [факты интеграции](pr-integration-log.md).
 
 Пакет5 не подтверждает M3 performance40enemies/effect storms или Steam Deck-class
@@ -23,13 +22,22 @@ reference. Mean graphicalFPS≥60 на конкретном GPU не гаран�
 - **Скорость регенерации энергии как стат.** `MovementAbilities` берёт регенерацию
   энергии из параметра конструктора (`regen_per_tick`, ×1000 за логический тик): отдельного
   стата в `StatBlock` нет, а добавление стата меняет раскладку `StatBlock` и его golden.
-  Когда карточки начнут менять регенерацию (M2), добавить стат `ENERGY_REGEN` и читать его
+  Только когда утверждённые карточки начнут менять регенерацию (M2.4+), добавить стат `ENERGY_REGEN` и читать его
   в `regen_energy()`. Найдено при ревью плана M1a шага 7.
 - **Цена конвейера контрактов.** В `regress.gd` полный конвейер (HitEventQueue → AttackContext
   → EffectHost → DamagePayloadBuffer → StatBlock) стоит ≈ +271 мкс логического тика на 40
   попаданий (≈ 6.8 мкс на попадание; 332 → 603 мкс). Профилировать на сцене-бенчмарке M3;
   кандидаты на пакетные методы — `HitEventQueue.prepare()` с сортировкой и обход эффектов
   `EffectHost`. Найдено в M1a шаге 8.
+
+## Prerequisites следующих пакетов M2
+
+M2.1 ограничен physical foundation. До EffectRunner нужны fixed work quota,
+continuation/trigger ordering и close/release ownership; wall-clock остаётся
+измерением, не источником детерминированных решений. До элементов/статусов/критов
+нужны утверждённые numerical/stacking/RNG правила; до content — точные десять карточек
+и их баланс. Эти зависимые решения не подменяются числами в foundation.
+Последовательность и критерии — [план M2](../m2-plan.md).
 
 ## P3: точность int cap высоты падения
 

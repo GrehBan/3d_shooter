@@ -247,7 +247,8 @@ func _finish() -> void:
 	_done = true
 	for index: int in _baseline.size():
 		result.counters[index] = _counter(index) - _baseline[index]
-	result.configuration_errors = _batch.configuration_errors + _visuals.configuration_errors + _frame_overflows
+	result.configuration_errors = _batch.configuration_errors + _visuals.configuration_errors + _frame_overflows \
+			+ _resolver.damage_configuration_errors()
 	result.dropped = _mobility.landings.dropped_count() + _visuals.dropped_count
 	result.refusals = _resolver.contexts.capacity_refusals + _resolver.contexts.hit_set_overflows \
 			+ _resolver.contexts.budget_refusals + _resolver.contexts.depth_refusals

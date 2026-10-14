@@ -1,6 +1,6 @@
 class_name ShotResolver
 extends RefCounted
-## Minimal M1 Apply/PostHit. Local signals expose the contract without an M2 engine.
+## Sequential physical damage and local PostHit signals; caller owns attack trees.
 
 signal on_fire(source: int, epoch: int, sequence: int, root: int)
 signal on_hit(source: int, target: int, epoch: int, sequence: int, trace: int, child: int, hp_damage: int)
@@ -8,6 +8,7 @@ signal on_kill(source: int, target: int, epoch: int, sequence: int, trace: int)
 signal on_attack_resolved(source: int, epoch: int, sequence: int, root: int)
 
 var contexts: AttackContextPool
+var damage_pipeline: DamagePipeline
 var resolved_shots: int = 0
 var registered_hits: int = 0
 var kills: int = 0
@@ -15,6 +16,7 @@ var no_op_traces: int = 0
 var logic_steps: int = 0
 var _stats: StatBlock
 var _batch: ShotBatch
+var _payloads: DamagePayloadBuffer
 var _last_tick: int = -1
 var _root: PackedInt64Array = PackedInt64Array()
 var _source: PackedInt64Array = PackedInt64Array()
@@ -27,6 +29,8 @@ var _owned_root: PackedInt64Array = PackedInt64Array()
 func _init(stats: StatBlock, batch: ShotBatch, capacity: int) -> void:
 	_stats = stats
 	_batch = batch
+	damage_pipeline = DamagePipeline.new(stats)
+	_payloads = DamagePayloadBuffer.new(1)
 	contexts = AttackContextPool.new(capacity)
 	_root.resize(capacity)
 	_root.fill(AttackContextPool.INVALID_HANDLE)
@@ -74,15 +78,29 @@ func _resolve(shot: int) -> void:
 			continue
 		if contexts.try_register_hit(child, target):
 			var before: int = _stats.get_stat(target, StatBlock.Stat.HP)
-			var damage: int = DamageApply.apply(_stats, target, _batch.damage_at(shot))
+			var payload: int = _payloads.push(source, target, _batch.damage_at(shot), DamagePayload.Element.NONE,
+					0, 0, child)
+			if payload == DamagePayloadBuffer.INVALID_SLOT:
+				close_context(child)
+				continue
+			var damage: int = damage_pipeline.resolve_front(_payloads)
+			if damage == DamagePipeline.INVALID_RESULT:
+				_payloads.pop_front()
+				close_context(child)
+				continue
 			var killed: bool = before > 0 and _stats.get_stat(target, StatBlock.Stat.HP) == 0
 			registered_hits += 1
 			on_hit.emit(source, target, _epoch[slot], _sequence[slot], trace, child, damage)
 			if killed:
 				kills += 1
 				on_kill.emit(source, target, _epoch[slot], _sequence[slot], trace)
+			_payloads.pop_front()
 		close_context(child)
 	close_context(root)
+
+
+func damage_configuration_errors() -> int:
+	return _payloads.dropped_count() + damage_pipeline.configuration_errors
 
 
 ## Deferred owners must close through this boundary so final completion retains metadata.
@@ -132,6 +150,9 @@ func reset_room() -> bool:
 	_owned_root.fill(AttackContextPool.INVALID_HANDLE)
 	_root.fill(AttackContextPool.INVALID_HANDLE)
 	contexts.reset_counters()
+	_payloads.clear()
+	_payloads.reset_dropped_count()
+	damage_pipeline.reset_counters()
 	_last_tick = -1
 	resolved_shots = 0
 	registered_hits = 0

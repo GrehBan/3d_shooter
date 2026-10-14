@@ -4,6 +4,92 @@
 открытые долги — в [follow-ups.md](follow-ups.md), гарантии API — в [contracts.md](../contracts.md).
 Локальная проверка и независимое ревью не означают публикацию, прохождение GitHub CI или слияние.
 
+## 2026-10-14 — начало M2.1 после слияния M1
+
+По явному поручению пользователя PR #13 squash-слит после required Linux/Windows
+SUCCESS точного final HEAD `062534d86352c45d4ff49d11f073d46cdbd8f752`,
+[run38595049442](https://github.com/GrehBan/3d_shooter/actions/runs/38595049442).
+Новая база master `962741d9fabc3aa599255126a03b5c2de6b54227`.
+Это обновляет прежний статус «PR открыт, merge не разрешён» ниже: он исторический.
+Принятые M1 доказательства: independent exact-diff architecture/QA PASS, Windows
+all 67 scripts/255 tests, synthetic3032385286 и активные joint gates; native
+Forward+/D3D12 RTX4050, mean143.846FPS, frame p95/p99/worst7776/9449/11146us,
+logic max319us, monitor deltas0; qualitative human movement/mouse PASS.
+Эти измерения не доказывают M3 40 enemies/effect storms, каждую конфигурацию GPU
+или Steam Deck-class reference. Точные исходные условия сохранены ниже.
+
+Пользователь затем поручил «работаем»: начат [план M2](../m2-plan.md), только
+локальная разработка без M2 publication/PR/merge. Worktree
+`C:/Users/maxim/.codex/worktrees/pr-stack-integration/3d_shooter`, ветка
+`codex/m2-combat-plan`, база выше. Lead developer единственный writer runtime/unit/
+MD; отдельный QA/SDET пишет Python oracle/golden, независимый архитектор read-only.
+
+До кода согласован узкий physical DamagePipeline: front-only BASE/NONE/flags0,
+amount >=0, opaque int64 metadata, no pop/emit/context ownership, atomic unsupported
+rejection с per-attempt counter/one-time diagnostic и явным reset; stale/dead
+допустимая цель — POST_HIT/no-write0. Ранние фазы identity; DamageApply остаётся
+единственным shield/armor authority на Apply. ShotResolver использует cold scratch1
+и сохраняет per-pellet OnHit/OnKill/close порядок, kill snapshot и dead guard.
+Неожиданный отказ закрывает child без negative HP event; новый diagnostic sum
+включён в existing real benchmark configuration gate. MobilityRuntime, synthetic
+fixture/reference, weapon balance, элементы, статусы и карточки не менялись.
+
+Уточнено противоречие roadmap «бюджет времени» с запретом wall-clock в deterministic
+decisions (манифест I.3): EffectRunner M2.2 будет принимать решения по фиксированной
+integer work quota, а время измеряется отдельно; значения quota/continuation ещё
+требуют контракта. 2ms generation/navigation slice не назначен боевому runner.
+Рост ENERGY_REGEN не входит в foundation: он нужен только при regen-modifying cards.
+
+Focused Windows: import exit0; DamagePipeline unit9 + existing ShotResolver7 + new
+golden1 — 17/17 PASS, zero errors/failures/orphans. Active 20k resolution unit test
+и suppressed malformed loop дают object/node/resource/static-memory delta0
+(suppressed test измеряет object/static-memory). Новый fault injection закрывает
+scratch overflow/correct completion/no hit/reset. Независимый Python oracle:
+hash2671520872, resolved28, positive_hp_results14; direct unlimited-int floor,
+не копия quotient/remainder DamageApply. Logs: `ci-logs/m2-pipeline/focused.log`.
+Final Windows `ci/run_checks.sh all` exit0, Godot4.7.2-stable: import PASS,
+scripts70/0,265/265tests35suites в4m56.320s; synthetic3032385286 PASS,
+object/node/resource/orphan/static-memory deltas0, dropped/config0,
+logic avg655.8us/max1031us (информационно). Headless real fixture: shots120,
+traces/hits960,resolved120,damage5,760,000=signal damage; dash30,slide15,double15,
+landing15,groundjump15, visual muzzle120/impact960/mark960,expiry/reuse2040,
+occupancy delta0; logic1800samples avg19.8us/max263us. Все monitor deltas0,
+diagnostics configuration/dropped/refusals/stale/noops/kills/pending/landings/contexts0.
+Injected leak обнаружен (+1object/+1orphan), ожидаемый exit1 и cleanup delta0;
+unknown-option setup refusal ожидаемый exit2. Все gates PASS.
+
+Native same-fixture graph gate exit0: Windows Forward+/D3D12,
+NVIDIA GeForce RTX4050 Laptop GPU, vsync1; requested/capture1280x720,
+reported viewport1152x648. 300warmup+3600measure, wall60007.4ms;
+8630frame samples, mean143.841FPS, p95/p99/worst8508/9926/10927us,
+slow fraction0; 1800logic samples avg41.7us/max356us. Те же active action/visual
+counters, damage5,760,000, distance557.12m/peakX35.79/look1.44; все monitor deltas
+и diagnostics0, включая новую сумму pipeline errors. Screenshot визуально проверен:
+target, gun, crosshair и retained hit marks видимы. Логи и PNG:
+`ci-logs/m2-pipeline/all/` (`native-errors.log` пуст). Headless FPS не используется
+как graphical evidence. Ручной OS input/smoothness check не повторялся; ранее
+принятый M1 human check не выдаётся за новую ручную проверку M2.
+
+Предревью checkpoint: итоговый exact full-diff review с документацией ещё ожидался;
+исходный early runtime review не являлся final integrated docs review. После runtime freeze
+изменялись только MD с доказательствами, Godot повторно ради MD не запускался.
+Markdown structure/relative file links/новые anchors и `git diff --check` PASS.
+Изменения не staged, не committed, не published, Linux/GitHub CI M2 не выполнялся.
+
+### Локальная приёмка M2.1 — 2026-10-14
+
+Независимый архитектор проверил точный итоговый diff всех18 файлов относительно
+базы `962741d9fabc3aa599255126a03b5c2de6b54227`, включая runtime, unit/golden,
+Python oracle и девять MD; вердикт — «блокеров не найдено». Reviewed file-manifest
+SHA256 `a2cef8bc498ec42522139053c7a4575ef9c1f770c43675f4d45f6a6918e40f44`.
+Координатор принял M2.1 локально. Следующий шаг — договор M2.2 о квоте работы,
+continuation, порядке триггеров и ownership до зависимой реализации.
+
+Эта closing запись и актуализация статуса плана — только документация: runtime,
+tests, assets, config и CI совпадают с проверенной версией, Godot не повторялся.
+Изменения не staged, не committed и не published; M2 PR, Linux/GitHub CI и merge
+отсутствуют. Публикация/слияние M2 не входят в поручение пользователя.
+
 ## 2026-10-13 — интеграция PR #12 после слияния #11
 
 Координатор подтвердил required Linux/Windows SUCCESS HEAD #11

@@ -1,9 +1,12 @@
 # Дизайн-документ (GDD) и Архитектурный манифест, версия 0.2
 
-Актуальный статус2026-10-14: PR #8–#12 слиты; `master` — `cc63554`.
-Final integration #12 `4d09` прошёл required Linux/Windows CI run38467557300.
-Пакет5 реализован в `codex/m1-real-pipeline`, Windows all/native/manual PASS.
-Итоговое independent review/приёмка M1 впереди.
+Актуальный статус2026-10-14: PR #8–#13 слиты; `master` — `962741d`.
+Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
+Пакет5 и текущая M1 fixture приняты локально после independent review,
+Windows all/native measurements и qualitative manual movement/mouse PASS.
+M2.1 физический конвейер реализован локально, Windows all/native PASS;
+точная версия и стадия независимой приёмки — в журнале.
+Дальнейшие пакеты и ограничения — [план M2](docs/m2-plan.md).
 Прежние draft/pending статусы ниже — история; [факты интеграции](docs/notes/pr-integration-log.md).
 
 **Проект:** Rogue Calibre
@@ -147,7 +150,13 @@ Prerequisite checkpoint14Oct: для совместной проверки M1 д
 Native same-fixture graphical gate пройден: Windows Forward+/D3D12, RTX4050,
 mean143.846FPS, p99 frame9449us и max logic319us; это не workload M3.
 Условия, измеренные размеры viewport/PNG и итоговый independent review пакета5
-фиксируются в [журнале](docs/notes/work-log.md); M2 ещё не начинается.
+зафиксированы в [журнале](docs/notes/work-log.md); M1 принята, PR #13 слит.
+Пользователь поручил начать M2. Первый пакет даёт чистый physical DamagePipeline:
+BASE/NONE/flags0, precomputed raw amount, shield/armor через существующий DamageApply,
+терминальный POST_HIT; локальные сигналы ShotResolver и порядок дробин сохранены.
+Это foundation, а не реализация элементов, статусов, критов или карточек. Точный
+roster десяти карточек, числа длительностей/stacking/реакций и crit/RNG ещё требуют
+отдельного договора до зависимых пакетов; значения здесь не назначаются.
 
 Архитектура карточки — это строгая модель: **Имя, Арт, Редкость, Теги, Уровень (1-3), Таргет-слот** и **Пайплайн эффектов**.
 
@@ -234,6 +243,6 @@ tests/       gdUnit4: unit/ (модульные), golden/ (детерминиз�
 * Высокочастотные боевые вычисления инкапсулированы внутри `EffectHost` и разрешаются через `EffectRunner` (с контролем глубины стека).
 
 
-3. **Pipeline архитектура (Урон):** `DamagePayload` — это мутируемый объект, проходящий через строгие фазы: `Base → Add → Multiply → Element → Crit → Mitigation → Apply → PostHit`.
+3. **Pipeline архитектура (Урон):** `DamagePayload` — мутируемая запись в SoA-буфере, проходящая строгие фазы: `Base → Add → Multiply → Element → Crit → Mitigation → Apply → PostHit`. В foundation M2.1 первые фазы identity; единственный shield/armor commit выполняется на Apply, unsupported данные атомарно отвергаются. Полный договор — [контракты](docs/contracts.md#damagepipeline-combatdamagepipelinegd-m21).
 4. **Унифицированный StatBlock:** Игрок, враги и ломаемое окружение используют единую систему компонентов статусов и характеристик.
 5. **Zero-Trust State:** Экземпляры сущностей инициализируются на основе read-only данных из `Registry`. Любые мутации в рамках забега живут в рантайм-инстансах и сериализуются через стандартизированные методы `get_state() / set_state()`.

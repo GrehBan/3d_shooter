@@ -1,9 +1,12 @@
 # План разработки
 
-Актуальный статус2026-10-14: PR #8–#12 слиты; `master` — `cc63554`.
-Final integration #12 `4d09` прошёл required Linux/Windows CI run38467557300.
-Пакет5 реализован в `codex/m1-real-pipeline`, Windows all/native/manual PASS.
-Итоговое independent review/приёмка M1 впереди.
+Актуальный статус2026-10-14: PR #8–#13 слиты; `master` — `962741d`.
+Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
+Пакет5 и текущая M1 fixture приняты локально: independent review,
+Windows all/native measurements и qualitative manual movement/mouse PASS.
+По поручению пользователя начат [план M2](docs/m2-plan.md); M2.1 реализован локально,
+Windows all/native PASS; стадия независимой приёмки — в журнале.
+Публикация/PR/merge M2 не разрешены.
 Прежние draft/pending статусы ниже — история; [факты интеграции](docs/notes/pr-integration-log.md).
 
 Сроков нет, поэтому вехи заданы не датами, а строгими техническими и продуктовыми критериями готовности. **Работа начинается с нуля.** Разработка ведется с применением «четырехтактного цикла» (Разработка → Валидация → Самокритика → Коммит). Технический долг приравнивается к инциденту и блокирует переход к следующей вехе. Любая фича, нарушающая лимиты производительности (Scope Creep), безжалостно отклоняется Product Owner-ом.
@@ -261,12 +264,18 @@ negative orphan probe. Synthetic3032385286 сохранён. Пользоват�
 255/255tests33suites, synthetic3032385286 и jointpositive/leak/setupPASS).
 Native same-fixture PASS: Windows Forward+/D3D12 RTX4050, mean143.846FPS,
 p95/p99/worst7776/9449/11146us, slow fraction0, logic max319us и все monitor deltas0.
-Independent exact-diff review ещё ожидается; PR разрешён, публикация и required CI
-будущего HEAD впереди. M1 не объявлена завершённой, M2 не начинается.
+Эти M1 доказательства получили independent exact-diff PASS; пакет5 принят локально,
+PR #13 слит в `962741d` после required Linux/Windows SUCCESS точного HEAD `062534d`.
+Это закрывает текущие prerequisites M1 с описанными аппаратными/M3 ограничениями.
+M2.1 добавляет только физическую границу фаз и интеграцию в ShotResolver; полный
+M2, элементы/статусы/карточки ещё не реализованы. Порядок, владельцы, зависимости и
+локальные gates — [план M2](docs/m2-plan.md).
 Методика — [контракт§9](docs/contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5).
 
 * Реализация `DamagePipeline`, элементов и статусов на основе парадигмы Data-Oriented Design (плотные массивы, битовая упаковка состояний в `StatBlock`).
-* Система `EffectRunner` с **жестким бюджетом времени** (Time-Slicing).
+* Система `EffectRunner` с фиксированной целочисленной квотой работы и отдельно
+  измеряемым CPU budget. Wall-clock не определяет детерминированный результат;
+  quota/continuation/ownership контракт принимается до реализации M2.2.
 * Создание 10 карточек (включая цепочку «Громового дробовика»).
 * Дебаг-консоль для логов цепочек событий.
 

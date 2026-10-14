@@ -1,9 +1,11 @@
 # План M1: движение, стрельба и Zero-Allocation
 
-Актуальный статус 2026-10-14: PR #8–#12 слиты; база `master` — `cc63554`.
-Последний integration HEAD #12 `4d09` прошёл required Linux/Windows CI
-run38467557300. Пакет5 реализован в `codex/m1-real-pipeline`, Windows all/native/manual PASS.
-Прежние draft/pending статусы ниже — история; итоговое independent review/приёмка M1 впереди.
+Актуальный статус 2026-10-14: PR #8–#13 слиты; база `master` — `962741d`.
+Точный HEAD #13 `062534d` прошёл required Linux/Windows CI run38595049442.
+Все пять пакетов M1 и текущая fixture приняты локально: independent review,
+Windows all, native measurements и качественная ручная проверка movement/mouse PASS.
+Аппаратные/M3 ограничения сохраняются. Начат отдельный [план M2](m2-plan.md).
+Прежние draft/pending статусы ниже — история соответствующих checkpoints.
 Точные факты — [журнал интеграции](notes/pr-integration-log.md).
 
 Дата плана: 2026-10-11. Текущий статус на 2026-10-13: пакет 1 принят и закоммичен локально;

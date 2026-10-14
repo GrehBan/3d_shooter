@@ -1,10 +1,12 @@
-# Контракты ядра боя (M1a)
+# Контракты ядра боя
 
-Актуальный статус 2026-10-14: PR #8–#12 слиты, база `master` — `cc63554`.
-Последний integration HEAD #12 `4d09` прошёл required Linux/Windows CI
-run38467557300; runtime пакета4 совпадает с принятой исходной версией.
-Пакет5 реализован в `codex/m1-real-pipeline`; final Windows all и graphical gates PASS,
-ручная проверка movement/mouse PASS. Итоговое independent review/приёмка M1 впереди.
+Актуальный статус 2026-10-14: PR #8–#13 слиты, база `master` — `962741d`.
+Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
+Пакет5 и текущая M1 fixture приняты локально после independent review,
+Windows all, native measurements и качественной ручной проверки movement/mouse.
+M2.1 физический DamagePipeline реализован локально в `codex/m2-combat-plan`;
+Windows all/native PASS, стадия независимой приёмки и точная версия — в журнале.
+Полный M2 не реализован.
 Прежние draft/pending статусы ниже сохранены как история исходных версий.
 Точные факты — [журнал интеграции PR](notes/pr-integration-log.md).
 
@@ -22,8 +24,8 @@ Closing docs пакета3 получили отдельный независи�
 integration HEAD; детали актуального слияния приведены в журнале интеграции.
 §8 описывает локально принятый пакет4: final Windows all и native rendering smoke
 пройдены; независимые full-diff архитектурное и QA-ревью дали PASS для source
-`ff26428d51c024ad693c916982738d96fba4096d`. Пакет5 и полный M2
-не реализованы; вся M1 не завершена.
+`ff26428d51c024ad693c916982738d96fba4096d`. Исторические статусы пакетов ниже
+сохраняют исходный контекст; текущая M1 принята, полный M2 ещё впереди.
 
 ## 1. Общие правила
 
@@ -104,6 +106,10 @@ integration HEAD; детали актуального слияния приве�
   `capacity_refusals`, `EffectHost.capacity_refusals`, `LandingEventQueue.dropped_count()`;
 * корректность и детерминизм гарантированы только при нулевых счётчиках; `regress.gd` и
   `CombatContractsGoldenTest` падают при ненулевых.
+* `DamagePipeline.configuration_errors` считает каждый отказ malformed/unsupported
+  записи; сообщение однократно до `reset_counters()`. ShotResolver суммирует его
+  со scratch `dropped_count()` в `damage_configuration_errors()`; real benchmark
+  включает эту сумму в gate configuration errors. Legacy synthetic path не меняется.
 * Для ShotBatch (§7) отказ атомарен для всего запроса ДО принятия выстрела;
   диагностическое сообщение однократно до явного reset, счётчик растёт на каждый отказ.
   Ненулевые ошибки транспорта/пулов блокируют приёмку пакета.
@@ -164,6 +170,36 @@ integration HEAD; детали актуального слияния приве�
   её голову, порядок FIFO и поля записей.
 * **Аксессоры по слоту не проверяют его валидность**: чтение после `pop_front()` вернёт старые
   данные без ошибки. Обходить только через `front_slot()` или `slot_at(i)` для `i < count()`.
+
+### DamagePipeline (`combat/DamagePipeline.gd`, M2.1)
+
+* Pure `RefCounted`, `new(stats: StatBlock)`. `resolve_front(payloads) -> int`
+  разрешает только FIFO front без pop/emit/context ownership; ≥0 — actual HP damage,
+  `INVALID_RESULT = -1` — пустая очередь либо отказ. Следующую запись не трогает.
+* Принимает только `BASE`, physical `Element.NONE`, `flags = 0`, `amount >= 0`.
+  `source`, `attack_context`, `tags` — opaque int64 metadata, включая недействительные
+  handle; pipeline не проверяет source/context liveness и сохраняет поля/raw amount.
+* Проверка всех поддерживаемых полей предшествует любым изменениям payload/stats,
+  даже если target stale. Unsupported element/flags, negative amount и non-BASE
+  возвращают -1 атомарно; `configuration_errors` растёт каждый раз, сообщение
+  `INVALID_PAYLOAD_ERROR` однократно до явного `reset_counters()`.
+  Пустая очередь не диагностируется. Reset не меняет очередь/stats.
+* Допустимый stale/dead (`HP <= 0`) target завершает запись в `POST_HIT`, возвращает
+  0 без HP/shield writes и ошибок конфигурации; текущий occupant stale slot не меняется.
+* Base/Add/Multiply/Element/Crit — identity над precomputed physical raw amount.
+  Mitigation не мутирует stats; `DamageApply.apply()` остаётся единственным shield/
+  armor authority и вызывается один раз на Apply. Терминальная фаза `POST_HIT`.
+  Нулевой amount сохраняет существующую zero-damage политику `DamageApply`.
+  Это синхронная граница фаз без hooks, RNG, modifiers, статусов и полного M2 engine.
+* ShotResolver cold-выделяет pipeline и scratch ёмкости 1, сохраняет full-target/HP
+  guard до child/budget и выполняет каждую дробину целиком: push → resolve → capture
+  kill → OnHit → OnKill → pop → close child. Kill snapshot предшествует callbacks.
+  Root/retained-descendant ownership сохраняется; нет нового source guard.
+  При неожиданном scratch push/resolve отказе отрицательный damage не испускается,
+  child закрывается; `damage_configuration_errors()` суммирует оба diagnostics.
+  Quiescent `reset_room()` очищает scratch и dropped counter, сбрасывает pipeline
+  counters. Реальный benchmark проверяет сумму; MobilityRuntime и synthetic остаются
+  на прежнем пути. Дальнейшие фазы/квоты — [план M2](m2-plan.md).
 
 ### Damageable (`combat/Damageable.gd`)
 
