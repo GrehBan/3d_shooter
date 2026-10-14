@@ -212,8 +212,8 @@ Godot `4.7.2.stable.mono.official.ed1daf0bf`: импорт успешен, пр�
 База исходных веток — `36b171d9699064dc3ef40552709310272e3492e0`:
 `codex/statblock-state-types`, `codex/golden-reference-models`, `codex/agent-workflow`.
 Версия 13 исходных изменённых файлов зафиксирована в локальном
-[SHA256-манифесте](../../ci-logs/integration/file-hashes.sha256).
-[Логи интеграции](../../ci-logs/integration/) (`import.log`, `scripts.log`, `tests.log`,
+SHA256-манифесте `ci-logs/integration/file-hashes.sha256`.
+Логи интеграции `ci-logs/integration/` (`import.log`, `scripts.log`, `tests.log`,
 `regress.log`, `references.log`) — локальные вспомогательные материалы; сырые логи
 игнорируются Git и могут отсутствовать в другом checkout. Краткие результаты приведены выше.
 
@@ -1306,3 +1306,102 @@ OS input/мыши, визуальной плавности и60FPS не подт
 реальный интеграционный benchmark/общая приёмка пакета5 и real-combat CPU≤7ms с40enemies
 и effect storms по M3 остаются впереди. Native rendering PASS и headless-результаты
 не закрывают эти ограничения; M2/cards/content не расширены.
+
+## Пакет5 M1: реальный конвейер — 2026-10-14
+
+Поручение «работаем дальше пакет5», позднее «работаем пакет5 реализуем и делаем pr».
+Единый writer назначен в isolated `codex/m1-real-pipeline`, база fresh master
+`cc63554f9bf63d46737554fd9ecb430d7b02447e`. PR #8–#12 уже слиты; final #12 integration
+HEAD `4d09f5943ca08a4aedde715066ebebca5d644255` проверен required Linux/Windows
+SUCCESS run38467557300. Основной dirty
+checkout и пользовательский локальный тир не затрагиваются. Публикация нового PR
+разрешена после реализации, проверок и independent exact-diff review; merge не назначен.
+
+Root утвердил минимальный договор: actual Sandbox instance, driver−100 и sampler1200
+вокруг production0/5/10/1000, проверяемые actions/damage/completions/mobility/VFX,
+300warmup+3600physics measure и намеренный orphan на том же workload.
+Fixture cold заменяет только свои floor/center geometry, скрывает боковые/мешающие
+colliders; shared resources, баланс и production scripts/config остаются неизменными.
+TargetHP20_000_000 задаётся один раз холодно, hot HP/clock/position reset отсутствует.
+Synthetic `regress.gd`/`SyntheticCombatLoad.gd` и checksum3032385286 не меняются.
+Методика, границы и команды — [контракт§9](../contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5).
+
+Первый focused result6/6 PASS без errors/failures/orphans. Unified headless positive0:
+120shots/960rays/960hits/120resolved, HP loss и signal damage5_760_000raw;
+30dash/15slide/15double/15ground jumps/15landings,557.12м, peak|x|35.79м, yaw path1.44rad;
+visual120/960/960, expiry/reuse2040, occupancydelta0,1800logic samples avg19.5/max291us.
+Object/node/resource/orphan/static delta0, все diagnostics/pending/context0.
+Focused CI `real_pipeline` PASS: positive0, negative full window exit1 with
+objects+1/orphans+1/static+768B, одна причина отказа и cleanup objects0/orphans0;
+unknown option setup exit2. Логи `ci-logs/real-pipeline-focused/`.
+Во время early QA исправлена frame metric: actual Time intervals вместо engine delta,
+graphical synthetic pacing options отвергаются, final batch complete+reserved counts
+учитываются. После этих исправлений начат final all: importPASS, scripts67/0;
+результат полного прогона пока ожидается. Source/runtime после старта all не менялся.
+
+Ручная качественная проверка14Oct: на вопрос root о плавности movement/mouse без рывков
+и пропущенного ввода пользователь ответил «Да, проблем не заметил». Это локальный тир,
+повторно использующий production controller/weapon/pools принятой базы, не новые runtime
+данного пакета; не numerical60FPS и не M3 performance reference. Native real-time FPS
+на той же joint fixture, final all и independent review ещё ожидаются. M1 пока не
+объявлена завершённой, M2 не начинается. Root публикует PR только после итоговой
+проверки; CI будущего HEAD не подменяется проверкой предка.
+
+### Финальный Windows all пакета5
+
+`GODOT=Godot_v4.7.2-stable_mono_win64_console.exe LOG_DIR=ci-logs/real-pipeline-final
+bash ci/run_checks.sh all` завершился exit0. ImportPASS, scripts67/0; gdUnit4
+255/255tests в33suites,0errors/failures/flaky/skipped/orphans,4m52.758s, report_2.
+Прежние active movement/mobility/gun/pool и goldens сохранились. Synthetic3032385286
+PASS, all monitor deltas0, dropped/config0,1800samples avg665.2/max1064us (только вывод).
+
+Joint positive PASS: all five monitor deltas0,120shots/960traces/960hits/120completion,
+damage5_760_000raw=signal damage,30dash/15slide/15double/15ground/15landing,
+557.12м/peakx35.79/yaw1.44; visual120/960/960,expiry/reuse2040,occupancydelta0.
+1800GameLoop whole-emission samples avg18.3/max234us≤7000; all cumulative diagnostics,
+noops/kills/complete+reservedpending/landings/contexts0. Negative full workload exit1:
+object+1/orphan+1/static+768B, одна allocation failure, cleanup0/0; unknown option exit2.
+Runner проверил эти точные markers, скриптовых ошибок нет. Логи всех шагов в
+`ci-logs/real-pipeline-final/`; hot source после старта all не менялся.
+
+Markdown structure, новые relative anchors и `git diff --check` проверены. Две старые
+ссылки журнала на ignored `ci-logs/integration/` заменены plain code paths с сохранением
+исторического текста: этих локальных материалов нет в новом checkout, они не Git assets.
+Графическое real-time измерение и независимое итоговое review ещё ожидаются; package5
+не опубликован, CI его будущего HEAD и merge отсутствуют. Нового runtime прогона ради
+записи результатов не требуется; M1 всё ещё ожидает финальной локальной приёмки.
+
+### Графическая проверка пакета5 и снимок перед ревью
+
+Координатор после завершения all запустил ту же benchmark scene в обычном графическом
+режиме без headless/fixed-fps/time-scale/max-fps. Native Windows Godot4.7.2-stable mono,
+Forward+, D3D12, NVIDIA GeForce RTX4050LaptopGPU, vsync1; CLI request1280×720,
+`get_visible_rect()` в setup log сообщает viewport rect1152×648, сохранённый PNG имеет
+1280×720pixels. Эти два размера записаны раздельно: reported logical viewport не
+подменяет pixel размер capture. Пользовательский игровой процесс не закрывался.
+
+После300warmup measured3600physics ticks заняли60009.8ms реального времени.
+8630actual frame intervals: mean143.846FPS (gate≥60), p957776us, p999449us,
+worst11146us, slow fraction(>16667us)0. 1800whole GameLoop emission samples avg40.5us,
+max319us≤7000. All object/node/resource/orphan/static deltas0; joint counters совпали
+с headless:120/960/960/120, damage5_760_000raw=signal,30/15/15abilities,
+15ground/15landings,557.12м/peak35.79/yaw1.44; visual120/960/960,expiry/reuse2040,
+occupancy0, all diagnostics/pending/context0. Exit0, REAL_PIPELINE RESULT:PASS.
+
+Логи `ci-logs/real-pipeline-final/native.log` и empty `native-errors.log`, screenshot
+`native.png` записан ПОСЛЕ monitor snapshot/pause. Координатор визуально проверил
+nonblank target/gun/crosshair/hit marks. PNG остаётся ignored evidence, production
+visual content не менялось. Ранее подтверждённая пользователем качественная
+movement/mouse проверка на локальном тире дополняет, а не заменяет numericalFPS.
+
+Инструментальные и ручные gates текущего M1 пройдены на этой Windows машине.
+Это не Steam Deck-class reference, не M3 workload40enemies/effect storms и не
+универсальная гарантия каждого будущего кадра≥60FPS. Damaging fall/cancel coverage
+остаётся в прежних Jolt suites. Итоговые17изменённых файлов (9runtime/test/CI,
+8MD), включая UID, передаются independent architecture/QA review от базы `cc63554`.
+Production scripts/config/resources и synthetic reference неизменны; проверенный
+benchmark SHA256 `33c26aca1a76badcd29279e680b27899dbc7e92574325a7f8d2fa497c188925c`.
+Этот checkpoint описывает состояние ДО финального review: локальная приёмка M1
+условна до его PASS; commit/publication/required CI будущего HEAD/merge не выполнены.
+Пользователь разрешил PR, merge нового пакета не назначен. После этой документации
+новые runtime прогоны не требуются: проверенные runtime bytes не изменились.

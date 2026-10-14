@@ -76,3 +76,14 @@ HEAD exactly. Only current-status clarification and integration metadata are new
 Godot was not rerun; further integration review is explicitly waived, not passed.
 PR #12 awaits publication and fresh required CI of the updated HEAD; it is not
 merged. Package 4 is locally accepted, but package 5 and overall M1 remain open.
+
+## PR 12: Merged, 2026-10-14 Status
+
+The coordinator published final integration HEAD `4d09f5943ca08a4aedde715066ebebca5d644255`; both required Linux/Windows
+checks succeeded ([run38467557300](https://github.com/GrehBan/3d_shooter/actions/runs/38467557300)).
+PR #12 was squash-merged to master `cc63554f9bf63d46737554fd9ecb430d7b02447e`.
+The accepted package4 runtime remained unchanged; the earlier pending entry above
+describes the state before publication. All PRs #8–#12 are merged.
+Package5 uses this fresh master in isolated `codex/m1-real-pipeline`. Its new checks,
+independent review and publication are separate evidence; prior CI does not validate
+this new diff. The user has authorized a package5 PR, not its merge.

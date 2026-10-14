@@ -1,10 +1,10 @@
 # Дизайн-документ (GDD) и Архитектурный манифест, версия 0.2
 
-Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
-опубликован в #12 (original `6a81bdc`, required CI SUCCESS run38464462181).
-Обновление #12 ожидает публикации/fresh required CI; новые reviews отменены
-пользователем. Ниже прежние draft/pending статусы — история исходных версий.
-Пакет5/общая M1 не завершены; [факты интеграции](docs/notes/pr-integration-log.md).
+Актуальный статус2026-10-14: PR #8–#12 слиты; `master` — `cc63554`.
+Final integration #12 `4d09` прошёл required Linux/Windows CI run38467557300.
+Пакет5 реализован в `codex/m1-real-pipeline`, Windows all/native/manual PASS.
+Итоговое independent review/приёмка M1 впереди.
+Прежние draft/pending статусы ниже — история; [факты интеграции](docs/notes/pr-integration-log.md).
 
 **Проект:** Rogue Calibre
 **Движок:** Godot 4.7
@@ -138,6 +138,16 @@ PR/CI/merge этой версии не выполнены; новая docs-only 
 ---
 
 ## 5. Система карточек и эффектов (Effect Engine)
+
+Prerequisite checkpoint14Oct: для совместной проверки M1 добавлена отдельная
+активная Sandbox fixture с production movement/mobility/hitscan/pools. Размер/HP
+её мишени служат измерению, не новому игровому балансу; ресурсы shotgun/movement
+не меняются. Ручную плавность движения и мыши пользователь подтвердил на локальном
+тире. Final Windows all прошёл (67scripts,255/255tests, synthetic и joint gates PASS).
+Native same-fixture graphical gate пройден: Windows Forward+/D3D12, RTX4050,
+mean143.846FPS, p99 frame9449us и max logic319us; это не workload M3.
+Условия, измеренные размеры viewport/PNG и итоговый independent review пакета5
+фиксируются в [журнале](docs/notes/work-log.md); M2 ещё не начинается.
 
 Архитектура карточки — это строгая модель: **Имя, Арт, Редкость, Теги, Уровень (1-3), Таргет-слот** и **Пайплайн эффектов**.
 

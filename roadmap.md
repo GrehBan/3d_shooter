@@ -1,10 +1,10 @@
 # План разработки
 
-Актуальная интеграция 2026-10-13: PR #8–#11 слиты; пакет4 принят локально и
-опубликован в #12 (original `6a81bdc`, required CI SUCCESS run38464462181).
-Обновление #12 ожидает публикации/fresh required CI; новые reviews отменены
-пользователем. Ниже прежние draft/pending статусы — история исходных версий.
-Пакет5/общая M1 не завершены; [факты интеграции](docs/notes/pr-integration-log.md).
+Актуальный статус2026-10-14: PR #8–#12 слиты; `master` — `cc63554`.
+Final integration #12 `4d09` прошёл required Linux/Windows CI run38467557300.
+Пакет5 реализован в `codex/m1-real-pipeline`, Windows all/native/manual PASS.
+Итоговое independent review/приёмка M1 впереди.
+Прежние draft/pending статусы ниже — история; [факты интеграции](docs/notes/pr-integration-log.md).
 
 Сроков нет, поэтому вехи заданы не датами, а строгими техническими и продуктовыми критериями готовности. **Работа начинается с нуля.** Разработка ведется с применением «четырехтактного цикла» (Разработка → Валидация → Самокритика → Коммит). Технический долг приравнивается к инциденту и блокирует переход к следующей вехе. Любая фича, нарушающая лимиты производительности (Scope Creep), безжалостно отклоняется Product Owner-ом.
 
@@ -252,6 +252,18 @@ Details — [план](docs/m1-plan.md#4-пулы-используемых-vfx-�
 **Готово, когда:** Движение и стрельба ощущаются плавно. Бенчмарк `regress.gd` на тестовом полигоне фиксирует **ноль аллокаций**: дельта `OBJECT_COUNT`/`OBJECT_NODE_COUNT`/`OBJECT_RESOURCE_COUNT` равна 0 и прирост `MEMORY_STATIC` не более 1 МБ за 60 с активного геймплея.
 
 ## M2. Ядро боя, Карточек и DOD (Data-Oriented Design)
+
+Checkpoint2026-10-14 перед M2: пакет5 добавляет actual joint movement/shot/pool
+benchmark с300warmup+3600physics measure, подтверждением действий/урона и отдельной
+negative orphan probe. Synthetic3032385286 сохранён. Пользователь подтвердил
+качественную плавность movement/mouse на локальном тире с production source этой базы.
+Это не numerical60FPS или M3 budget40enemies. Final Windows all exit0 (67scripts,
+255/255tests33suites, synthetic3032385286 и jointpositive/leak/setupPASS).
+Native same-fixture PASS: Windows Forward+/D3D12 RTX4050, mean143.846FPS,
+p95/p99/worst7776/9449/11146us, slow fraction0, logic max319us и все monitor deltas0.
+Independent exact-diff review ещё ожидается; PR разрешён, публикация и required CI
+будущего HEAD впереди. M1 не объявлена завершённой, M2 не начинается.
+Методика — [контракт§9](docs/contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5).
 
 * Реализация `DamagePipeline`, элементов и статусов на основе парадигмы Data-Oriented Design (плотные массивы, битовая упаковка состояний в `StatBlock`).
 * Система `EffectRunner` с **жестким бюджетом времени** (Time-Slicing).
