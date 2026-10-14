@@ -87,3 +87,25 @@ describes the state before publication. All PRs #8–#12 are merged.
 Package5 uses this fresh master in isolated `codex/m1-real-pipeline`. Its new checks,
 independent review and publication are separate evidence; prior CI does not validate
 this new diff. The user has authorized a package5 PR, not its merge.
+
+## PR 13: Published and Locally Accepted, 2026-10-14
+
+Independent architecture and QA reviews passed the complete 17-file package5 snapshot
+against base `cc63554f9bf63d46737554fd9ecb430d7b02447e`, verifying file-manifest SHA256
+`208e98fa7c84d60c9204748386bb7b1ba020f227636fdcc1d832f1686a27f215`.
+The coordinator accepted package5 and the current M1 fixture locally after the
+Windows all, native frame/logic measurements and qualitative human movement/mouse
+check documented in [the work log](work-log.md#локальная-приёмка-и-публикация-пакета5--2026-10-14).
+Hardware and M3 workload limitations remain; M2 has not started.
+
+Source commit `df32caaf670008a059cd1c15de2e79fff8172af9` is published on
+`codex/m1-real-pipeline`; [PR #13](https://github.com/GrehBan/3d_shooter/pull/13)
+is open, ready, and targets `master`. The coordinator freshly verified SUCCESS for
+both required Linux/Windows checks on this exact source HEAD
+([run38556520650](https://github.com/GrehBan/3d_shooter/actions/runs/38556520650),
+jobs `115826933410`/`115826933053`). No merge has occurred or been authorized for this PR.
+
+This two-file documentation closure awaits its own exact review before publication.
+Runtime/config/assets/CI are unchanged and Godot was not rerun. The future closing-docs
+HEAD requires fresh required checks; source-head CI cannot validate that later HEAD.
+Earlier pre-review and unpublished checkpoints remain historical records.

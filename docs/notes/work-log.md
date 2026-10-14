@@ -1405,3 +1405,33 @@ benchmark SHA256 `33c26aca1a76badcd29279e680b27899dbc7e92574325a7f8d2fa497c18892
 условна до его PASS; commit/publication/required CI будущего HEAD/merge не выполнены.
 Пользователь разрешил PR, merge нового пакета не назначен. После этой документации
 новые runtime прогоны не требуются: проверенные runtime bytes не изменились.
+
+### Локальная приёмка и публикация пакета5 — 2026-10-14
+
+После checkpoint выше независимые architecture и QA reviewers дали PASS без блокеров
+всему итоговому снимку 17 файлов относительно базы
+`cc63554f9bf63d46737554fd9ecb430d7b02447e`. Оба проверили точные bytes по file manifest
+SHA256 `208e98fa7c84d60c9204748386bb7b1ba020f227636fdcc1d832f1686a27f215`, включая
+runtime, tests, CI и 8 MD. QA прочитал final logs/XML и native PNG; новых Godot прогонов
+reviewers не выполняли. От freeze до source commit проверенные файлы не менялись;
+два MD этого closing delta рассматриваются отдельно ниже.
+
+Координатор принял пакет5 и текущую M1 fixture локально: Windows all 255/255,
+synthetic 3032385286, joint positive/leak/setup, native mean 143.846 FPS/max logic 319 us,
+zero monitor deltas и качественная пользовательская movement/mouse проверка
+подтверждены выше. Ограничения оборудования и будущего M3 workload сохраняются;
+это локальная приёмка ветки, не merge в master и не начало M2.
+
+Source commit `df32caaf670008a059cd1c15de2e79fff8172af9` опубликован в
+`codex/m1-real-pipeline`; открыт ready [PR #13](https://github.com/GrehBan/3d_shooter/pull/13)
+в `master`. Координатор свежей проверкой подтвердил SUCCESS required Linux/Windows CI
+именно для этого source HEAD
+([run38556520650](https://github.com/GrehBan/3d_shooter/actions/runs/38556520650),
+jobs `115826933410`/`115826933053`). PR не слит, его merge пользователем не назначен.
+
+Этот closing delta меняет только work-log и pr-integration-log и ожидает независимого
+review точных двух файлов перед commit/push. Runtime/config/assets/CI остаются
+проверенной source версией; Godot не повторялся. CI source HEAD не подтверждает
+будущий closing-docs HEAD: после публикации metadata ему требуются собственные
+required Linux/Windows checks. Прежний pre-review checkpoint сохранён как история,
+новая запись явно фиксирует последовавшую локальную приёмку и публикацию.
