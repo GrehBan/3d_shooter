@@ -291,9 +291,10 @@ func _finish() -> void:
 	result.visual_occupancy_delta = _visual_occupancy() - _occupancy
 	result.frame_fps_mean = float(_frame_count) * 1000000.0 / maxf(1.0, float(_frame_usec_sum))
 	result.phase_steps = _sandbox.call(&"phase_steps")
-	for phase: int in 3:
+	for phase: int in RealPipelineResult.PHASE_COUNT:
 		result.phase_usec_sum[phase] = _sandbox.call(&"phase_sum_usec", phase)
 		result.phase_usec_max[phase] = _sandbox.call(&"phase_max_usec", phase)
+		result.phase_usec_p99[phase] = _sandbox.call(&"phase_percentile_usec", phase, 990)
 	get_tree().paused = true
 	var failures: PackedStringArray = result.failures()
 	print("REAL_PIPELINE allocations: objects=%+d nodes=%+d resources=%+d orphans=%+d memory_static=%+d B" % [
@@ -307,10 +308,11 @@ func _finish() -> void:
 	print("REAL_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=7000 us scope=M2.2_counter_fixture" % [
 		result.logic_samples, float(result.logic_usec_sum) / maxf(1.0, float(result.logic_samples)), result.logic_usec_max])
 	var steps: float = maxf(1.0, float(result.phase_steps))
-	print("REAL_PIPELINE phases: steps=%d resolver avg=%.1f max=%d effects avg=%.1f max=%d mobility avg=%.1f max=%d us" % [
-		result.phase_steps, float(result.phase_usec_sum[0]) / steps, result.phase_usec_max[0],
-		float(result.phase_usec_sum[1]) / steps, result.phase_usec_max[1],
-		float(result.phase_usec_sum[2]) / steps, result.phase_usec_max[2]])
+	print("REAL_PIPELINE phases: steps=%d resolver avg=%.1f p99<=%d max=%d effects avg=%.1f p99<=%d max=%d mobility avg=%.1f p99<=%d max=%d us" % [
+		result.phase_steps,
+		float(result.phase_usec_sum[0]) / steps, result.phase_usec_p99[0], result.phase_usec_max[0],
+		float(result.phase_usec_sum[1]) / steps, result.phase_usec_p99[1], result.phase_usec_max[1],
+		float(result.phase_usec_sum[2]) / steps, result.phase_usec_p99[2], result.phase_usec_max[2]])
 	print("REAL_PIPELINE timer: pairs=%d pair_ns=%.1f (four reads per logic tick)" % [
 		TIMER_PAIRS, _timer_pair_ns()])
 	print("REAL_PIPELINE effects: accepted=%d processed=%d inspected=%d actions=%d condition=%d cooldown=%d deferred=%d counters=%d,%d,%d,%d pending=%d" % [

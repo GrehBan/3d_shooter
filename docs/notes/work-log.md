@@ -9,10 +9,13 @@
 Шаг `claude/pipeline-phase-budget`, закрыт долг «цена конвейера» (исходная оценка M1a:
 `regress.gd`, +271 µs на 40 попаданий, ≈ 6.8 µs на попадание). Sandbox меряет фазы
 resolver/effects/mobility, `RealPipelineBenchmark` печатает средние и максимумы и цену таймера.
-Headless `--fixed-fps 60` (Windows, тот же ноутбук): logic avg 28.0 / max 419 µs; фазы
-resolver 16.0/384, effects 4.7/94, mobility 4.7/85 µs. Native real-time, RTX 4050 Laptop,
-Forward+/D3D12, viewport 1152×648: logic avg 47.5 / max 428 µs; resolver 22.1/369, effects
-6.7/68, mobility 11.5/35 µs; средний FPS 142.983. Пара `Time.get_ticks_usec()` стоит ≈ 70 нс
+Отдельный прогон headless `--fixed-fps 60` (Windows, тот же ноутбук; не из лога пакета):
+logic avg 28.0 / max 419 µs; фазы resolver 16.0/384, effects 4.7/94, mobility 4.7/85 µs.
+Headless-максимумы шумят от прогона к прогону (в логе пакета resolver 617, effects 209,
+mobility 219 µs). Native real-time, RTX 4050 Laptop, Forward+/D3D12, viewport 1152×648:
+logic avg 47.5 / max 428 µs; resolver 22.1/369, effects 6.7/68, mobility 11.5/35 µs; средний
+FPS 142.983. Ещё два native-прогона после добавления гистограммы: resolver p99 ≤ 300/330,
+max 378/348; effects p99 ≤ 50/50, max 69/63; mobility p99 ≤ 20/20, max 43/55 µs. Пара `Time.get_ticks_usec()` стоит ≈ 70 нс
 (четыре чтения на тик ≈ 0,14 µs), замер фаз их не искажает. Решение координатора: доли
 бюджета — native-максимум ×3 (1107 / 204 / 105 µs), пороги CI только на весь тик 7000 µs;
 пересчёт долей на 40 + 1 — пункт M2.3 в follow-ups. Тесты: `ShotgunSandboxTest` — три логических тика дают три шага фаз,
@@ -22,6 +25,9 @@ Forward+/D3D12, viewport 1152×648: logic avg 47.5 / max 428 µs; resolver 22.1/
 По ревью PR #23 тест независимости от FPS сравнивает позы и в середине переходов (через 1/6 с
 после начала ходьбы и поворота, 5/10/24 кадра) и проверяет величину смещения камеры > 3 мм в
 концах отрезков; покадровый `lerp(a, b, 0.5)` и линейный `blend = 12 * delta` роняют тест.
+Эти отрицательные проверки ручные (временная правка модели), в репозитории они не
+воспроизводятся. По ревью доли сравниваются с native p99 и максимумом, а не с headless-пиками;
+отклонённый сброс комнаты метрики фаз не обнуляет (тест).
 
 ## 2026-10-15 — frame-слой M1
 

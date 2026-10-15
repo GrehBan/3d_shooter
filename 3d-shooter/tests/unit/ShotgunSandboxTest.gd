@@ -161,10 +161,13 @@ func test_refused_room_reset_does_not_announce_room() -> void:
 	(_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
 	add_child(_scene)
 	var shots: ShotBatch = _scene.get(&"shots") as ShotBatch
+	_scene.call(&"reset_phase_metrics")
+	_scene.call(&"_on_logic_tick", GameLoop.get_logic_tick() + 1)
 	shots.epoch = ShotBatch.INT_MAX
 	await assert_error(func() -> void: _scene.call(&"reset_mobility_clock")).is_push_error(
 			"Sandbox: room epoch exhausted")
 	assert_array(_entered_rooms).is_equal(PackedInt64Array([0]))  # only the successful load
+	assert_int(_scene.call(&"phase_steps")).is_equal(1)  # a refused reset keeps the metrics
 
 
 func test_refused_visual_reset_does_not_announce_room() -> void:
@@ -196,7 +199,9 @@ func test_phase_metrics_count_logic_ticks_and_reset_with_the_room() -> void:
 		var last: int = _scene.call(&"phase_last_usec", phase)
 		var maximum: int = _scene.call(&"phase_max_usec", phase)
 		var total: int = _scene.call(&"phase_sum_usec", phase)
-		consistent = consistent and last >= 0 and maximum >= last and total >= maximum
+		var p99: int = _scene.call(&"phase_percentile_usec", phase, 990)
+		# With three samples p99 is the bucket of the maximum: its upper bound, 10 us wide.
+		consistent = consistent and last >= 0 and maximum >= last and total >= maximum 				and p99 > maximum and p99 - maximum <= 10
 	_scene.call(&"reset_mobility_clock")
 	assert_int(steps).is_equal(3)
 	assert_bool(consistent).is_true()

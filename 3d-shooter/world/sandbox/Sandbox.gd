@@ -44,6 +44,11 @@ var _phase_last: PackedInt64Array = PackedInt64Array([0, 0, 0])
 var _phase_max: PackedInt64Array = PackedInt64Array([0, 0, 0])
 var _phase_sum: PackedInt64Array = PackedInt64Array([0, 0, 0])
 var _phase_steps: int = 0
+## Per-phase histogram of PHASE_BUCKETS buckets of PHASE_BUCKET_USEC each (last bucket
+## collects everything slower), preallocated so recording a tick never allocates.
+const PHASE_BUCKET_USEC: int = 10
+const PHASE_BUCKETS: int = 1000
+var _phase_histogram: PackedInt32Array = _zeroes(PHASE_COUNT * PHASE_BUCKETS)
 
 
 func _ready() -> void:
@@ -133,10 +138,29 @@ func _on_logic_tick(tick: int) -> void:
 	_phase_steps += 1
 
 
-func _record_phase(phase: int, usec: int) -> void:
+static func _zeroes(size: int) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	out.resize(size)
+	return out
+
+
+func _record_phase(phase: Phase, usec: int) -> void:
 	_phase_last[phase] = usec
 	_phase_sum[phase] += usec
 	_phase_max[phase] = maxi(_phase_max[phase], usec)
+	_phase_histogram[phase * PHASE_BUCKETS + clampi(usec / PHASE_BUCKET_USEC, 0, PHASE_BUCKETS - 1)] += 1
+
+
+## Upper bound of the bucket holding the given percentile (permille), e.g. 990 for p99.
+## Cold read for reports; returns 0 before any tick.
+func phase_percentile_usec(phase: Phase, permille: int) -> int:
+	var rank: int = (_phase_steps * permille + 999) / 1000
+	var seen: int = 0
+	for bucket: int in PHASE_BUCKETS:
+		seen += _phase_histogram[phase * PHASE_BUCKETS + bucket]
+		if rank > 0 and seen >= rank:
+			return (bucket + 1) * PHASE_BUCKET_USEC
+	return 0
 
 
 func phase_steps() -> int:
@@ -159,6 +183,7 @@ func reset_phase_metrics() -> void:
 	_phase_last.fill(0)
 	_phase_max.fill(0)
 	_phase_sum.fill(0)
+	_phase_histogram.fill(0)
 	_phase_steps = 0
 
 
