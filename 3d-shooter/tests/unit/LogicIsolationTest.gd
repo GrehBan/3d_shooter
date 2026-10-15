@@ -1,9 +1,8 @@
 extends GdUnitTestSuite
 ## «Логика и визуал независимы» (roadmap M1a): скрипты логики — чистые классы.
-## Каждый скрипт в core/, combat/, effects/ (рекурсивно, с подпапками) и
-## player/ должен
-## наследовать RefCounted или Resource. Исключения — только в ALLOWED_NODES,
-## с причиной; новый Node-класс в логике без записи здесь роняет тест.
+## Каждый скрипт в core/, combat/, effects/, weapons/ (рекурсивно) и в корне
+## player/ должен наследовать RefCounted или Resource. Исключения — только в
+## ALLOWED_NODES, с причиной; новый Node-класс в логике без записи здесь роняет тест.
 
 const LOGIC_DIRS: PackedStringArray = ["res://core", "res://combat", "res://effects", "res://weapons"]
 const LOGIC_FILE_PREFIXES: Dictionary = {"res://player": ""}

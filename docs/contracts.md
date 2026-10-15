@@ -1,32 +1,11 @@
 # Контракты ядра боя
 
-Актуальный статус 2026-10-14: PR #8–#13 слиты, база `master` — `962741d`.
-Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
-Пакет5 и текущая M1 fixture приняты локально после independent review,
-Windows all, native measurements и качественной ручной проверки movement/mouse.
-M2.1 принят независимо и локально committed в `bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`.
-Зависимый M2.2 реализован локально в `codex/m2-effect-runner`; точные проверки и
-стадия независимой приёмки — в журнале. Публикация M2 не разрешена.
-Полный M2 не реализован.
-Прежние draft/pending статусы ниже сохранены как история исходных версий.
-Точные факты — [журнал интеграции PR](notes/pr-integration-log.md).
-
 Справочник по чистым классам логики боя: кто их вызывает, что гарантировано и что
 запрещено. Код лежит в `3d-shooter/` (`res://`). Реализованные классы ядра здесь — `RefCounted` или
 `Resource`; это проверяет `tests/unit/LogicIsolationTest.gd`. Исключения (`GameLoop`,
 `EventBus`, физические `FPSController` и `HitscanWeapon`) перечислены в его allowlist с причиной.
-§7 описывает реализованный минимальный пакет 3 M1 в `codex/m1-current-plan`.
-На 2026-10-13 runtime пакета 3 принят локально: независимый обзор полного diff
-`b73a4be` → `9a4fead` дал PASS без блокеров, обязательные CI Linux/Windows для
-`9a4feade15e98d6c870f89163e659572b7ecb9a0` завершились SUCCESS.
-Closing docs пакета3 получили отдельный независимый PASS и опубликованы в
-`d9f1a53175fe32176fac72df195eda27ee18a129`; обязательные Linux/Windows CI этого HEAD
-завершились SUCCESS (run38424601880). PR #11 впоследствии слит после fresh CI
-integration HEAD; детали актуального слияния приведены в журнале интеграции.
-§8 описывает локально принятый пакет4: final Windows all и native rendering smoke
-пройдены; независимые full-diff архитектурное и QA-ревью дали PASS для source
-`ff26428d51c024ad693c916982738d96fba4096d`. Исторические статусы пакетов ниже
-сохраняют исходный контекст; текущая M1 принята, полный M2 ещё впереди.
+Документ описывает только действующие гарантии `master`; история пакетов, ревью и
+слияний — в [журнале интеграции PR](notes/pr-integration-log.md).
 
 ## 1. Общие правила
 
@@ -280,80 +259,86 @@ Mock/golden/synthetic используют его прежний контрак�
 
 ### EffectRuleData и EffectRunner (`effects/`, M2.2)
 
-This implemented foundation supports only `INCREMENT_COUNTER`, with `ALWAYS` or
-`MIN_VALUE` against a captured nonnegative integer value. `minimum_value >= 0`,
-`counter_increment > 0`, `cooldown_ticks >= 0`; unsupported enums/null definitions
-reject the complete constructor. Definitions are copied into packed scalar columns
-while loading, never retained or mutated. Definition ID is its array index, matching
-`EffectHost.effect_id`; the maximum is 64 definitions. Empty definitions are valid.
+Реализован только счётчик: действие `INCREMENT_COUNTER` с условием `ALWAYS` или
+`MIN_VALUE` против захваченного неотрицательного целого значения. Ограничения
+определения: `minimum_value >= 0`, `counter_increment > 0`, `cooldown_ticks >= 0`;
+неизвестный enum или `null` отвергают весь конструктор. При загрузке определения
+копируются в плотные скалярные колонки, сами `Resource` не хранятся и не меняются.
+ID определения — его индекс в массиве и совпадает с `EffectHost.effect_id`;
+максимум 64 определения, пустой список допустим.
 
-`EffectRunner.new(stats, host, definitions, event_capacity=32, max_subscriptions=8,
-work_quota=16)` validates matching host/stat capacities, positive bounded capacities
-(events <=4096, subscriptions <=64), positive quota and every definition before
-allocation. `is_initialized()` reports failure; Sandbox aborts initialization on it.
-No callbacks or general action abstractions are part of this foundation.
+`EffectRunner.new(stats, host, definitions, event_capacity = 32, max_subscriptions = 8,
+work_quota = 16)` до выделения памяти проверяет совпадение ёмкостей host и `StatBlock`,
+положительные ограниченные ёмкости (событий ≤ 4096, подписок ≤ 64), положительную квоту
+и каждое определение. Неудачу сообщает `is_initialized()`; Sandbox в этом случае
+прерывает инициализацию комнаты. Колбэков и общей абстракции действий нет.
 
-`enqueue(owner, trigger, value) -> bool` validates the full live owner handle at
-admission. Invalid owners ordinarily return false; malformed triggers/negative values
-or unknown definition IDs are configuration errors. HP0 with a valid handle is allowed.
-No matching subscription returns true without creating or counting an event. For a
-matching event, capture ordered full entry handles in the existing EffectHost order.
-Admission scans at most `max_subscriptions+1` candidates. Added entries are invisible
-to an accepted snapshot; removed/replaced entries are skipped. Each live entry's
-definition fields cannot be mutated through EffectHost, so an admitted definition ID
-remains valid until that full entry is removed. No raw slot persists across calls.
+`enqueue(owner, trigger, value) -> bool` проверяет полный живой handle владельца при
+приёме. Недействительный владелец — обычный `false`; неверный триггер, отрицательное
+значение или неизвестный ID определения — ошибка конфигурации. Владелец с HP 0 и
+действительным handle допустим. Если нет подходящей подписки, возвращается `true` без
+события и без счёта. Для подходящего события захватываются полные handle записей в порядке
+`EffectHost`; приём просматривает не больше `max_subscriptions + 1` кандидатов.
+Записи, добавленные после приёма, в принятый снимок не попадают; снятые или заменённые
+пропускаются. Поля определения живой записи через `EffectHost` не меняются, поэтому
+принятый ID определения действителен, пока запись не снята. Сырые слоты между вызовами
+не хранятся.
 
-Queue/snapshot overflow rejects the whole event before queue/state/cooldown writes,
-increments `configuration_errors` and `dropped_events` once per rejected event, and
-uses one constant diagnostic until `reset_diagnostics()`. Other malformed input and
-action-counter overflow increment configuration errors without counting a queue drop.
-Scratch storage may change during rejected admission. Accepted events retain only
-full owner, captured value, and full entry handles: no target or attack handle,
-context reference/lease, dereference, or close/release operation. The current bridge
-captures `OnHit.hp_damage`; later target death/despawn cannot cancel this value.
+Переполнение очереди или снимка отвергает всё событие до записи в очередь, состояние и
+кулдауны: `configuration_errors` и `dropped_events` растут на 1 за каждое отвергнутое
+событие, одно постоянное сообщение пишется до `reset_diagnostics()`. Прочий неверный
+ввод и переполнение счётчика действия увеличивают только `configuration_errors`.
+Временный буфер при отказе может измениться. Принятое событие хранит только полный
+handle владельца, захваченное значение и полные handle записей: никаких handle цели или
+атаки, аренды контекста, разыменования или закрытия. Текущий мост передаёт
+`OnHit.hp_damage`; последующая смерть или деспавн цели это значение не отменяют.
 
-`logic_step(tick) -> int` returns inspected units, up to fixed `work_quota`. Negative,
-duplicate and backward ticks do nothing. An empty new tick still advances the guard,
-so subsequent admission waits for the next tick. FIFO events preserve a front cursor;
-every candidate costs one unit, including stale, condition/cooldown, and action overflow
-refusals. Exhaustion defers remaining work, without drops/errors. Owner validity is
-rechecked at execution. For successful actions only, write full entry/owner state,
-counter and last-success tick together. Cooldown compares nonnegative elapsed
-`tick - last_success >= cooldown_ticks`, avoiding overflowing future deadlines;
-initial last-success is -1, cooldown0 permits repeated actions on one tick. Check
-`counter > INT64_MAX - increment` before any action/cooldown write.
+`logic_step(tick) -> int` возвращает число просмотренных единиц, не больше `work_quota`.
+Отрицательный, повторный или прошедший тик ничего не делает. Пустой новый тик всё равно
+сдвигает защиту, поэтому следующий приём ждёт следующего тика. FIFO хранит курсор
+головного события; каждый кандидат стоит одну единицу, включая устаревшие записи и
+отказы по условию, кулдауну и переполнению. Исчерпание квоты откладывает остаток на
+следующий тик без потерь и ошибок. Действительность владельца перепроверяется при
+исполнении. Только успешное действие записывает вместе полный handle записи и
+владельца, счётчик и тик последнего успеха. Кулдаун сравнивает неотрицательную разницу
+`tick - last_success >= cooldown_ticks`, без переполняемых будущих сроков; начальный
+`last_success = -1`, кулдаун 0 разрешает повтор на одном тике. Условие
+`counter > INT64_MAX - increment` проверяется до любых записей.
 
-State belongs to full subscription handles, never `EffectHost.state_slot` or shared
-card state. `counter_for(entry)` returns 0 for removed/replaced entries or stale owners.
-Metrics are cumulative `accepted_events`, `processed_events`, `inspected_candidates`,
-`executed_actions`, `condition_refusals`, `cooldown_refusals`, `stale_skips`, and
-`deferred_steps` (each new step ending pending because quota was exhausted).
-`pending_count()` includes a partially inspected front event. `reset_diagnostics()`
-clears only error/drop counters and the latch, preserving tick/FIFO/state/activity.
-Quiescent `reset_room()` cancels FIFO and clears all runner state/metrics/diagnostics
-and last tick, preserving definitions and subscriptions. There is no save/restore.
-Sandbox first requires successful resolver reset, then resets effects, weapon,
-visuals, mobility and GameLoop; resolver refusal leaves runner state/FIFO/tick intact.
+Состояние принадлежит полному handle подписки, а не `EffectHost.state_slot` и не общему
+состоянию карточки. `counter_for(entry)` возвращает 0 для снятых или заменённых записей
+и устаревших владельцев. Накопительные метрики: `accepted_events`, `processed_events`,
+`inspected_candidates`, `executed_actions`, `condition_refusals`, `cooldown_refusals`,
+`stale_skips` и `deferred_steps` (каждый новый тик, закончившийся с остатком из-за
+квоты). `pending_count()` учитывает частично просмотренное головное событие.
+`reset_diagnostics()` обнуляет только счётчики ошибок, потерь и защёлку сообщения,
+сохраняя тик, очередь, состояние и метрики. `reset_room()` в момент покоя отменяет
+очередь и очищает всё состояние, метрики, диагностику и последний тик, сохраняя
+определения и подписки. Сохранения и восстановления нет. Sandbox сначала требует
+успешного сброса resolver, затем сбрасывает эффекты, оружие, визуал, мобильность и
+`GameLoop`; при отказе resolver состояние runner, очередь и тик не меняются.
 
-Room capacity is 64 entries, 32 events, 8 handles/event and quota 16. A separate 32768 B
-packed payload cap includes EffectHost/HandlePool and runner; it excludes Godot object,
-Variant and packed-array wrappers, allocator overhead and cold Resource storage.
-Exact payload ledger: host `84*16 + 57*64 = 4992 B`; runner
-`28*definitions + 32*(20+8*8) + 8*8 + 32*64 = 4800 + 28*definitions B`.
-Totals are 9792 B with empty Sandbox definitions, 9904 B with four benchmark definitions,
-11584 B at 64 definitions. Sandbox checks this combined payload before binding gameplay;
-M1's independent weapon/visual caps are unchanged. All tables/scratch allocate cold.
+Ёмкость комнаты: 64 записи, 32 события, 8 handle на событие, квота 16. Отдельный
+лимит упакованных данных 32768 B покрывает `EffectHost`/`HandlePool` и runner, без
+обёрток объектов Godot, Variant и packed-массивов, накладных расходов аллокатора и
+холодных `Resource`. Точный учёт: host `84 * 16 + 57 * 64 = 4992 B`; runner
+`28 * definitions + 32 * (20 + 8 * 8) + 8 * 8 + 32 * 64 = 4800 + 28 * definitions B`.
+Итого 9792 B при пустых определениях Sandbox, 9904 B при четырёх определениях бенчмарка,
+11584 B при 64 определениях. Sandbox проверяет сумму до привязки игровой логики;
+независимые лимиты оружия и визуала M1 не меняются. Все таблицы и scratch-буферы
+выделяются в холодном пути.
 
-The real benchmark installs four test-only `.tres` rules before Sandbox enters the
-tree: `(ALWAYS,+1,cd0)`, `(MIN_VALUE6000,+2,cd0)`, `(MIN_VALUE6001,+1,cd0)`,
-`(ALWAYS,+3,cd1)`, then subscribes them in order 0..3. Eight hits produce 32 candidates
-per shot, split over two ticks. The measured 120 shots/960 hits require 960 accepted
-and processed events, 3840 inspections, 2160 actions, 960 condition refusals, 720 cooldown
-refusals, 120 deferred steps, counter deltas `[960,1920,0,720]`, and pending 0.
-All diagnostic/drop/host-capacity-refusal/stale counters must be 0. Whole-GameLoop 7000 us
-and allocation gates include this runner. This remains a small counter workload,
-not M3's 40-enemy/effect storm acceptance. Independent oracle:
-`tests/tools/effect_runner_ref.py`, golden 3633298175; original synthetic 3032385286 remains.
+Реальный бенчмарк до входа Sandbox в дерево ставит четыре тестовых `.tres`:
+`(ALWAYS, +1, cd 0)`, `(MIN_VALUE 6000, +2, cd 0)`, `(MIN_VALUE 6001, +1, cd 0)`,
+`(ALWAYS, +3, cd 1)` и подписывает их по порядку 0…3. Восемь попаданий дают
+32 кандидата на выстрел, разнесённых на два тика. За 120 выстрелов / 960 попаданий
+обязательны: 960 принятых и обработанных событий, 3840 просмотров, 2160 действий,
+960 отказов по условию, 720 отказов по кулдауну, 120 отложенных тиков, приращения
+счётчиков `[960, 1920, 0, 720]` и 0 в очереди. Все счётчики диагностики, потерь,
+отказов ёмкости host и устаревших записей — 0. Порог 7000 µs на весь `GameLoop` и
+проверки аллокаций включают runner. Это малая нагрузка счётчиков, а не приёмка M3 с
+40 врагами и штормом эффектов. Независимая модель — `tests/tools/effect_runner_ref.py`,
+golden 3633298175; исходный synthetic checksum 3032385286 сохранён.
 
 ## 3. Независимость логики и визуала
 
@@ -374,11 +359,12 @@ not M3's 40-enemy/effect storm acceptance. Independent oracle:
 
 ## 4. Эталонные модели
 
-Эталоны golden-тестов считаются независимыми Python-моделями в `3d-shooter/tests/tools/`
-(`seeded_rng_ref.py`, `fixed_ref.py`, `stat_block_ref.py`, `hit_event_queue_ref.py`,
-`acp_ref.py`, `effect_host_ref.py`, `movement_ref.py`, `combat_contracts_ref.py`), запуск —
-`python 3d-shooter/tests/tools/<модель>.py` из корня репозитория. Пути моделей указаны
-в шапках соответствующих golden-тестов.
+Эталоны golden-тестов считаются независимыми Python-моделями в `3d-shooter/tests/tools/`:
+`seeded_rng_ref.py`, `fixed_ref.py`, `stat_block_ref.py`, `hit_event_queue_ref.py`,
+`acp_ref.py`, `effect_host_ref.py`, `movement_ref.py`, `combat_contracts_ref.py`,
+`landing_ref.py`, `shotgun_ref.py`, `damage_pipeline_ref.py`, `effect_runner_ref.py`.
+Запуск — `python 3d-shooter/tests/tools/<модель>.py` из корня репозитория; вывод модели
+совпадает с константой своего golden-теста. Пути моделей указаны в шапках golden-тестов.
 
 ## 5. Физический адаптер FPSController (M1, пакет 1)
 
@@ -482,7 +468,7 @@ GameLoop.reset_clock при повторном использовании runtim
 physics activation до первого logic_step. Этот явный room reset отбрасывает pending
 landing events, сбрасывает dropped/diagnostic counters и duplicate logic guard;
 MovementAbilities.rebase_clock сохраняет оставшийся cooldown `max(ready-old_now,0)`
-с новым origin0, energy/grants/costs/flags и physical episode не меняются. Истёкший срок0;
+с новым началом отсчёта 0, energy/grants/costs/flags и physical episode не меняются. Истёкший срок даёт 0;
 ungranted остаётся ungranted. Последовательность реализованного пакета 2 Sandbox.reset_mobility_clock:
 capture old GameLoop tick → runtime.reset_clock(old) → GameLoop.reset_clock().
 Расширение composition root для пакета 3 добавляет reset shot resolver
@@ -515,20 +501,14 @@ float непосредственно ниже границы остаются н
 
 ## 7. M1: hitscan-дробовик и ShotBatch (пакет 3)
 
-### Статус и границы
+### Границы
 
-Договорённости подготовлены 2026-10-13 от `b73a4be701276373b3704b7f8c801a8815939872`.
-Игровая семантика ратифицирована, значение 8 относится только к утверждённому
+Игровая семантика утверждена; число дробин 8 относится только к утверждённому
 [пресету GDD](../gdd.md#принято-для-m1-минимальный-hitscan-дробовик--2026-10-13).
-После независимого PASS уточнённого договора минимальные ShotBatch, WeaponData,
-WeaponState, ShotResolver и физический HitscanWeapon реализованы в `res://weapons/`.
-Их runtime принят локально по итоговому независимому PASS полного diff на `9a4fead`;
-новая документационная запись проходит отдельное ревью. Доказательства и точная база —
-в [журнале приёмки](notes/work-log.md#возобновление-работы-и-локальная-приёмка-runtime-пакета-3--2026-10-13).
-Объём M1: проверенные данные оружия, input/physics adapter, минимальные чистые
-transport/resolver и существующие stores/пулы/AttackContext. Полный M2 DamagePipeline,
-EffectRunner, карточки и элементы не переносятся в пакет 3; synthetic fixtures,
-legacy очереди и checksum `3032385286` сохраняются.
+Реализация — `ShotBatch`, `WeaponData`, `WeaponState`, `ShotResolver` и физический
+`HitscanWeapon` в `res://weapons/`. С M2.1 урон каждой дробины идёт через
+`DamagePipeline` (см. §2). Synthetic fixtures, старые очереди и checksum `3032385286`
+сохраняются.
 
 ### WeaponData и атомарный транспорт
 
@@ -561,7 +541,7 @@ legacy очереди и checksum `3032385286` сохраняются.
 
 ### Дробины, смерть и контексты
 
-Один accepted shot открывает один root depth0, включая полный miss; hit-set root
+Один accepted shot открывает один root на глубине 0, включая полный miss; hit-set root
 остаётся пустым. Все N trace results обходятся по stable trace index.
 Перед каждой дробиной resolver проверяет full target handle и `HP > 0`.
 Stale/`NO_HANDLE`/`HP <= 0` — полный no-op ДО child, регистрации hit budget,
@@ -569,7 +549,7 @@ DamageApply, расхода щита и триггеров. `StatBlock.is_valid(
 а не HP; отдельная проверка живой цели обязательна. Death-policy принадлежит resolver,
 не физике и не `DamageApply`; auto-release entity в DamageApply не добавляется.
 
-Для живой цели создаётся отдельный sibling-child depth1 и регистрируется hit только
+Для живой цели создаётся отдельный sibling-child на глубине 1 и регистрируется hit только
 в нём через существующий `try_register_hit()`. Повторные дробины могут поражать
 ту же живую цель в соседних ветвях; регистрация цели в root нарушила бы этот контракт.
 Зарегистрированное живое попадание даёт `OnHit`, даже при нулевом HP damage из-за
@@ -580,7 +560,7 @@ DamageApply, расхода щита и триггеров. `StatBlock.is_valid(
 минимального resolver, не реализация полного M2 engine.
 
 `AttackContextPool.MAX_DEPTH = 4` и существующий API сохраняются: pellet занимает
-depth1, дальнейшие реакции могут занимать depth2–4. Для N прямых дробин без эффектов
+глубину 1, дальнейшие реакции могут занимать глубины 2–4. Для N прямых дробин без эффектов
 `hit_budget >= N`; будущие реакции требуют отдельного резерва. Cold sizing пула
 учитывает до `1 + N` root/children на выстрел, одновременно живые деревья и удержанные
 descendants. Закрытые children занимают слоты до освобождения всего дерева, даже
@@ -621,7 +601,7 @@ Identity reset не должен смешивать старые и новые �
 `MovementAbilities.rebase_clock` сохраняет оставшийся cooldown относительно ТОЧНОГО
 old tick, включая physics activation до первого logic_step; energy/grants и физический
 episode не сбрасываются room clock reset. Обычный same-identity bind не заменяет reset.
-Weapon reset переносит remaining = max(ready_tick - old_tick, 0) к новому origin0,
+Weapon reset переносит remaining = max(ready_tick - old_tick, 0) к новому началу отсчёта 0,
 включая выстрел из physics до первого logic_step. Pending press отбрасывается,
 held-input latch сохраняется: удержание не создаёт новый rising edge после reset.
 Lifecycle нового полного entity handle отдельно сбрасывает weapon state/input;
@@ -631,11 +611,11 @@ owned trees отменяются без OnAttackResolved. Старые handles �
 
 ### Реализованная конфигурация Sandbox и физического адаптера
 
-Sandbox задаёт room-specific `C_shots=4`, trace cap32, `C_trace=max(N)=8` для единственного
-разрешённого shotgun.tres, host capacity16, context capacity64, deferred reserve16.
+Sandbox задаёт room-specific `C_shots = 4`, trace cap 32, `C_trace = max(N) = 8` для единственного
+разрешённого shotgun.tres, host capacity 16, context capacity 64, deferred reserve 16.
 Cold `WeaponData.validate_room` проверяет все presets до создания stores/bind/subscriber:
-memory cap128KiB покрывает conservative packed-store budget: 64+9*C_trace bytes на
-shot,16 на source allocator,640 на context с HandlePool/hit-set/metadata/owned registry.
+memory cap 128 КиБ покрывает консервативный бюджет packed-хранилищ: `64 + 9 * C_trace` байт на
+shot, 16 на source allocator, 640 на context с HandlePool/hit-set/metadata/owned registry.
 Этот cap относится к packed combat stores, не к внутренней памяти Godot ray/mesh nodes;
 их число фиксируется холодной загрузкой и проверяется активными monitor deltas.
 Context sizing требует `C_shots*(1+C_trace)+deferred_reserve<=context_capacity`;
@@ -650,8 +630,8 @@ Room reset повышает epoch и сбрасывает sequences; ticket не
 старый незавершённый writer не может записать в новый slot после reset.
 
 HitscanWeapon создаёт `C_trace` RayCast3D при загрузке, исключает тело игрока и использует
-world/enemy/hitbox mask. Physics priority10 следует FPS priority0 и предшествует
-GameLoop1000. Фиксированные central+ring endpoints сохраняют world range40м при yaw/pitch
+world/enemy/hitbox mask. Physics priority 10 следует за FPS (priority 0) и предшествует
+`GameLoop` (1000). Фиксированные central+ring endpoints сохраняют world range 40 м при yaw/pitch
 и поддержанном положительном uniform scale контроллера; после acceptance все rays
 обновляются и unconditional publish выполняется вне assert, включая release build.
 Hardware route принимает fire только при focus/captured mouse, игнорирует echo;
@@ -666,125 +646,107 @@ collider/full handle. Это inspectable death/no-op полигон, не enemy 
 
 Unit/golden/Jolt/аллокационные проверки и команды заданы в
 [плане пакета 3](m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий).
-Результаты реализации и итогового независимого обзора записаны отдельно в журнале;
-локальная приёмка runtime не доказывает графическую плавность или real-combat CPU-бюджет.
-Последний Windows all exit0: scripts61/0,230/230 tests31suites, active120shots/960hits
-zero deltas/config0; synthetic3032385286 PASS. Это инструментальные проверки,
-они дополнены independent full-diff PASS и CI SUCCESS точного `9a4fead`, но не закрывают
-графические проверки или общую приёмку M1. Runtime-проверки в этом docs-only шаге не повторялись.
 
 ## 8. M1 presentation pools (пакет 4)
 
-Назначенный visual preset и room limits — в [плане M1](m1-plan.md#4-пулы-используемых-vfx-и-декалей).
-Presentation outside deterministic combat: collision point/normal не попадают
-в ShotBatch/resolver. HitscanWeapon snapshots предвыделены и доступны только
-синхронному published-shot listener; packed-array references не выдаются.
-Identity — epoch/full source/sequence; unpublished/aborted records и getters
-вне callback не дают presentation. Физический hit отличается от damage:
-wall NO_HANDLE/dead/stale дают marks, miss не даёт contact. Новых OnHit событий нет.
+Утверждённый визуальный пресет и лимиты комнаты — в [плане M1](m1-plan.md#4-пулы-используемых-vfx-и-декалей).
+Представление вне детерминированного боя: точка и нормаль столкновения не попадают
+в `ShotBatch` и resolver. Снимки `HitscanWeapon` предвыделены и доступны только
+синхронному слушателю опубликованного выстрела; ссылки на packed-массивы не выдаются.
+Идентичность — epoch, полный source и sequence; неопубликованные и отменённые записи,
+а также геттеры вне колбэка визуала не дают. Физическое попадание отличается от урона:
+стена (`NO_HANDLE`), мёртвая или устаревшая цель дают следы, промах контакта не даёт.
+Новых событий `OnHit` нет.
 
-ShotVisualPool — отдельный `visuals/` Node3D adapter с flat packed state.
-Lifetime3/6/180physics, capacity5/40/80 валидируются до room stores/binds/subscriber.
-Expiry priority5 перед weapon10, pause сохраняет age. Release требует
-kind-tagged int64 generation handle; reset освобождает handles с сохранением
-поколений, скрывает nodes, очищает identities/age/counters. Старые releases,
-epoch и duplicate whole-shot callback не трогают текущий occupant. Один shot
-может иметь N contact pairs с одной sequence. Low-level spawn primitives private;
-только synchronous listener служит production entry. Новый full source после
-weapon.bind_source переключает visual producer на следующем accepted callback,
-сохраняя ранее созданные marks до expiry; old-source requests отвергаются.
-Impact+decal pair
-проверяет обе capacity до allocation. Overflow отвергает presentation request,
-повышает собственные dropped/configuration counters на каждый отказ и пишет
-push_error один раз до reset; gameplay shot/cooldown/damage не откатываются.
-Storage не растёт, active nodes не вытесняются, acceptance counters0.
+`ShotVisualPool` — отдельный адаптер `visuals/` (`Node3D`) с плоским упакованным
+состоянием. Время жизни 3 / 6 / 180 физических тиков и ёмкости 5 / 40 / 80 (вспышка
+ствола / попадание / след) проверяются до создания хранилищ комнаты, привязок и
+подписчика. Истечение (priority 5) идёт до оружия (priority 10), пауза сохраняет возраст.
+Освобождение требует int64-handle с видом и поколением; сброс освобождает handle с
+сохранением поколений, прячет узлы, очищает идентичности, возраст и счётчики. Старые
+освобождения, epoch и повторный колбэк того же выстрела не трогают текущего владельца
+слота. Один выстрел может дать N пар контактов с одной sequence. Низкоуровневые
+примитивы создания приватны; единственный рабочий вход — синхронный слушатель.
+Новый полный source после `weapon.bind_source` переключает производителя визуала со
+следующего принятого колбэка, сохраняя уже созданные следы до истечения; запросы
+старого source отвергаются. Пара «попадание + след» проверяет обе ёмкости до
+выделения. Переполнение отвергает запрос представления, увеличивает собственные
+счётчики потерь и конфигурации на каждый отказ и пишет `push_error` один раз до сброса;
+выстрел, кулдаун и урон не откатываются. Хранилище не растёт, активные узлы не
+вытесняются, для приёмки счётчики должны быть 0.
 
-Decal local+Y=outward normal, projection -Y направлена внутрь поверхности;
-depth0.04м и tangent fallback для floor/ceiling. World/targets render layer1,
-weapon/flashes layer2, decal cull mask1 (это не physics mask). Shared cold
-bitmap textures cap32KiB и packed cap16KiB не включают Godot node heap.
-Runtime checks, real Jolt/pool measurement, graphical Forward+/D3D12 inspection
-и independent final-diff acceptance фиксируются отдельными доказательствами.
+Локальная ось +Y декали — внешняя нормаль, проекция −Y направлена внутрь поверхности;
+глубина 0.04 м, для пола и потолка — запасная касательная. Мир и цели — render layer 1,
+оружие и вспышки — layer 2, cull mask декалей 1 (это не маска физики). Общие холодные
+текстуры ограничены 32 КиБ, упакованные данные — 16 КиБ; кучу узлов Godot эти лимиты
+не включают.
 
-Pool/pooled nodes имеют physics interpolation OFF: static contact placement и
-reuse не интерполируются из idle identity transform. Muzzle следует displayed
-socket.get_global_transform_interpolated() в presentation _process; getter
-вызывается впервые холодно при initialize для предсоздания interpolation pump,
-а затем каждый frame, включая отсутствие active muzzle. Frame pose не меняет age
-или gameplay. Initialize требует nodes inside tree; pure combat interpolation
-и контроллер не меняются.
+У пула и его узлов физическая интерполяция выключена: статичное размещение контакта и
+переиспользование не интерполируются из исходного transform. Вспышка ствола следует
+`socket.get_global_transform_interpolated()` в `_process` представления; первый вызов
+делается холодно в `initialize`, чтобы заранее создать механизм интерполяции, затем —
+каждый кадр, даже без активной вспышки. Поза кадра не меняет возраст и игру.
+`initialize` требует узлов внутри дерева; интерполяция чистого боя и контроллер не меняются.
 
-Tagged visual handle сохраняет generation*65536, index region содержит
-kind*256+local index (kind0=muzzle,1=impact,2=mark; capacity каждого<256).
-Release декодирует kind и проверяет полный handle соответствующего HandlePool;
-визуальные handles не являются combat/entity handles и принадлежат конкретному
-ShotVisualPool instance (raw int не является global identity). Поколения выше Int32
-не усекутся. Непубликуемая физическая запись отменяется adapter и увеличивает
-существующий ShotBatch configuration counter; snapshot/visual listener не вызывается.
-
-Реализация этого договора локально проверена final Windows all (64 scripts,
-249/249 tests,32suites, active3900ticks zero monitor deltas/config/dropped) и
-native Forward+/D3D12 live/moving-camera smoke. Независимые архитектурное и QA-ревью
-точного23file snapshot дали PASS; source `ff26428d51c024ad693c916982738d96fba4096d`
-принят локально. Это не PR/CI/merge пакета4 и не приёмка общей M1; новая docs-only
-запись результата ожидает отдельного независимого ревью. Точные результаты и ограничения —
-[журнал](notes/work-log.md#итоговая-локальная-проверка-пакета4).
+Визуальный handle хранит `generation * 65536`, а область индекса — `kind * 256 + local index`
+(kind 0 — вспышка ствола, 1 — попадание, 2 — след; ёмкость каждого вида < 256).
+Освобождение декодирует вид и проверяет полный handle соответствующего `HandlePool`.
+Визуальные handle — не боевые handle сущностей и принадлежат конкретному экземпляру
+`ShotVisualPool` (сырое число не является глобальной идентичностью). Поколения выше
+Int32 не усекаются. Неопубликованную физическую запись адаптер отменяет и увеличивает
+существующий счётчик конфигурации `ShotBatch`; снимок и слушатель визуала не вызываются.
 
 ## 9. M1 реальный интеграционный бенчмарк (пакет 5)
 
-`res://tests/perf/RealPipelineBenchmark.tscn` — обычная сцена Node, холодно создающая
-настоящий Sandbox. Production controller, weapon, visual pools, GameLoop и единственная
-подписка Sandbox resolver → effects → mobility используются напрямую. M2.2 перед
-входом Sandbox в дерево устанавливает четыре test-only counter definitions и
-подписывает их для OnHit игрока; [точные gates M2.2](#effectruledata-и-effectrunner-effects-m22)
-дополняют сохранённые ниже M1 counters. Fixture заменяет
-только свои floor/center shape и mesh: пол 200×200 м, центр 100×12×0.5 м с HP/MAX_HP
-20_000_000 raw; боковые цели, slope/platform скрыты и выключены из collisions.
-Shared definition resources не мутируются. Горячих HP/clock/position resets нет.
+`res://tests/perf/RealPipelineBenchmark.tscn` — обычная сцена `Node`, которая холодно
+создаёт настоящий Sandbox. Используются рабочие контроллер, оружие, пулы визуала,
+`GameLoop` и единственная подписка Sandbox resolver → effects → mobility. До входа
+Sandbox в дерево бенчмарк ставит четыре тестовых определения счётчиков M2.2 и подписывает
+их на `OnHit` игрока; [проверки M2.2](#effectruledata-и-effectrunner-effects-m22)
+дополняют счётчики M1 ниже. Fixture заменяет только свои пол и центральную цель
+(shape и mesh): пол 200 × 200 м, центр 100 × 12 × 0.5 м с HP/MAX_HP 20 000 000 raw;
+боковые цели, склон и платформа скрыты и выключены из столкновений. Общие ресурсы
+определений не меняются. Горячих сбросов HP, часов и позиций нет.
 
-Driver priority−100 до FPS0/pools5/weapon10 подаёт свежие input edges: каждые240physics
-jump2/14, dash28/170, slide120; направление strafe меняет знак каждые240ticks.
-Парные look deltas ±0.2pixels и fire edge каждые30ticks исполняются настоящими
-engine callbacks. Sampler priority1200 после GameLoop1000 не вызывает физику или
-логику вручную. После300warmup снимает baseline, затем измеряет3600physics ticks.
-Мониторы objects/nodes/resources/orphans/static снимаются до вывода, сигналов,
-сортировки, очистки и изображения; первые четыре delta0, static≤1MiB.
+Драйвер (priority −100, до FPS 0, пулов 5 и оружия 10) подаёт свежие фронты ввода:
+каждые 240 физических тиков jump на 2/14, dash на 28/170, slide на 120; направление
+strafe меняет знак каждые 240 тиков. Парные повороты мыши ±0.2 пикселя и выстрел
+каждые 30 тиков исполняются настоящими колбэками движка. Сэмплер (priority 1200, после
+`GameLoop` 1000) физику и логику вручную не вызывает. После 300 тиков прогрева снимается
+база, затем измеряются 3600 физических тиков. Мониторы objects/nodes/resources/orphans/
+static снимаются до вывода, сигналов, сортировки, очистки и снимка экрана; первые четыре
+дельты — 0, static ≤ 1 МиБ.
 
-Для measured окна обязательны120accepted shots/960rays/960registered hits/120completion,
-HP loss5_760_000 raw и тот же суммарный on_hit damage; no-op/kills0. Обязательны30dash,
-15slide/15double/15ground jumps/15landings и resolved landings,1800resolver/mobility
-steps и timing samples, distance>450м, |x|≤45м, реальное изменение yaw.
-Visual counters120/960/960, expiry2040, reuse>0, итоговая occupancy равна baseline.
-Все cumulative configuration/drop/capacity/hit-set/budget/depth/stale diagnostics0;
-pending complete/reserved shots, landings и live contexts0. Неподвижная сцена не проходит.
+В измеряемом окне обязательны: 120 принятых выстрелов, 960 лучей, 960 зарегистрированных
+попаданий, 120 завершений, потеря HP 5 760 000 raw и такой же суммарный урон в `on_hit`;
+no-op и убийств — 0. Обязательны 30 dash, по 15 slide, double jump, наземных прыжков,
+приземлений и разрешённых приземлений, 1800 шагов resolver/mobility и замеров времени,
+пройденное расстояние > 450 м, |x| ≤ 45 м, реальное изменение yaw. Визуал: 120 / 960 / 960,
+2040 истечений, переиспользование > 0, итоговая занятость равна базе. Все накопительные
+счётчики конфигурации, потерь, ёмкости, hit-set, бюджета, глубины и устаревших записей — 0;
+незавершённых и зарезервированных выстрелов, приземлений и живых контекстов — 0.
+Неподвижная сцена проверку не проходит.
 
-`GameLoop.get_last_logic_tick_usec()` измеряет весь синхронный logic_tick emission,
-включая Sandbox и benchmark damage observer. Максимум≤7000us является жёстким
-порогом этой M1 fixture; это не подтверждение будущих40enemies/effect storms M3.
-Существующий `regress.gd` и checksum3032385286 сохранены без изменения.
+`GameLoop.get_last_logic_tick_usec()` измеряет весь синхронный выпуск `logic_tick`,
+включая Sandbox и наблюдатель урона бенчмарка. Максимум ≤ 7000 µs — жёсткий порог этой
+fixture M1; это не подтверждение будущих 40 врагов и шторма эффектов M3.
+Существующий `regress.gd` и checksum 3032385286 сохранены без изменений.
 
-`--inject-leak` создаёт один намеренный orphan после baseline; тот же полный workload
-должен завершиться exit1 с objects+1/orphans+1, после snapshot узел освобождается.
-CI отдельно проверяет activity, единственную причину отказа и cleanup0/0; crash или
-произвольный nonzero exit не считаются успехом отрицательной проверки. Unknown option
-даёт setup exit2. Pure `RealPipelineResultTest` проверяет gates без второго60s gdUnit case.
-`ci/run_checks.sh real_pipeline` и `all` запускают positive/negative/setup проверки;
-workflow имеет отдельный real-pipeline step на Linux/Windows.
+`--inject-leak` создаёт один намеренный orphan после снятия базы; та же полная нагрузка
+должна завершиться exit 1 с objects +1 / orphans +1, после снимка узел освобождается.
+CI отдельно проверяет активность, единственную причину отказа и очистку 0/0; падение или
+произвольный ненулевой код не считаются успехом отрицательной проверки. Неизвестная опция
+даёт exit 2 на этапе настройки. Чистый `RealPipelineResultTest` проверяет критерии без
+второго 60-секундного прогона в gdUnit. `ci/run_checks.sh real_pipeline` и `all`
+запускают положительную, отрицательную и проверку настройки; в workflow есть отдельный
+шаг real-pipeline для Linux и Windows.
 
-Headless `--fixed-fps60` — ускоренные3600симулированных physics ticks, не FPS evidence.
-Графический запуск той же сцены требует real-time pacing: fixed-fps/time-scale/max-fps
-CLI отвергаются; time_scale1 и physics60 обязательны. Frame intervals берутся из
-`Time.get_ticks_usec()` между actual `_process` callbacks, хранятся в холодно
-предвыделенном буфере; overflow блокирует приёмку. Выводятся renderer/driver/GPU/
-resolution/vsync, mean FPS (gate≥60), p95/p99/worst interval и доля frames>16667us.
-Mean≥60 не означает minimum60 для каждого кадра или M3 performance reference.
-Опциональный `--capture=<path>` сохраняет PNG только после monitor snapshot и pause.
-Ручной OS input/feel, инструментальный FPS, локальные проверки, independent review,
-publication, required CI и merge фиксируются раздельно в журнале.
-
-Локальные инструментальные gates14Oct пройдены: Windows all67scripts/255tests,
-synthetic3032385286 и joint positive/leak/setupPASS; native whole-emission max319us,
-graphical mean143.846FPS, p95/p99/worst7776/9449/11146us, slow fraction0 и monitor
-deltas0. Условия и разрешение (reported viewport rect отличается от PNG pixel size),
-ручная обратная связь и границы приёмки — [журнал](notes/work-log.md#графическая-проверка-пакета5-и-снимок-перед-ревью).
-Это состояние перед independent exact-diff review; publication/CI/merge нового пакета впереди.
+Headless с `--fixed-fps 60` — ускоренные 3600 симулированных физических тиков, не
+доказательство FPS. Графический запуск той же сцены требует реального темпа: опции
+fixed-fps, time-scale и max-fps отвергаются, обязательны `time_scale = 1` и физика 60 Гц.
+Интервалы кадров берутся из `Time.get_ticks_usec()` между настоящими колбэками
+`_process` и хранятся в холодно предвыделенном буфере; его переполнение блокирует
+приёмку. Выводятся renderer, драйвер, GPU, разрешение, vsync, средний FPS (порог ≥ 60),
+p95/p99/худший интервал и доля кадров > 16 667 µs. Средний FPS ≥ 60 не означает минимум
+60 в каждом кадре и не является эталоном производительности M3. Опциональный
+`--capture=<path>` сохраняет PNG только после снимка мониторов и паузы.

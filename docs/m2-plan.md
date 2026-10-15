@@ -1,21 +1,9 @@
 # План M2: физический конвейер, эффекты и карточки
 
-Дата: 2026-10-14. База `master` —
-`962741d9fabc3aa599255126a03b5c2de6b54227` после squash merge PR #13.
-M1 принят локально: независимое ревью, Windows all, native same-fixture measurements
-и качественная ручная проверка movement/mouse. Required Linux/Windows CI проверял
-точный опубликованный HEAD #13 `062534d`, run38595049442, обе проверки SUCCESS.
-Числа и ограничения — [журнал интеграции](notes/pr-integration-log.md).
-
-Пользователь поручил начать M2 («работаем»). Это разрешает локальную разработку,
-а не публикацию, создание PR или слияние M2. M2.1 принят локально после Windows
-all/native PASS и независимого ревью, затем committed как
-`bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`. Это согласованная зависимая база M2.2:
-ветка `codex/m2-effect-runner`, worktree `m2-effect-runner/3d_shooter`.
-M2.2 принят локально 2026-10-15 после Windows all/native PASS и независимого
-exact full-diff review без замечаний. Следующий шаг — числовой контракт M2.3.
-M2.2 ещё не staged/committed/published; M2 GitHub CI и merge отсутствуют.
-Версия и доказательства зафиксированы в [журнале](notes/work-log.md).
+Статус на 2026-10-15: M2.1 (PR #14) и M2.2 (PR #15) слиты, `master` — `3c94d6d`.
+M2.3 существует как несмёрженный снимок и переносится после нормализации проекта
+(закрытие долгов из [аудита](notes/audit-2026-10-15.md)); M2.4–M2.6 не начаты.
+История пакетов, проверок и слияний — в [журнале интеграции PR](notes/pr-integration-log.md).
 
 Источники: [манифест](../tech_manifest.md), [GDD](../gdd.md),
 [контракты](contracts.md), [roadmap](../roadmap.md), [правила агентов](../AGENTS.md).
@@ -27,10 +15,6 @@ Lead developer реализует; архитектор проверяет ко�
 независимыми моделями и доказательствами; game designer ратифицирует числовые
 правила до зависимого кода. Перед каждым следующим пакетом нужны принятый точный
 diff предыдущего, зафиксированные контракт и ёмкости, отдельные ветка/worktree.
-Назначения M2.2: lead developer — counter runner, Sandbox/benchmark integration,
-unit tests и CI marker; отдельный writer завершает документы после runtime freeze;
-QA/SDET — отдельные Python oracle и golden test;
-архитектор — независимое read-only ревью итогового полного diff.
 
 | Пакет | Результат | Gate до реализации / приёмка |
 | --- | --- | --- |
@@ -93,39 +77,43 @@ benchmark. MobilityRuntime и synthetic reference/checksum не меняются
 ≤2 ms slice из манифеста относится к генерации/navigation, не автоматически к
 боевым реакциям. Текущая M1 fixture не доказывает M3 workload.
 
-## M2.2: approved and implemented counter foundation
+## M2.2: реализованный фундамент счётчиков
 
-The coordinator approved this restricted contract before implementation. `EffectRuleData`
-provides ALWAYS/MIN_VALUE conditions and only INCREMENT_COUNTER; no damage, spawn,
-status, branching, card state or content expansion. Cold scalar copies isolate shared
-resources. Full subscription handles and owners key room-local state; `state_slot`
-is not card persistence. Snapshot admission is atomic; 32 FIFO events capture at most 8
-ordered handles each from 64 room entries. Quota 16 counts every inspected candidate
-and preserves the front cursor between ticks. Overflow rejects a whole event with
-configuration/drop counters; quota exhaustion defers it without errors.
+Ограниченный договор утверждён до реализации. `EffectRuleData` даёт условия
+`ALWAYS`/`MIN_VALUE` и единственное действие `INCREMENT_COUNTER`: без урона, спавна,
+статусов, ветвлений, состояния карточек и расширения контента. Холодные скалярные копии
+изолируют общие ресурсы. Состояние комнаты привязано к полным handle подписок и
+владельцев; `state_slot` не является хранилищем карточки. Приём снимка атомарен:
+32 события FIFO захватывают не больше 8 упорядоченных handle каждое из 64 записей
+комнаты. Квота 16 считает каждого просмотренного кандидата и сохраняет курсор головы
+между тиками. Переполнение отвергает всё событие со счётчиками конфигурации и потерь;
+исчерпание квоты откладывает работу без ошибок.
 
-Source full-handle validity is checked at admission/execution; dead-but-valid sources
-continue. OnHit supplies captured nonnegative HP damage only. No target/context handle
-is retained, so existing immediate attack completion and damage balance stay intact.
-Cooldown starts on successful execution and compares elapsed integer ticks. Counter
-overflow refuses atomically. Diagnostic reset preserves work/state/time; room reset
-cancels all runner-local work/state but preserves definitions/subscriptions. Sandbox
-performs resolver reset successfully before clearing runner state, then existing clock
-resets. Normal Sandbox has no content effects; four test resources activate benchmark.
+Полный handle источника проверяется при приёме и исполнении; мёртвый, но действительный
+источник продолжает работу. `OnHit` передаёт только захваченный неотрицательный HP-урон.
+Handle цели и контекста не хранятся, поэтому немедленное завершение атаки и баланс урона
+не меняются. Кулдаун стартует с успешного исполнения и сравнивает прошедшие целые тики.
+Переполнение счётчика отвергается атомарно. Сброс диагностики сохраняет работу,
+состояние и время; сброс комнаты отменяет всю работу и состояние runner, сохраняя
+определения и подписки. Sandbox успешно сбрасывает resolver до очистки runner, затем
+существующие часы. В обычном Sandbox эффектов контента нет; четыре тестовых ресурса
+включают нагрузку бенчмарка.
 
-Separate packed payload cap 32768 B covers both EffectHost/HandlePool and runner:
-9792 B empty, 9904 B four definitions, 11584 B maximum 64 definitions, excluding Godot
-wrappers/allocator/Resources. The exact ledger, APIs, refusal counters, state semantics
-and benchmark expected values are in [contracts](contracts.md#effectruledata-и-effectrunner-effects-m22).
-This is a bounded counter foundation, not full M2 or persistent CardInstance state.
+Отдельный лимит упакованных данных 32768 B покрывает `EffectHost`/`HandlePool` и runner:
+9792 B пусто, 9904 B с четырьмя определениями, 11584 B с максимальными 64 определениями,
+без обёрток Godot, аллокатора и `Resource`. Точный учёт, API, счётчики отказов, семантика
+состояния и ожидаемые значения бенчмарка — в [контрактах](contracts.md#effectruledata-и-effectrunner-effects-m22).
+Это ограниченный фундамент счётчиков, а не полный M2 и не постоянное состояние `CardInstance`.
 
-Required checks: focused boundary/stale/reuse/cold-copy/int64/reset tests, active 20k
-mutation/allocation and suppressed-error loops, independent Python/golden 3633298175,
-Sandbox immediate completion/target death/failed reset, full Windows all, real positive
-and injected leak fixture (same counter workload), native same-fixture and independent
-review of the exact final diff. Runtime freeze precedes full checks. Local review,
-commit, publication, CI and merge remain distinct. M2.3+ stays blocked on its own
-approved mechanics and acceptance; this package does not assign status/card balance.
+Обязательные проверки: граничные, устаревшие handle, переиспользование, холодная копия,
+int64 и сбросы; активные 20 000 мутаций с проверкой аллокаций и циклы с подавленными
+ошибками; независимая Python-модель и golden 3633298175; немедленное завершение в
+Sandbox, смерть цели и неудачный сброс; полный Windows `all`; реальная положительная
+fixture и fixture с внедрённой утечкой (та же нагрузка счётчиков); native-замер той же
+fixture и независимое ревью точного итогового diff. Focused-тесты — 21/21. Runtime
+замораживается до полных проверок; локальное ревью, коммит, публикация, CI и слияние —
+отдельные шаги. M2.3+ заблокировано собственными утверждёнными механиками и приёмкой;
+этот пакет не назначает баланс статусов и карточек.
 
 ## Проверки и передача
 
@@ -139,17 +127,6 @@ retained descendant lifecycle. Новая fault injection проверяет dia
 ревью bytes требуют повторного review. Runtime PASS, local acceptance, commit,
 publication, CI и merge отражаются раздельно в [журнале](notes/work-log.md).
 
-M2.1 Windows all итогового runtime: import PASS, scripts70/0, 265/265 tests в35 suites,
-synthetic3032385286 PASS; активный joint benchmark, negative leak и setup refusal
-PASS. Native same-fixture Forward+/D3D12 RTX4050: mean143.841FPS, p99 frame9926us,
-max logic356us; object/node/resource/orphan/static-memory deltas0. Это подтверждает
-текущий workload, не будущие 40 enemies/effect storms M3 или все GPU.
-
-Для M2.2 final Windows all от2026-10-15 PASS: import, scripts75/0,
-280/280tests в38 suites, synthetic3032385286 и active joint positive/leak/setup gates.
-Native same-fixture Forward+/D3D12 RTX4050 PASS: mean142.984FPS,
-p99 frame7741us/max logic431us, все5 monitor deltas0 и ожидаемые effect counters.
-Focused21/21 и Python/golden3633298175 подтверждены отдельно. Независимый review
-точного29-file diff от `bc1810450ffe150cd6ccea5930b6bc31a69b5bb2` дал PASS,
-координатор принял M2.2 локально; manifest и ограничения — в журнале.
-Ранние прерванные all-прогоны не используются как PASS.
+Результаты проверок M2.1 и M2.2 (Windows `all`, native-замеры, ревью) записаны в
+[журнале интеграции PR](notes/pr-integration-log.md#2026-10-1415--m21-и-m22-pr-14-15).
+Native-замеры подтверждают текущую нагрузку, а не 40 врагов и шторм эффектов M3.

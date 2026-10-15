@@ -1,119 +1,24 @@
 # План M1: движение, стрельба и Zero-Allocation
 
-Актуальный статус 2026-10-14: PR #8–#13 слиты; база `master` — `962741d`.
-Точный HEAD #13 `062534d` прошёл required Linux/Windows CI run38595049442.
-Все пять пакетов M1 и текущая fixture приняты локально: independent review,
-Windows all, native measurements и качественная ручная проверка movement/mouse PASS.
-Аппаратные/M3 ограничения сохраняются. Начат отдельный [план M2](m2-plan.md).
-Прежние draft/pending статусы ниже — история соответствующих checkpoints.
-Точные факты — [журнал интеграции](notes/pr-integration-log.md).
+Статус: M1 закрыта 2026-10-14 слиянием PR #10–#13, кроме frame-слоя (покачивание камеры
+и процедурная анимация оружия в `_process`), который закрывается отдельной задачей до M2.3.
+Состояние вехи — в [roadmap](../roadmap.md#m1-движение-стрельба-и-zero-allocation),
+история пакетов, проверок и слияний — в [журнале интеграции PR](notes/pr-integration-log.md)
+и [журнале работ](notes/work-log.md). Здесь — постановка и критерии приёмки пакетов.
 
-Дата плана: 2026-10-11. Текущий статус на 2026-10-13: пакет 1 принят и закоммичен локально;
-пакет 2 принят локально, source `499fbc2ec414eb8bcf7b13aa4f3bf5d7d44f1410`
-получил официальный независимый PASS Архитектора ПО относительно
-`081d9ae627ca62c7ff4a9e833a5310580c488ad0`: «блокеров не найдено».
-Это отдельный code verdict, а не прежний внутренний PASS или ревью MD.
-Все P2 закрыты; сохранённые Windows-проверки подтверждены чтением логов,
-ревьюер сам Godot/тесты/benchmark не запускал. Четыре MD с официальной записью PASS
-также получили отдельный официальный PASS Архитектора ПО и локально зафиксированы
-в `b73a4be701276373b3704b7f8c801a8815939872`. От этой базы уточнённый договор пакета3
-получил независимый subagent архитектурный PASS и по новому поручению реализован в
-`codex/m1-current-plan`; повторный Windows all exit0 (scripts61/0,230/230 tests31suites,
-synthetic3032385286 PASS). На 2026-10-13 пользователь возобновил работу:
-«работаем дальше по плану». Финальный independent whole-diff review `b73a4be` →
-`9a4fead` и независимый QA дали PASS без блокеров; runtime пакета 3 принят локально.
-Closing docs получили отдельный независимый PASS; пакет4 передан единственному writer.
-Опубликованный source commit:
-`9c88a7b6556bbbbde21dce2a407df88ee18af920`,
-[draft PR #11](https://github.com/GrehBan/3d_shooter/pull/11) в `master`.
-Текущий опубликованный HEAD `d9f1a53175fe32176fac72df195eda27ee18a129` получил SUCCESS
-обязательных Linux/Windows CI ([run 38424601880](https://github.com/GrehBan/3d_shooter/actions/runs/38424601880)).
-Эта проверка базы не относится к незакоммиченному runtime/docs пакета4.
-Native rendering smoke оружия/целей/прицела пройден; ручные mouse/smoothness проверки
-не подтверждены, вся M1 не завершена. PR #11 OPEN/DRAFT; зависимости #8/#9/#10 не слиты.
-Merge не выполнялся. Пакет4 локально реализован в `codex/m1-visual-pools`:
-final Windows all (scripts64/0,249/249 tests32suites,synthetic3032385286) и native
-Forward+/D3D12 live smoke PASS; независимые final-diff архитектурное и QA-ревью PASS.
-Source `ff26428d51c024ad693c916982738d96fba4096d` принят локально; пакет5 не начат.
-Эта docs-only запись результата ожидает отдельного независимого ревью. Пользователь
-поручил аудит/слияние PR, затем отдельную тестовую сцену дробовика/мишеней.
-Точные версии, review и ограничения — [журнал](notes/work-log.md#возобновление-работы-и-локальная-приёмка-runtime-пакета-3--2026-10-13).
-Источники:
-[roadmap.md](../roadmap.md), [GDD](../gdd.md), [технический манифест](../tech_manifest.md),
-[контракты](contracts.md), [процесс работы](../AGENTS.md), [открытые долги](notes/follow-ups.md).
-Сам план не разрешает автоматически публикацию, PR или слияние; новое явное поручение
-пользователя о финальном M1 описано в пакете 2 ниже.
+Источники: [roadmap.md](../roadmap.md), [GDD](../gdd.md), [технический манифест](../tech_manifest.md),
+[контракты](contracts.md), [открытые долги](notes/follow-ups.md).
 
-История поручения 2026-10-12: «Коммитим текущее состояние и останавливаемся».
-Source commit пакета2 уже создан; отдельно проверить и зафиксировать запись его
-фактического SHA, затем остановиться; пакеты3–5, push/PR/merge не выполнять.
-Ранее данное разрешение final review/squash после всей M1 ниже сохранено как история.
+## Порядок
 
-Этап подготовки 2026-10-11: отдельным поручением пользователя разрешена публикация текущего
-checkpoint из 20 файлов; создана ветка `codex/foundation-checkpoint`, готовится draft PR в `master`.
-Commit/push/PR ещё не выполнены. Этот шаг не включает исправление переполнения буфера,
-реализацию M1 или разрешение слияния; prerequisites пакетов ниже сохраняются.
+Пакеты выполнялись строго последовательно, каждый после приёмки предыдущего, в отдельной
+ветке с явным списком файлов. Общие файлы (`Sandbox`, контроллер, тесты, контракты)
+переходили к следующему пакету только после завершения предыдущего.
 
-Этап публикации 2026-10-12: исходный checkpoint commit
-`eb2415b6eb9581476d1aac89571f06147ffb530c` опубликован в `codex/foundation-checkpoint`,
-открыт [draft PR #8](https://github.com/GrehBan/3d_shooter/pull/8) в `master`.
-Дополнительное ревью упаковки этого снимка пропущено по явному поручению пользователя;
-на момент публикации Linux/Windows CI исходного commit выполняется. Слияния и реализации
-M1 нет, известный overflow-долг сохраняется, prerequisites пяти пакетов не изменены.
-
-Принятие исправления до публикации 2026-10-12: итоговый HEAD checkpoint
-`3dfddbf0c50bbedcd1aaadaf2036f25236dd59f9` получил SUCCESS обеих обязательных
-GitHub CI Linux/Windows. PR #8 остаётся OPEN/DRAFT и не слит. В отдельной ветке
-`codex/buffer-overflow-contract` от этой согласованной зависимой базы локально
-исправлено переполнение `DamagePayloadBuffer`, проверены однократный лог и оба сброса;
-история и результаты — в [журнале](notes/work-log.md). Точный семифайловый diff получил
-независимый итог «блокеров не найдено» от ревьюера на `high`, исправление принято локально.
-Новый diff не опубликован, его Linux/GitHub CI не запускался. Запись результата ревью
-в трёх MD проверяется отдельно. M1 не начата.
-
-Публикация исправления 2026-10-12: итоговый семифайловый diff, metadata-запись ревью
-и описание PR получили независимый PASS. Создан commit
-`b29789804efd2f57c09e911ab2f460f94072b4d1`, выполнен обычный push ветки
-`codex/buffer-overflow-contract`, открыт отдельный
-[draft PR #9](https://github.com/GrehBan/3d_shooter/pull/9) в `master`.
-На момент первой проверки после публикации (02:03 UTC) обязательные CI Linux/Windows
-этого HEAD находятся IN_PROGRESS, успех ещё не подтверждён. PR #8 не изменён и не слит;
-последующая проверка подтвердила SUCCESS обеих обязательных CI для `b297898`.
-Этот успех не подтверждает CI будущего HEAD с новой записью публикации.
-master-diff PR #9 пока включает checkpoint, новое изменение от `3dfddbf` — семь файлов.
-Настоящая запись публикации в трёх MD не закоммичена и ожидает отдельного ревью.
-Merge не выполнялся; M1 не начата.
-
-## Предварительные условия и порядок
-
-Актуальное решение 2026-10-12: запись публикации исправления независимо проверена,
-закоммичена и отправлена; итоговый HEAD PR #9
-`4802c805017b7593a4f1e37d2d1d9b83ee1743f8` получил SUCCESS обязательных CI Linux/Windows
-([run 38194634272](https://github.com/GrehBan/3d_shooter/actions/runs/38194634272)).
-PR #8/#9 остаются OPEN/DRAFT и не слиты. По поручению пользователя продолжить следующий
-пункт координатор явно согласовал эту зависимую базу для `codex/m1-fps-controller` в
-отдельном worktree. Это не свежий `master`; прежние pending-записи выше описывают историю.
-Prerequisites начала пакета 1 выполнены; результаты его собственных проверок ниже.
-
-До начала M1 завершить отдельную проверку записи публикации, обеспечить обязательные
-CI точной итоговой версии и соответствующий Git-поток исправления `DamagePayloadBuffer`.
-Семифайловый diff и описание PR независимо проверены и опубликованы в draft PR #9;
-повторная реализация долга не нужна. Squash только после независимого ревью и
-зелёных обязательных CI Linux/Windows для публикуемой версии. SUCCESS checkpoint
-`3dfddbf` не подтверждает CI нового исправления. До слияния локальные правки не считаются
-частью `master`; продолжение допускает только явно согласованную зависимую базу.
-
-Пакеты ниже выполняются строго последовательно, после приёмки предыдущего. Координатор
-назначает исполнителю явный список файлов и отдельные ветку/worktree от свежего `master`
-либо явно согласованной зависимой базы. Независимый ревьюер каждого пакета не участвует
-в авторстве; исполнители и ревьюеры запускаются на `high`, координатор работает на `medium`.
-Общие файлы (`Sandbox`, контроллер, тесты, контракты) передаются следующему исполнителю
-только после завершения предыдущего; параллельная запись запрещена.
-
-Каждый пакет обновляет затронутые MD и [журнал](notes/work-log.md), проходит импорт,
+Каждый пакет обновлял затронутые MD и [журнал](notes/work-log.md), проходил импорт,
 проверку скриптов и соответствующие unit/golden-тесты по [CLAUDE.md](../CLAUDE.md) и
-`ci/run_checks.sh`; горячие пути дополнительно проверяются измерениями и бенчмарком.
-При интеграции независимо проверяется полный итоговый diff, включая взаимодействие пакетов.
+`ci/run_checks.sh`; горячие пути дополнительно проверялись измерениями и бенчмарком.
+При интеграции независимо проверялся полный итоговый diff.
 
 ## 1. Физический FPS-контроллер и полигон
 
@@ -128,51 +33,17 @@ CI точной итоговой версии и соответствующий 
 headless-тесты её не доказывают. Обычные параметры скорости, мыши и прыжка координатор
 фиксирует в постановке в рамках GDD и делегированной задачи.
 
-Реализация начата 2026-10-12. Минимальный пакет — ходьба, yaw/pitch, обычный edge-прыжок,
-физические состояния земля/воздух и полигон со стеной, пологим склоном и платформой.
-Согласованные стартовые exports: скорость 8 м/с, прыжок 5.5 м/с, мышь 0.002 рад/пиксель,
-pitch ±85°, гравитация из ProjectSettings (default 9.8). Это параметры физического
-прототипа, не новый утверждённый баланс GDD. API и пауза — в [контрактах](contracts.md).
-Тест активного движения использует 300 тиков прогрева и 3600 тиков измерения, обычную
-физику 60 Гц и локальный test timeout 120000 мс через штатный gdUnit API; общие CI-пороги
-не меняются. Итоговый локальный Windows-прогон: импорт успешен, 43 скрипта без ошибок,
-158/158 unit/golden в 22 suite, включая 16/16 FPS-тестов; `regress.gd` PASS с прежним
-checksum `3032385286`. Активный контроллер за 3600 тиков замера прошёл 500.60 м,
-выполнил 30 прыжков/30 приземлений, дельты objects/nodes/resources/orphans — 0,
-static memory +1152 B при допуске 1 МиБ. Подробности и отрицательные доказательства — в [журнале](notes/work-log.md).
-Повторное независимое ревью точного девятифайлового diff получило PASS, блокеров не найдено
-(patch SHA256 `93E3E98EEA35E5F1E4F6BD6BE42E1BE88D81021A9ABC77B7451FC32972ED0233`).
-Пакет 1 принят локально; эта запись результата проверяется отдельно перед commit.
-Графическая проверка плавности и собственный Linux/GitHub CI пакета не проводились.
-P2 первого ревью о локальном basis исправлен мировым ортонормированным basis;
-реальный тест yaw родителя 90° / scale 2 проверяет направление камеры и мировую скорость,
-включая аналоговый ввод. Поддерживаемые физические transforms — в [контрактах](contracts.md).
-На предыдущем этапе пользователь поручил остановиться после локального commit пакета 1.
-2026-10-12 он отменил остановку: «не останавливаемся работаем дальше».
-После завершения записи и приёмки пакета 1 координатор передаёт пакет 2 следующему
-исполнителю на `high`; пакет 2 пока не начат.
-
-Локальная фиксация 2026-10-12: создан commit
-`cf141eb166e0013d7566c46bfdb44da14a4d7672` (`M1: add physics FPS controller and sandbox`)
-в `codex/m1-fps-controller`, ровно девять независимо проверенных файлов. Запись PASS
-также получила отдельное metadata-review; перед stage сверены все девять SHA256.
-Push/PR FPS и merge не выполнялись. Runtime сохранён, Godot не запускался повторно;
-собственный Linux/GitHub CI и графическая плавность не проверены. Эта фактическая запись
-commit в трёх MD проверяется отдельно, затем фиксируется локально. Прежнее поручение
-остановиться отменено последующим поручением продолжить; после этого шага следующий —
-пакет 2. Он пока не начат; общая приёмка M1 остаётся впереди. Push/PR FPS без отдельного
-указания Git-потока не выполняются.
+Минимальный пакет — ходьба, yaw/pitch, обычный edge-прыжок, физические состояния
+земля/воздух и полигон со стеной, пологим склоном и платформой. Стартовые exports:
+скорость 8 м/с, прыжок 5.5 м/с, мышь 0.002 рад/пиксель, pitch ±85°, гравитация из
+ProjectSettings (по умолчанию 9.8). Это параметры физического прототипа, а не
+утверждённый баланс GDD. API и пауза — в [контрактах](contracts.md). Тест активного
+движения использует 300 тиков прогрева и 3600 тиков замера, обычную физику 60 Гц и
+локальный test timeout 120000 мс через штатный API gdUnit; общие пороги CI не меняются.
+Поддерживаемые физические transforms (мировой ортонормированный basis, положительный
+равномерный масштаб) — в [контрактах](contracts.md#5-физический-адаптер-fpscontroller-m1-пакет-1).
 
 ## 2. Рывок, скольжение и воздушные прыжки
-
-Статус 2026-10-12: пакет 2 начат отдельным исполнителем на `high` в
-`codex/m1-mobility`, worktree `m1-mobility/3d_shooter`, согласованная база
-`081d9ae627ca62c7ff4a9e833a5310580c488ad0` (принятые source/metadata пакета 1).
-Координатор переключил основной checkout на master, сохранив чужой `.gitignore`.
-Новый мандат пользователя: после всех пяти пакетов M1 — финальное независимое ревью
-отдельным субагентом и squash merge по общему решению координатора/ревьюера, только
-при зелёных обязательных Linux/Windows CI точного последнего PR HEAD. Публикация пакета 2
-и слияние сейчас не выполняются; PR #8/#9 остаются draft, M1 не готова.
 
 Владелец: исполнитель движения; области контроллера, `MovementAbilities`,
 настройки Sandbox и соответствующие unit/интеграционные тесты. Начальная энергия — 3000
@@ -198,117 +69,27 @@ slide speed entry ≥4 м/с, cost 500/cooldown 6, deceleration 5 м/с² ×36 �
 ground jump free. ENERGY/MAX 3000; общий store регенерирует 50 raw ровно раз в logic
 tick (1500/с). Все проверки допустимости физики предшествуют try_activate; отказ
 может уступить следующему действию dash→slide→jump, успех максимум один.
-Предыдущая локальная проверка Windows `ci/run_checks.sh all` после исправления test-only
-physics barrier: exit0, import PASS, scripts 50/50, unit/golden 189/189 в 25 suite,
-Mobility physics 24/24, pure 6/6, новый Python/golden hash 2555885940.
-Активные 300+3600 физических тиков: 557.12 м, dash30/slide15/double15/landing15/regen1800,
-objects/nodes/resources/orphans/static memory delta0, dropped0. Synthetic checksum
-3032385286 сохранён, PASS; avg664.9/max1354 мкс, 7000 мкс пока только метрика синтетики.
-Первый full all был exit100 из-за process_frame helper (33 logic вместо30), история
-причины/исправления и отрицательные прогоны — [журнал](notes/work-log.md).
-Независимое ревью этой 27-file версии: есть блокеры (3 P2): cooldown clock reset,
-cold preset validation и same-identity rebind. Исправления: exact OLD GameLoop tick
-и allocation-free сохранение оставшегося cooldown к origin0; полная атомарная cold
-валидация трёх kinds/flags/Int32 параметров; same runtime/full handle bind idempotent
-NO-OP, новая identity отдельно начинает lifecycle. Предыдущий PASS проверок не
-подтверждает исправленные bytes. Следующий шаг — новый full all, freeze patch/manifest
-и повторное независимое ревью; пакеты 3–5 не начаты.
-
-Проверка исправлений: новый `ci/run_checks.sh all` exit0, import/scripts50 PASS,
-197/197 tests в25suite (physics28, pure10, golden unchanged2555885940), errors/failures/
-flaky/skipped/orphans0. Active300+3600 ticks:557.12м, dash30/slide15/double15/landing15/
-regen1800; objects/nodes/resources/orphans delta0, static memory+1152B≤1МиБ, dropped0.
-Rebase allocation unit PASS; existing synthetic3032385286 PASS avg664.6/max1449мкс.
-Полный snapshot теперь28files (добавился узкий API MovementAbilities.gd); это ещё не
-независимый PASS, исправления передаются тому же отдельному ревьюеру по новому manifest.
-
-История snapshot-поручения: включён точный пользовательский `.gitignore`
-из main (ровно5 ignore строк для локальных app/handoff artifacts, source SHA5BA25EFD…);
-main не менялся. Итоговый snapshot29files проходит повторное независимое ревью.
-Runtime/tests после полного all и восстановления negative probes сохранены побайтно;
-изменение .gitignore/MD проверено только diff/ссылками согласно AGENTS.
-Commit/push/PR пакета2 отсутствуют. Linux/GitHub CI новой версии и manual GUI не проверены;
-headless и synthetic не подтверждают графическую приёмку и всю M1.
-
-История версии перед последним ревью (2026-10-12): прежние три P2 и два последующих
-о Sandbox abort/lifecycle-prearm закрыты независимым ревью. Оставшееся замечание
-о пропавшем физическом slide cooldown покрыто отдельным Jolt-тестом: cooldown 120
-логических тиков остаётся будущим до/после landing, ENERGY 3000, свежий edge,
-prearm ровно на границе 12 физических тиков, скорость ≥4 м/с и отсутствие dash/slide.
-Отказ сохраняет энергию и ready_tick, не запускает slide и не отменяет падение.
-Windows `ci/run_checks.sh all` exit0: import PASS, scripts50/0, 199/199 tests25suite,
-physics30/30; active3900 ticks/557.12м, dash30/slide15/double15/landing15/regen1800,
-objects/nodes/resources/orphans/static delta0, dropped0. Synthetic3032385286 PASS,
-static+248808B≤1МиБ, avg723.2/max3826мкс (CPU synthetic — метрика, не порог).
-Полный 32-file diff, включая новые файлы и документацию, передаётся на повторное
-независимое ревью; пакет 2 пока не принят. После PASS — только локальный commit
-и отдельно проверенная запись его SHA, затем STOP. Commit/push/PR/merge пакета 2
-пока отсутствуют; Linux/GitHub CI и GUI этой версии не проверены.
-
-Приёмка пакета 2 (2026-10-12): отдельный независимый ревьюер на `high` проверил
-весь точный 32-file снимок от базы `081d9ae627ca62c7ff4a9e833a5310580c488ad0`,
-patch SHA256 `8ef6b82144a6cccf545cb6aec7e05321e4e8ddd8985a891a9d8302f488f6ebac`,
-manifest SHA256 `d9dcc99b31de7b89407c7d2970b74c89d41e0f9040463d7d664c1ba40a54c1b6`.
-Итог — PASS, блокеров не найдено; последнее P2 cooldown закрыто, все предыдущие
-блокеры устранены. Ревьюер лично прочитал новые логи: 199/199 tests в 25 suites,
-MobilityPhysics30/30, all exit0; собственный Godot-прогон ревьюер не выполнял.
-Пакет 2 принят локально, долг AIR-jump закрыт — [история](notes/follow-ups.md).
-Runtime/test bytes после PASS не менялись. Ожидается только независимое ревью
-новой записи результата в четырёх MD; оно не отменяет PASS проверенного кода.
-Затем локальный source commit, отдельно проверенная запись фактического SHA и STOP.
-Source commit ещё не создан. Linux/GitHub CI и GUI этой версии не запускались,
-push/PR/merge отсутствуют, пакеты3–5 не начаты, вся M1 не завершена.
-
-Локальная фиксация пакета 2 (2026-10-12): после второго независимого PASS полного
-32-file снимка, включая запись приёмки в четырёх MD, координатор создал source commit
-`499fbc2ec414eb8bcf7b13aa4f3bf5d7d44f1410`
-(`M1: implement mobility and resolve review blockers`) в `codex/m1-mobility`.
-Индекс и все 32 файла сверены с одобренным снимком, cached diff-check0; после commit
-рабочее дерево чистое. Это новая запись фактического SHA, её отдельное ревью ещё
-ожидается. Код/тесты/ресурсы сохранены, Godot ради MD не запускался. Следующий шаг —
-только проверка и локальная фиксация этой записи, затем STOP; Linux/GitHub CI и GUI
-не запускались, push/PR/merge и пакеты3–5 отсутствуют. Подробности — [журнал](notes/work-log.md).
 
 ## 3. Дробовик hitscan и разрешение попаданий
 
-Статус на 2026-10-13: уточнённый договор пяти MD получил независимый архитектурный PASS;
-координатор назначил реализацию всего пакета 3 в зависимом `codex/m1-current-plan`
-от `b73a4be701276373b3704b7f8c801a8815939872`. Минимальные weapons/transport/resolver,
-Sandbox и проверки реализованы; runtime принят локально по итоговому independent
-full-diff PASS `b73a4be` → `9a4fead` и Linux/Windows CI SUCCESS этого HEAD.
-Новая запись приёмки ожидает отдельного документационного ревью перед пакетом 4.
-Сведения прежнего `codex/m1-shotgun-contract` ниже сохраняют исторический смысл:
-официальный app-вердикт не объявляется полученным. Пакеты 4/5 не начаты.
-Официальный PASS, сопоставление 32 content-файлов и ограничения сохранённых проверок —
-[журнал](notes/work-log.md#официальный-source-pass-архитектора-по-для-пакета-2-m1--2026-10-13).
-Неблокирующий P3 о точности предельной высоты вынесен в отдельный
-[follow-up](notes/follow-ups.md#p3-точность-int-cap-высоты-падения).
-
-Историческая запись будущей постановки 2026-10-12 (только read-only планирование):
-координатор утвердил 8 дробин ×6 HP (6000 raw) и 40 м; фиксированные central +7 кольцо
-с spread5°, semi-auto rising edge, cooldown15logic (0.5с), без ammo/reload в минимальном
-M1. Один root на shot, включая miss, sibling-child для каждой попавшей дробины,
-damage per pellet. Эти решения не разрешают начинать пакет3 при текущей остановке.
-Историческое состояние на момент той постановки: окончательный транспортный контракт
-и ёмкости требовали отдельного согласования. После приёмки договора runtime реализован;
-на 2026-10-13 итоговый diff `b73a4be` → `9a4fead` независимо принят без блокеров.
-Текущая запись приёмки проходит отдельное ревью перед передачей shared files пакету 4.
+Утверждённый пресет: 8 дробин × 6000 raw (6 HP), дальность 40 м, центральная дробина и
+кольцо из 7 с разбросом 5°, semi-auto по фронту нажатия, кулдаун 15 логических тиков
+(0.5 с), без патронов и перезарядки. Один root на выстрел, включая промах,
+sibling-child на каждую попавшую дробину, урон по дробине.
 
 Владелец: исполнитель оружия; области `weapons/`, физическая интеграция в Sandbox,
 минимальные чистые ShotBatch/resolver, существующие stores/пулы контрактов и
 unit/golden/интеграционные тесты оружия. Состояние и данные оружия — чистые классы;
 input/raycast adapter работает на 60 Гц, resolver — на 30 Гц. Полный M2 DamagePipeline,
-EffectRunner, карточки и элементы в пакет не входят; API/MAX_DEPTH4 AttackContextPool
+EffectRunner, карточки и элементы в пакет не входят; API и `MAX_DEPTH = 4` у `AttackContextPool`
 не меняются. Пакеты 4/5 этим договором не расширяются.
 
-Утверждённый конкретный WeaponData — сохранённый выше пресет: 8 дробин ×6000 raw,
-40 м, central +7 ring, spread5°, semi-auto rising edge, cooldown15logic.
-Таким образом, число дробин/разброс этого пресета уже назначены; они не являются
+Конкретный `WeaponData` — пресет выше. Число дробин и разброс этого пресета не являются
 универсальными техническими максимумами. Подробности игровой семантики —
 [GDD](../gdd.md#принято-для-m1-минимальный-hitscan-дробовик--2026-10-13),
 транспорт, контексты и интеграция — [контракт §7](contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3).
-Реализованный Sandbox назначает room-specific shots4/trace cap32/stride8, hosts16,
-contexts64/deferred reserve16 и128KiB conservative packed-store cap. RayCast3D
+Реализованный Sandbox назначает лимиты комнаты: shots 4, trace cap 32, stride 8, hosts 16,
+contexts 64, deferred reserve 16 и консервативный лимит packed-хранилищ 128 КиБ. RayCast3D
 предсозданы холодно; world range сохраняется при supported yaw/pitch/uniform scale.
 Shared ACP API/MAX_DEPTH и legacy stores/эталоны сохранены. Deferred owners используют
 только resolver.open_child/close_context; quiescent reset отменяет owned trees без
@@ -323,16 +104,16 @@ acceptance/cooldown/resources/VFX/трасс; partial write, truncation и hot r
 оружиям одного full source; identity=(room epoch, full source, sequence). Wrap запрещён:
 exhaustion отказывает до acceptance/cooldown/resources/VFX/traces. Порядок —
 source/sequence, затем stable trace index. Числовые universal capacity cap не назначаются.
-Legacy HitEventQueue/payload/target-first sort/goldens и synthetic3032385286 сохраняются;
+Legacy HitEventQueue/payload/target-first sort/goldens и synthetic checksum 3032385286 сохраняются;
 M1 hitscan→ShotBatch — явное исключение из общего событийного маршрута.
 
 Root на accepted shot, включая miss, имеет пустой hit-set; live-hit каждой дробины
-идёт через sibling-child depth1. Stale/dead no-op проверяется до child/budget/щита/триггеров;
+идёт через sibling-child на глубине 1. Stale/dead no-op проверяется до child/budget/щита/триггеров;
 Apply/PostHit завершаются до следующей дробины. OnHit живой зарегистрированной цели
-сохраняется при HP damage0; OnKill только HP>0→0. Root держится до всех traces,
+сохраняется при HP damage 0; OnKill только HP>0→0. Root держится до всех traces,
 отложенные descendants — до final close. Metadata сохраняются до любого close;
 OnAttackResolved ровно один после close()==true, освобождённое дерево не читается.
-Для direct N hit_budget≥N; pool sizing учитывает 1+N, закрытые children, одновременно
+Для N прямых дробин `hit_budget >= N`; pool sizing учитывает 1+N, закрытые children, одновременно
 живые деревья и отложенные descendants. Схема root-per-hit из SyntheticCombatLoad
 не переносится в игровой resolver и не переписывается в синтетике.
 
@@ -340,27 +121,16 @@ OnAttackResolved ровно один после close()==true, освобожд�
 shots перед landing damage/regen. Duplicate/старый tick игнорируется resolver.
 Room reset: capture old GameLoop tick → reset batch pending/guard/identity с новым epoch →
 weapon.reset_clock(old) → existing mobility.reset_clock(old) → GameLoop.reset_clock();
-weapon remaining=max(ready_tick-old,0) переносится к origin0, включая physics fire до
+оставшийся кулдаун оружия `max(ready_tick - old, 0)` переносится к началу отсчёта 0, включая physics fire до
 первого logic_step. Pending press очищается, held latch сохраняется, удержание не
 создаёт rising edge после reset; lifecycle нового full entity handle отдельный.
 Точный old tick и
 сохранение оставшегося mobility cooldown, energy/grants/physical episode обязательны.
 
-### Будущие проверки пакета 3 (в этом шаге не запускались)
+### Проверки пакета 3
 
-Заголовок и перечень ниже сохраняют исторический docs-only договор и его ссылки.
-При реализации добавлены ShotBatchTest, WeaponStateTest, ShotResolverTest,
-ShotgunPhysicsTest, ShotgunSandboxTest и ShotgunGoldenTest с independent shotgun_ref.py.
-Focused pure/Sandbox/golden20/20 и Jolt9/9 пройдены до полного финального прогона.
-Active3900ticks: shots120/traces960/hits960/resolved120, все object/node/resource/orphan
-дельты0, static0, configuration0; intentional orphan probe обнаружен и очищен.
-Эти результаты не заменяют all последней версии и независимый exact-diff review.
-Итог уже запущенного all завершился после limit-stop: exit0,230/230 tests31suites,
-Jolt11/11, active120shots/960hits/120resolved с нулевыми дельтами/config0, synthetic
-3032385286 PASS/static+1152B. Source после прогона не менялся. На 2026-10-13 independent
-full-diff review и QA дали PASS, CI Linux/Windows точного `9a4fead` — SUCCESS;
-runtime пакета 3 принят локально. PR #11 остаётся draft, новая запись приёмки ожидает
-документационного ревью; Godot/runtime-проверки в этом docs-only шаге не повторялись.
+Тесты пакета: `ShotBatchTest`, `WeaponStateTest`, `ShotResolverTest`, `ShotgunPhysicsTest`,
+`ShotgunSandboxTest` и `ShotgunGoldenTest` с независимой моделью `shotgun_ref.py`.
 
 * Unit/golden транспорта: WeaponData validation и invalid room init; параметризуемые
   C_trace/C_shots, fixed stride/нечитаемый tail, все N trace results включая miss,
@@ -371,11 +141,11 @@ runtime пакета 3 принят локально. PR #11 остаётся dr
   no-wrap exhaustion без acceptance/cooldown/traces, полные source/target поколения,
   уникальная shot identity, канонические source/sequence/trace index независимо от
   порядка поступления; несколько целей, препятствие, stale handle и miss.
-* Resolver: 8×6000 raw по HP10000 при shield/armor0 → два живых hits, один OnKill,
-  шесть no-op. Щит/броня, давшие HP damage0, сохраняют OnHit без OnKill.
+* Resolver: 8 × 6000 raw по HP 10000 при shield/armor 0 → два живых hits, один OnKill,
+  шесть no-op. Щит/броня, давшие HP damage 0, сохраняют OnHit без OnKill.
   Stale/dead цель не расходует контекстную capacity, hit budget или shield и не
   испускает триггеров; повторные дробины по живой цели проходят sibling-ветвями.
-* Context lifecycle: пустой hit-set root, miss root, budget≥N, MAX_DEPTH4 и pool sizing
+* Context lifecycle: пустой hit-set root, miss root, budget ≥ N, `MAX_DEPTH = 4` и pool sizing
   с удержанием закрытых children. Каждый owned context закрывается ровно один раз;
   отложенный descendant удержан до final close, завершение даёт один OnAttackResolved
   по сохранённым metadata, операции с freed handles отвергаются.
@@ -386,10 +156,10 @@ runtime пакета 3 принят локально. PR #11 остаётся dr
   Identity старой комнаты
   не смешивается с новой; существующие mobility lifecycle/grant гарантии сохраняются.
 * Реальный Jolt/input adapter: raycasts и rising-edge выстрелы на физике 60 Гц,
-  cooldown15logic и resolver на 30 Гц; удержание не повторяет semi-auto edge.
+  кулдаун 15 логических тиков и resolver на 30 Гц; удержание не повторяет semi-auto edge.
   Headless не подтверждает GUI/плавность или доставку ввода ОС.
 * Активные 60 с после прогрева: подтверждённые счётчики выстрелов/hits/resolved,
-  objects/nodes/resources delta0, static memory≤1МиБ, config/dropped errors0;
+  дельты objects/nodes/resources 0, static memory ≤ 1 МиБ, ошибок config/dropped 0;
   проверки горячих путей и прежние unit/golden/эталоны остаются. Synthetic checksum
   3032385286 не меняется и не заменяет реальный CPU-бюджет/приёмку всей M1.
 
@@ -403,17 +173,15 @@ focused gdUnit suites запускаются существующей коман
 
 ## 4. Пулы используемых VFX и декалей
 
-Пакет 3 принят отдельно; пакет 4 назначен единственному исполнителю в
-`codex/m1-visual-pools` от зависимой базы `d9f1a53` 2026-10-13.
 Координатор утвердил visual preset без изменения игрового баланса:
 muzzle/impact/mark живут 3/6/180 физических тиков, размеры 0.16/0.08/0.14 м,
-глубина проекции mark 0.04 м. Настоящие Decal, shared cold RGBA textures64x64
+глубина проекции mark 0.04 м. Настоящие Decal, shared cold RGBA текстуры 64×64
 и MeshInstance3D flashes предсоздаются при загрузке. Room envelope: один producer,
-cooldown не меньше15logic (30physics), stride8, burst4. Conservative capacity
-`4+ceil(lifetime/30)` для muzzle и `stride*(4+ceil(lifetime/30))` для contact
-дают muzzle5/impact40/decal80 (125 nodes при cap128).
-Raw textures cap32768 bytes; presentation packed stores cap16384 bytes отдельно
-от combat cap128KiB. Эти cap не описывают полный внутренний heap/VRAM Godot nodes.
+кулдаун не меньше 15 логических (30 физических) тиков, stride 8, burst 4. Conservative capacity
+`4 + ceil(lifetime / 30)` для muzzle и `stride * (4 + ceil(lifetime / 30))` для contact
+дают muzzle 5 / impact 40 / decal 80 (125 узлов при лимите 128).
+Лимит сырых текстур 32768 байт, packed-хранилищ представления 16384 байт — отдельно
+от боевого лимита 128 КиБ. Эти cap не описывают полный внутренний heap/VRAM Godot nodes.
 
 Физический snapshot читается синхронно только после успешного publish; pure
 ShotBatch/resolver не получают float point/normal. Miss даёт muzzle; любой
@@ -421,21 +189,12 @@ physical contact, включая wall NO_HANDLE/dead/stale, даёт flash+surfa
 независимо damage. Abort/reserve/publish отказ и чтение вне snapshot не дают визуал.
 Impact/decal pair атомарна. Visual overflow повышает собственные counters и
 однократную диагностику, не меняя cooldown/damage/shot; acceptance требует zero.
-Expiry priority5 перед weapon10, pause замораживает age, reset отменяет metadata
+Истечение (priority 5) перед оружием (priority 10), pause замораживает age, reset отменяет metadata
 и active nodes с сохранением generation allocator. Kind/full-generation handles
 и epoch/sequence guards защищают повторное использование. Muzzle следует socket
-на конце Barrel; decals исключают weapon/flash render layer2. Реализация присутствует,
-pool/nodes interpolationOFF, muzzle следует displayed socket transform с cold pump.
-Native Forward+/D3D12 live/moving-camera proof прошёл на RTX4050LaptopGPU (1280x720),
-pose error0 и active1/8/8; world marks остаются после flash и очищаются reset.
-Final Windows all завершён: import PASS, scripts64/0,249/249 tests в32suites;
-active300warmup+3600measure:120muzzle/960impact/960marks,2040reuse/expiry,
-object/node/resource/orphan/static deltas0, configuration/dropped0.
-Synthetic checksum3032385286 сохранён, regress PASS. Независимые архитектурное и
-QA-ревью точного итогового23file snapshot дали PASS; пакет4 принят локально,
-source `ff26428d51c024ad693c916982738d96fba4096d` закоммичен.
-PR/CI/merge этой версии не выполнены; новая docs-only запись приёмки ожидает
-отдельного независимого ревью. Пакет5 не начат.
+на конце Barrel; decals исключают weapon/flash render layer 2.
+У пула и узлов физическая интерполяция выключена, вспышка ствола следует
+отображаемому transform сокета.
 
 Владелец: исполнитель визуальных пулов; области используемых сцен/ресурсов эффектов,
 их пулов, интеграции оружия/Sandbox и тестов. Предсоздавать только реальные эффекты
@@ -447,20 +206,11 @@ PR/CI/merge этой версии не выполнены; новая docs-only 
 
 ## 5. Бенчмарк реального конвейера и приёмка M1
 
-Реализация2026-10-14: назначен единый writer в `codex/m1-real-pipeline` от свежего
-master `cc63554f9bf63d46737554fd9ecb430d7b02447e`. Добавлены actual Sandbox fixture,
-driver−100/sampler1200, pure acceptance result/test и отдельный CI `real_pipeline`.
-Production callbacks/subscription/stores не меняются; полный набор активности,
-диагностик, allocation/CPU/FPS gates — [контракт§9](contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5).
-Focused6/6 и active positive/negative/setup checks пройдены. Финальный Windows all
-exit0: importPASS, scripts67/0,255/255tests33suites, synthetic3032385286PASS и joint
-positive/leak/setupPASS. Native real-time positivePASS на Windows Forward+/D3D12,
-RTX4050LaptopGPU: mean143.846FPS, p95/p99/worst7776/9449/11146us, slow fraction0,
-logic max319us, all monitor deltas0. Reported viewport rect1152×648, screenshot pixels
-1280×720; измерение60009.8ms после300warmup. Independent exact-diff review ещё ожидается;
-публикация PR разрешена пользователем, выполняется после review, merge не назначен.
-Ручную плавность движения/мыши пользователь подтвердил14Oct на локальном тире с
-тем же production controller/weapon/pools. Это качественная оценка, не численный FPS.
+Пакет добавляет настоящий Sandbox под нагрузкой (`RealPipelineBenchmark.tscn`), драйвер
+ввода (priority −100) и сэмплер (priority 1200), чистый результат приёмки с тестом и
+отдельный шаг CI `real_pipeline`. Рабочие колбэки, подписка и хранилища не меняются;
+полный набор активности, диагностик, проверок аллокаций, CPU и FPS —
+[контракт §9](contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5).
 
 Команды из Git root:
 
