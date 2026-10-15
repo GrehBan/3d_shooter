@@ -64,8 +64,12 @@ func test_integer_fall_boundaries_and_cancellation() -> void:
 	assert_int(FPSController.quantize_height_mm(cap_m)).is_equal(LandingEventQueue.MAX_HEIGHT_MM)
 	assert_int(FPSController.quantize_height_mm(1.0e30)).is_equal(LandingEventQueue.MAX_HEIGHT_MM)
 	assert_int(FPSController.quantize_height_mm(1.0e12)).is_equal(1_000_000_000_000_000)
+	# The double just below float(cap) = cap - 12 mm (spacing 128 mm) stays on the floor path.
+	var below_m: float = (float(LandingEventQueue.MAX_HEIGHT_MM) - 128.0) / 1000.0
+	assert_int(FPSController.quantize_height_mm(below_m)).is_equal(922_337_203_685_485_440)
+	# (cap - 8000 mm) * 10 raw per mm, computed independently of fall_damage().
 	assert_int(MobilityRuntime.fall_damage(FPSController.quantize_height_mm(1.0e30))).is_equal(
-			MobilityRuntime.fall_damage(LandingEventQueue.MAX_HEIGHT_MM))
+			9_223_372_036_854_775_800)
 
 
 func test_shared_regen_once_per_logic_tick_and_stale_handles() -> void:

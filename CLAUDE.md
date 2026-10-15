@@ -18,7 +18,7 @@
 
 ### Зависимости (обновлять только осознанно)
 *   **Godot** 4.7.2-stable.
-*   **gdUnit4** v6.2.1 в `3d-shooter/addons/gdUnit4/`, закоммичен в репозиторий. Источник: архив тега `https://github.com/MikeSchulze/gdUnit4/archive/refs/tags/v6.2.1.zip` (репозиторий переехал в `godot-gdunit-labs/gdUnit4`), sha256 архива `ffb48847c46f386bf0c7a716fd68c6dace7d67730775cf7f748adce8ef3ed794`. Проверка обновлений в редакторе отключена (`gdunit4/settings/common/update_notification_enabled=false`). Аддон и `tests/` исключаются из экспортных сборок.
+*   **gdUnit4** v6.2.1 в `3d-shooter/addons/gdUnit4/`, закоммичен в репозиторий. Источник: архив тега `https://github.com/MikeSchulze/gdUnit4/archive/refs/tags/v6.2.1.zip` (репозиторий переехал в `godot-gdunit-labs/gdUnit4`), sha256 архива `ffb48847c46f386bf0c7a716fd68c6dace7d67730775cf7f748adce8ef3ed794`. Проверка обновлений в редакторе отключена (`gdunit4/settings/common/update_notification_enabled=false`). Аддон и `tests/` (включая фикстуры) должны исключаться из экспортных сборок; фильтр и проверка состава `.pck` настраиваются вместе с экспортным пресетом в M6 (см. [follow-ups](docs/notes/follow-ups.md)).
 
 ---
 
