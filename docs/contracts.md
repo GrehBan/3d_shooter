@@ -147,8 +147,8 @@
 
 Ошибки конфигурации: `RoomCombat.new(host_capacity)` вне `1..StatBlock.MAX_CAPACITY` и
 `MobilityRuntime.new(null)` пишут `push_error` и оставляют объект неинициализированным
-(`is_initialized() == false`); неинициализированный `MobilityRuntime` в `logic_step`,
-`reset_clock` и `grant_content` ничего не делает и возвращает отказ. Sandbox в этом случае
+(`is_initialized() == false`); неинициализированный `MobilityRuntime` ничего не делает в
+`logic_step` и `reset_clock` (оба `void`), а `grant_content` возвращает `false`. Sandbox в этом случае
 прерывает загрузку комнаты.
 
 Сброс комнаты (`Sandbox.reset_mobility_clock`) `StatBlock` не сбрасывает: сущности, их
@@ -516,7 +516,9 @@ reset_dropped_count сбрасывает только счётчик. Ненул
 Физическое преобразование height→mm = буквальный floor без epsilon; значения binary
 float непосредственно ниже границы остаются ниже (decimal 8.001 может дать 8000).
 Сам resolver и Python golden получают целые mm и проверяют 7999/8000/8001 bit-exact.
-Максимальная float height квантуется с cap выше; NaN/Inf/отрицательная высота дают 0.
+Высота, которая в мм достигает cap или превышает его, возвращает точный целый cap
+`922337203685485580` (без перевода cap через float, который дал бы на 12 мм меньше);
+NaN/Inf/отрицательная высота дают 0.
 Порядок входных событий от Jolt не обещан bit-exact; integer apply одинаков для одного
 и того же последовательного event stream. Очередь не переносит HP-логику в физику.
 
@@ -625,8 +627,8 @@ duplicate guard, новый room epoch и согласованная shot sequen
 комнаты; при отказе любого шага сброса или загрузки он не испускается.
 Отказать при сбросе могут только `ShotResolver.reset_room()` (исчерпан epoch) и
 `ShotVisualPool.reset_room(epoch)` (epoch не новее текущего); оба возвращают `bool`, и Sandbox
-прерывает комнату без `room_entered`. `EffectRunner.reset_room()`, `HitscanWeapon.reset_clock()`
-и `MobilityRuntime.reset_clock()` возвращают `void` и пути отказа не имеют.
+прерывает комнату без `room_entered`. `EffectRunner.reset_room()`, `HitscanWeapon.reset_clock()`,
+`MobilityRuntime.reset_clock()` и `GameLoop.reset_clock()` возвращают `void` и пути отказа не имеют.
 Identity reset не должен смешивать старые и новые записи комнаты. Существующий
 `MovementAbilities.rebase_clock` сохраняет оставшийся cooldown относительно ТОЧНОГО
 old tick, включая physics activation до первого logic_step; energy/grants и физический

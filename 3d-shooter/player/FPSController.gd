@@ -307,8 +307,12 @@ func _try_slide() -> bool:
 
 
 ## Physics boundary only. No epsilon: 7999/8000/8001 millimetres stay distinct.
+## Heights at or above the cap return the exact integer cap: float(MAX_HEIGHT_MM) rounds
+## to 922337203685485568, 12 mm below it, so the cap is never converted through float.
 static func quantize_height_mm(height_m: float) -> int:
 	if not is_finite(height_m) or height_m <= 0.0:
 		return 0
-	return clampi(int(floor(minf(height_m * 1000.0,
-			float(LandingEventQueue.MAX_HEIGHT_MM)))), 0, LandingEventQueue.MAX_HEIGHT_MM)
+	var height_mm: float = height_m * 1000.0
+	if height_mm >= float(LandingEventQueue.MAX_HEIGHT_MM):
+		return LandingEventQueue.MAX_HEIGHT_MM
+	return clampi(int(floor(height_mm)), 0, LandingEventQueue.MAX_HEIGHT_MM)
