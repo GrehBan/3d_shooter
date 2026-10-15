@@ -7,6 +7,8 @@ signal on_hit(source: int, target: int, epoch: int, sequence: int, trace: int, c
 signal on_kill(source: int, target: int, epoch: int, sequence: int, trace: int)
 signal on_attack_resolved(source: int, epoch: int, sequence: int, root: int)
 
+const NO_SLOT: int = -1
+
 var contexts: AttackContextPool
 var damage_pipeline: DamagePipeline
 var resolved_shots: int = 0
@@ -23,7 +25,9 @@ var _source: PackedInt64Array = PackedInt64Array()
 var _sequence: PackedInt64Array = PackedInt64Array()
 var _epoch: PackedInt64Array = PackedInt64Array()
 var _owned: PackedInt64Array = PackedInt64Array()
-var _owned_root: PackedInt64Array = PackedInt64Array()
+# Intrusive list of owned slots per root slot: final close clears only its own tree.
+var _owned_head: PackedInt32Array = PackedInt32Array()
+var _owned_next: PackedInt32Array = PackedInt32Array()
 
 
 func _init(stats: StatBlock, batch: ShotBatch, capacity: int) -> void:
@@ -39,8 +43,10 @@ func _init(stats: StatBlock, batch: ShotBatch, capacity: int) -> void:
 	_epoch.resize(capacity)
 	_owned.resize(capacity)
 	_owned.fill(AttackContextPool.INVALID_HANDLE)
-	_owned_root.resize(capacity)
-	_owned_root.fill(AttackContextPool.INVALID_HANDLE)
+	_owned_head.resize(capacity)
+	_owned_head.fill(NO_SLOT)
+	_owned_next.resize(capacity)
+	_owned_next.fill(NO_SLOT)
 
 
 func logic_step(tick: int) -> void:
@@ -62,7 +68,8 @@ func _resolve(shot: int) -> void:
 		return
 	var slot: int = root % HandlePool.INDEX_SPAN
 	_owned[slot] = root
-	_owned_root[slot] = root
+	_owned_next[slot] = NO_SLOT
+	_owned_head[slot] = slot
 	_root[slot] = root
 	_source[slot] = source
 	_sequence[slot] = _batch.sequence_at(shot)
@@ -117,10 +124,13 @@ func close_context(context: int) -> bool:
 	if not contexts.close(context):
 		return false
 	_root[slot] = AttackContextPool.INVALID_HANDLE
-	for index: int in _owned.size():
-		if _owned_root[index] == root:
-			_owned[index] = AttackContextPool.INVALID_HANDLE
-			_owned_root[index] = AttackContextPool.INVALID_HANDLE
+	var index: int = _owned_head[slot]
+	while index != NO_SLOT:
+		var next_index: int = _owned_next[index]
+		_owned[index] = AttackContextPool.INVALID_HANDLE
+		_owned_next[index] = NO_SLOT
+		index = next_index
+	_owned_head[slot] = NO_SLOT
 	resolved_shots += 1
 	on_attack_resolved.emit(source, room_epoch, sequence, root)
 	return true
@@ -134,8 +144,10 @@ func open_child(parent: int) -> int:
 	var child: int = contexts.open_child(parent)
 	if child != AttackContextPool.INVALID_HANDLE:
 		var slot: int = child % HandlePool.INDEX_SPAN
+		var root_slot: int = root % HandlePool.INDEX_SPAN
 		_owned[slot] = child
-		_owned_root[slot] = root
+		_owned_next[slot] = _owned_head[root_slot]
+		_owned_head[root_slot] = slot
 	return child
 
 
@@ -147,7 +159,8 @@ func reset_room() -> bool:
 		if contexts.is_valid(handle):
 			contexts.close(handle)
 	_owned.fill(AttackContextPool.INVALID_HANDLE)
-	_owned_root.fill(AttackContextPool.INVALID_HANDLE)
+	_owned_head.fill(NO_SLOT)
+	_owned_next.fill(NO_SLOT)
 	_root.fill(AttackContextPool.INVALID_HANDLE)
 	contexts.reset_counters()
 	_payloads.clear()

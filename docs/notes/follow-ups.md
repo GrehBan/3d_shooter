@@ -41,9 +41,6 @@
   физическом тике (как `MovementAbilities.try_activate`), `DamagePipeline` по дробине
   без пакетной обработки до сигнала профайлера (п. 6, 8). Одновременно сделать
   `CLAUDE.md` нейтральным к инструменту и перенести особенности Codex в `AGENTS.md` (п. 3).
-* Визуал мёртвых целей — через событие, а не из `logic_tick`; сброс комнаты испускает
-  `room_*` через `EventBus`; `ShotResolver.close_context` без обхода всей ёмкости
-  (п. 9, 10, 12).
 * Владелец `StatBlock` — комната (`RoomCombat` или аналог), `MobilityRuntime` получает
   ссылку (п. 7).
 * Unit-тесты аллокаций для `ShotResolver`, `ShotBatch`, `WeaponState`,
