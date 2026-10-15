@@ -33,7 +33,7 @@ func _process(delta: float) -> void:
 	var yaw_rate: float = 0.0
 	var pitch_rate: float = 0.0
 	if _has_previous:
-		var turn: Vector3 = (_previous_basis.inverse() * displayed).get_euler()
+		var turn: Vector3 = (_previous_basis.transposed() * displayed).get_euler()
 		yaw_rate = turn.y / delta
 		pitch_rate = turn.x / delta
 	_previous_basis = displayed

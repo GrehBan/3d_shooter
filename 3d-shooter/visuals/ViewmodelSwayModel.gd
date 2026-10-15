@@ -28,6 +28,8 @@ var _sway: Vector2 = Vector2.ZERO
 func step(delta: float, speed: float, grounded: bool, yaw_rate: float, pitch_rate: float) -> void:
 	if not (delta > 0.0) or not is_finite(delta):
 		return
+	if not is_finite(speed):
+		speed = 0.0  # a NaN would otherwise stick in the smoothed weight forever
 	var blend: float = 1.0 - exp(-response * delta)
 	var target_weight: float = clampf(speed / reference_speed, 0.0, 1.0) if grounded else 0.0
 	_bob_weight = lerpf(_bob_weight, target_weight, blend)

@@ -53,20 +53,41 @@ func test_look_sway_is_bounded() -> void:
 
 
 func test_same_motion_gives_same_pose_at_30_60_144_fps() -> void:
-	var poses: Array[Vector3] = []
-	var cameras: Array[Vector2] = []
+	# Poses are compared while they are large (end of walking, end of turning), before
+	# anything decays; a per-frame lerp that depends on the frame rate fails this test.
+	var walk_poses: Array[Vector3] = []
+	var turn_poses: Array[Vector3] = []
+	var walk_cameras: Array[Vector2] = []
+	var turn_cameras: Array[Vector2] = []
 	for fps: int in [30, 60, 144]:
 		var model := ViewmodelSwayModel.new()
 		var delta: float = 1.0 / float(fps)
 		_run(model, delta, 1.0, 8.0, true)
+		walk_poses.append(model.offset)
+		walk_cameras.append(model.camera_offset)
 		_run(model, delta, 0.5, 6.0, true, 2.0, 0.5)
-		_run(model, delta, 0.5, 6.0, false)
-		poses.append(model.offset)
-		cameras.append(model.camera_offset)
-	assert_float((poses[0] - poses[1]).length()).is_less(0.001)
-	assert_float((poses[2] - poses[1]).length()).is_less(0.001)
-	assert_float((cameras[0] - cameras[1]).length()).is_less(0.001)
-	assert_float((cameras[2] - cameras[1]).length()).is_less(0.001)
+		turn_poses.append(model.offset)
+		turn_cameras.append(model.camera_offset)
+	for poses: Array[Vector3] in [walk_poses, turn_poses]:
+		assert_float(poses[1].length()).is_greater(0.003)
+		assert_float((poses[0] - poses[1]).length()).is_less(0.0001)
+		assert_float((poses[2] - poses[1]).length()).is_less(0.0001)
+	for cameras: Array[Vector2] in [walk_cameras, turn_cameras]:
+		assert_float((cameras[0] - cameras[1]).length()).is_less(0.0001)
+		assert_float((cameras[2] - cameras[1]).length()).is_less(0.0001)
+
+
+func test_non_finite_speed_does_not_stick() -> void:
+	var model := ViewmodelSwayModel.new()
+	_run(model, 1.0 / 60.0, 0.5, 8.0, true)
+	model.step(1.0 / 60.0, NAN, true, 0.0, 0.0)
+	model.step(1.0 / 60.0, INF, true, NAN, INF)
+	var finite_after_bad_frame: bool = model.offset.is_finite() and model.camera_offset.is_finite()
+	_run(model, 1.0 / 60.0, 2.0, 0.0, true)
+	assert_bool(finite_after_bad_frame).is_true()
+	assert_bool(is_finite(model.roll)).is_true()
+	assert_float(model.offset.length()).is_less(EPSILON)
+	assert_float(model.camera_offset.length()).is_less(EPSILON)
 
 
 func test_camera_bob_is_clamped_and_rests_at_zero() -> void:
@@ -133,6 +154,7 @@ func test_sway_never_moves_camera_weapon_or_rays() -> void:
 	for index: int in rays_after.size():
 		assert_bool(rays_after[index].is_equal_approx(rays_before[index])).is_true()
 	assert_float(absf(camera.v_offset)).is_less_equal(ViewmodelSwayModel.CAMERA_BOB_LIMIT_M)
+	assert_float(absf(camera.h_offset)).is_less_equal(ViewmodelSwayModel.CAMERA_BOB_LIMIT_M)
 
 
 func test_frame_step_does_not_allocate() -> void:

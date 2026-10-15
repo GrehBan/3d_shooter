@@ -89,7 +89,7 @@ run_real_pipeline() {
 # remove the emptied report directories and floods the log with "Delete ... failed". Start
 # from an empty report directory instead; reports are build output and ignored by git.
 run_tests() {
-	rm -rf "$PROJECT_DIR/reports"
+	rm -rf "${PROJECT_DIR:?}/reports"
 	run_step tests -s addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode --add res://tests/
 }
 
