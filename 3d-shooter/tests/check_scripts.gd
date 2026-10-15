@@ -22,13 +22,17 @@ func _initialize() -> void:
 			continue  # перезагрузка выполняющегося скрипта ломает VM
 		checked += 1
 		var script: Script = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as Script
-		# TODO(первый @abstract-класс): can_instantiate() у абстрактного класса
-		# вернёт false, тогда проверять только ошибку загрузки.
-		if script == null or not script.can_instantiate():
+		if not is_loadable(script):
 			printerr("CHECK FAIL: %s" % path)
 			failed += 1
 	print("CHECK scripts=%d failed=%d" % [checked, failed])
 	quit(1 if failed > 0 else 0)
+
+
+## Скрипт загружен без ошибок разбора. Абстрактный (`@abstract`) класс нельзя
+## инстанцировать по определению, поэтому для него достаточно успешной загрузки.
+static func is_loadable(script: Script) -> bool:
+	return script != null and (script.is_abstract() or script.can_instantiate())
 
 
 func _collect_scripts(dir_path: String, out: PackedStringArray) -> void:
