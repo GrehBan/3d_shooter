@@ -202,4 +202,3 @@ func test_phase_metrics_count_logic_ticks_and_reset_with_the_room() -> void:
 	assert_bool(consistent).is_true()
 	assert_int(_scene.call(&"phase_steps")).is_equal(0)  # the room reset clears diagnostics
 	assert_int(_scene.call(&"phase_sum_usec", 0)).is_equal(0)
-
