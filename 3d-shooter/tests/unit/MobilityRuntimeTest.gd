@@ -321,6 +321,7 @@ func test_null_room_stats_leave_mobility_inert() -> void:
 	assert_int(_made_mobility.logic_steps).is_equal(0)
 	_made_mobility.reset_clock(5)
 	assert_object(_made_mobility.abilities).is_null()  # reset neither crashes nor builds stores
+	assert_object(_made_mobility.landings).is_null()
 	# The same preset on an initialized runtime is accepted.
 	var runtime := MobilityRuntime.new(StatBlock.new(1))
 	assert_bool(runtime.grant_content(runtime.stats.allocate(), registry, category)).is_true()

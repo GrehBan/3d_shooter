@@ -32,6 +32,8 @@ func after_test() -> void:
 
 
 ## ObjectDB validator of a fresh probe object; the probe itself is freed immediately.
+## Objects created by other engine threads inside the window can only make the count larger:
+## they may cause a false failure but never hide a leak of the code under test.
 static func _validator_now() -> int:
 	return (RefCounted.new().get_instance_id() >> VALIDATOR_SHIFT) & VALIDATOR_MASK
 
@@ -45,7 +47,7 @@ func _begin() -> void:
 
 ## [retained objects, retained nodes, static memory growth, objects created in the window]
 func _deltas() -> PackedInt64Array:
-	var created: int = _validator_now() - _validator - 1
+	var created: int = ((_validator_now() - _validator) & VALIDATOR_MASK) - 1
 	return PackedInt64Array([
 		int(Performance.get_monitor(Performance.OBJECT_COUNT)) - _objects,
 		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)) - _nodes,
@@ -217,10 +219,14 @@ func test_landing_event_queue_suppressed_overflow() -> void:
 	for event: int in 4:
 		queue.push(event, 9000, 0)
 	# The first refusal reports once; later refusals only count until clear().
-	await assert_error(func() -> void: queue.push(9, 9000, 0)).is_push_error(
-			"LandingEventQueue: overflow, landing event dropped")
-	for i: int in WARMUP:
-		queue.push(9, 9000, 0)
+	var notification: GdUnitGodotErrorAssert = assert_error(func() -> void:
+		for i: int in WARMUP:
+			queue.push(9, 9000, 0)
+	)
+	await notification.is_push_error("LandingEventQueue: overflow, landing event dropped")
+	# gdUnit4 6.2.1 matches a message but does not count them; read its pinned logger.
+	var logger: GodotGdErrorMonitor.GdUnitLogger = notification.get("_logger")
+	assert_int(logger.entries().size()).is_equal(1)
 	queue.reset_dropped_count()
 	_begin()
 	for i: int in MEASURED:
@@ -259,10 +265,10 @@ func test_shot_visual_pool_through_real_shot_signal() -> void:
 	pool.set_physics_process(false)
 	pool.set_process(false)
 	await get_tree().physics_frame  # register the wall in the physics space
-	var marks_before: int = 0
+	var reused_before: int = 0
 	for i: int in WARMUP + MEASURED:
 		if i == WARMUP:
-			marks_before = pool.reused_count
+			reused_before = pool.reused_count
 			_begin()
 		if i % 30 == 0:
 			# The production route: input edge -> weapon physics step -> shot_presented -> pool.
@@ -280,6 +286,7 @@ func test_shot_visual_pool_through_real_shot_signal() -> void:
 	_assert_no_growth(deltas)
 	assert_int(pool.dropped_count).is_equal(0)
 	assert_int(pool.configuration_errors).is_equal(0)
-	assert_int(pool.reused_count - marks_before).is_greater(MEASURED / 30)
+	# Warmup fills every slot, so each of the 120 shots reuses 1 muzzle + 8 impacts + 8 marks.
+	assert_int(pool.reused_count - reused_before).is_equal(MEASURED / 30 * 17)
 	assert_int(pool.active_count(ShotVisualPool.Kind.MARK)).is_greater(0)  # rays hit the wall
 	assert_int(batch.configuration_errors).is_equal(0)
