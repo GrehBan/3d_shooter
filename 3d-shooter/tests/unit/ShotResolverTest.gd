@@ -199,6 +199,10 @@ func test_final_close_releases_only_its_own_tree_ownership() -> void:
 	assert_int(_resolver.resolved_shots).is_equal(0)
 	var second_root: int = _resolver.contexts.root_of(_held[1])
 	assert_int(_resolver.owned_count(second_root)).is_equal(3)  # root, pellet, held child
+	var first_root: int = _resolver.contexts.root_of(_held[0])
+	var first_slots := PackedInt64Array([first_root % HandlePool.INDEX_SPAN,
+			_resolver.contexts.parent_of(_held[0]) % HandlePool.INDEX_SPAN,
+			_held[0] % HandlePool.INDEX_SPAN])
 	assert_bool(_resolver.close_context(_held[0])).is_true()
 	assert_int(_resolver.resolved_shots).is_equal(1)
 	# A third shot reuses the first tree's freed slots while the second tree is alive.
@@ -206,6 +210,7 @@ func test_final_close_releases_only_its_own_tree_ownership() -> void:
 	_resolver.logic_step(1)
 	assert_int(_held.size()).is_equal(3)
 	var third_root: int = _resolver.contexts.root_of(_held[2])
+	assert_bool(first_slots.has(third_root % HandlePool.INDEX_SPAN)).is_true()  # slot reuse is real
 	assert_int(_resolver.owned_count(third_root)).is_equal(3)
 	assert_int(_resolver.owned_count(second_root)).is_equal(3)
 	# The second tree keeps its ownership after the first tree's final close and slot reuse.
