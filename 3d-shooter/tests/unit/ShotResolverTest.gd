@@ -10,6 +10,7 @@ var _seen_roots: PackedInt64Array
 var _completion: PackedInt64Array
 var _deferred: int = -1
 var _heal_on_hit: bool = false
+var _held: PackedInt64Array
 
 
 func before_test() -> void:
@@ -25,6 +26,7 @@ func before_test() -> void:
 	_completion = PackedInt64Array()
 	_deferred = -1
 	_heal_on_hit = false
+	_held = PackedInt64Array()
 	_resolver.on_fire.connect(_on_fire)
 	_resolver.on_hit.connect(_on_hit)
 	_resolver.on_attack_resolved.connect(_on_resolved)
@@ -180,3 +182,47 @@ func test_apply_kill_transition_is_snapshotted_before_onhit_healing() -> void:
 	_resolver.logic_step(0)
 	assert_int(_resolver.kills).is_equal(1)
 	assert_int(_stats.get_stat(_target, StatBlock.Stat.HP)).is_equal(10000)
+
+
+func _hold_every_hit(_source: int, _target_handle: int, _epoch: int, _sequence: int,
+		_trace: int, child: int, _damage: int) -> void:
+	_held.append(_resolver.open_child(child))
+
+
+func test_final_close_releases_only_its_own_tree_ownership() -> void:
+	_stats.set_stat(_target, StatBlock.Stat.HP, 100000)
+	_resolver.on_hit.connect(_hold_every_hit)
+	_shot(_target, 1)
+	_shot(_target, 1)
+	_resolver.logic_step(0)
+	assert_int(_held.size()).is_equal(2)
+	assert_int(_resolver.resolved_shots).is_equal(0)
+	var second_root: int = _resolver.contexts.root_of(_held[1])
+	assert_int(_resolver.owned_count(second_root)).is_equal(3)  # root, pellet, held child
+	var first_root: int = _resolver.contexts.root_of(_held[0])
+	var first_slots := PackedInt64Array([first_root % HandlePool.INDEX_SPAN,
+			_resolver.contexts.parent_of(_held[0]) % HandlePool.INDEX_SPAN,
+			_held[0] % HandlePool.INDEX_SPAN])
+	assert_bool(_resolver.close_context(_held[0])).is_true()
+	assert_int(_resolver.resolved_shots).is_equal(1)
+	# A third shot reuses the first tree's freed slots while the second tree is alive.
+	_shot(_target, 1)
+	_resolver.logic_step(1)
+	assert_int(_held.size()).is_equal(3)
+	var third_root: int = _resolver.contexts.root_of(_held[2])
+	assert_bool(first_slots.has(third_root % HandlePool.INDEX_SPAN)).is_true()  # slot reuse is real
+	assert_int(_resolver.owned_count(third_root)).is_equal(3)
+	assert_int(_resolver.owned_count(second_root)).is_equal(3)
+	# The second tree keeps its ownership after the first tree's final close and slot reuse.
+	var nested: int = _resolver.open_child(_held[1])
+	assert_int(nested).is_not_equal(AttackContextPool.INVALID_HANDLE)
+	assert_int(_resolver.owned_count(second_root)).is_equal(4)
+	assert_bool(_resolver.close_context(_held[1])).is_false()
+	assert_bool(_resolver.close_context(nested)).is_true()
+	assert_int(_resolver.owned_count(second_root)).is_equal(0)
+	assert_int(_resolver.owned_count(third_root)).is_equal(3)
+	assert_bool(_resolver.close_context(_held[2])).is_true()
+	assert_int(_resolver.owned_count(third_root)).is_equal(0)
+	assert_int(_resolver.resolved_shots).is_equal(3)
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
+	assert_bool(_resolver.reset_room()).is_true()

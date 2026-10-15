@@ -34,13 +34,12 @@
 
 ### Решения по [аудиту 2026-10-15](audit-2026-10-15.md)
 
-* Визуал мёртвых целей — через событие, а не из `logic_tick`; сброс комнаты испускает
-  `room_*` через `EventBus`; `ShotResolver.close_context` без обхода всей ёмкости
-  (п. 9, 10, 12).
-* Владелец `StatBlock` — комната (`RoomCombat` или аналог), `MobilityRuntime` получает
-  ссылку (п. 7).
-* Unit-тесты аллокаций для `ShotResolver`, `ShotBatch`, `WeaponState`,
-  `LandingEventQueue`, `ShotVisualPool`.
+* **M2.3:** `RoomCombat.reset_room()` и тест отсутствия аллокаций при сбросе появляются
+  вместе с состоянием комнаты (`StatusRuntime`, `ReactionRuntime`, ресурс конфигурации
+  комнаты); `StatBlock` при сбросе комнаты не сбрасывается.
+* **M2.3:** перекраску мёртвых целей сейчас запускает только `ShotResolver.on_kill`;
+  убийства пульсами статусов (`StatusRuntime.on_pulse_kill` в снимке M2.3) и вторичным
+  уроном реакций при переносе нужно провести в тот же путь.
 * Мёртвая маска статусов `StatBlock` — убирается вместе с переносом M2.3: источник
   истины статусов — `StatusRuntime` с O(1) `has_status`; golden и модель `StatBlock`
   обновляются (п. 11).

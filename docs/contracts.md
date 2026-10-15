@@ -135,6 +135,27 @@
   ожидаемым типам: отказ с `push_error` и `false`, прежнее состояние полностью сохранено.
   При верных типах проверяются ёмкость, размеры, счётчики, free-list, флаги и поколения.
 
+### RoomCombat (`combat/RoomCombat.gd`)
+
+Владелец боевых хранилищ комнаты. `RoomCombat.new(host_capacity)` создаётся холодно при
+загрузке комнаты и создаёт единственный `StatBlock` комнаты; поле `stats` не
+переназначается. Остальные runtime комнаты (`MobilityRuntime`, `EffectRunner`,
+`ShotResolver`, `HitscanWeapon`) получают ссылку на `combat.stats` и сами `StatBlock` не
+создают: `MobilityRuntime.new(room_stats, landing_capacity)`. `EffectHost` `StatBlock` не
+получает, его ёмкость задаётся числом хостов. Обращения к `combat.stats` в горячем пути не
+выделяют память.
+
+Ошибки конфигурации: `RoomCombat.new(host_capacity)` вне `1..StatBlock.MAX_CAPACITY` и
+`MobilityRuntime.new(null)` пишут `push_error` и оставляют объект неинициализированным
+(`is_initialized() == false`); неинициализированный `MobilityRuntime` в `logic_step`,
+`reset_clock` и `grant_content` ничего не делает и возвращает отказ. Sandbox в этом случае
+прерывает загрузку комнаты.
+
+Сброс комнаты (`Sandbox.reset_mobility_clock`) `StatBlock` не сбрасывает: сущности, их
+статы и handle переживают сброс, жизненный цикл сущности отдельный (§6, §7). Поэтому у
+`RoomCombat` пока нет `reset_room()`; он появится вместе с состоянием комнаты, которое нужно
+сбрасывать (статусы и реакции M2.3, конфигурация комнаты), с тестом отсутствия аллокаций.
+
 ### DamagePayload и DamagePayloadBuffer (`combat/`)
 
 * `DamagePayload` — словарь: `Phase` (Base → Add → Multiply → Element → Crit → Mitigation →
@@ -577,8 +598,11 @@ Root удерживается открытым до обработки всех 
 Для miss root закрывается без children и также даёт ровно один `OnAttackResolved`.
 Отложенные владельцы создают child только через `ShotResolver.open_child(parent)`
 и закрывают через `close_context(handle)`; прямые мутации его AttackContextPool
-нарушают ownership. Предвыделенный реестр owned handles/root обеспечивает reset,
-не расширяя API существующего AttackContextPool. Read-only inspection пула разрешён.
+нарушают ownership. Предвыделенный реестр owned handles обеспечивает reset, не расширяя
+API существующего AttackContextPool: слоты каждого дерева связаны интрузивным списком от
+слота root, поэтому final close очищает владение за O(размер дерева), а не за O(ёмкость).
+Read-only `ShotResolver.owned_count(root)` показывает длину этого списка для проверок.
+Read-only inspection пула разрешён.
 Факт HP>0→0 снимается сразу после Apply до синхронных OnHit listeners: их последующее
 исцеление/освобождение цели не стирает OnKill этого Apply.
 
@@ -595,8 +619,14 @@ Room reset координируется этим же владельцем: capt
 `GameLoop.get_logic_tick()` → reset shot resolver/ShotBatch (pending, diagnostic counters,
 duplicate guard, новый room epoch и согласованная shot sequence) →
 `EffectRunner.reset_room()` только после успешного resolver reset →
-`weapon.reset_clock(old_tick)` для каждого оружия →
-`MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()`.
+`weapon.reset_clock(old_tick)` для каждого оружия → `ShotVisualPool.reset_room(epoch)` →
+`MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()` →
+`EventBus.room_entered(room_id)`. Тот же сигнал испускается после успешной загрузки
+комнаты; при отказе любого шага сброса или загрузки он не испускается.
+Отказать при сбросе могут только `ShotResolver.reset_room()` (исчерпан epoch) и
+`ShotVisualPool.reset_room(epoch)` (epoch не новее текущего); оба возвращают `bool`, и Sandbox
+прерывает комнату без `room_entered`. `EffectRunner.reset_room()`, `HitscanWeapon.reset_clock()`
+и `MobilityRuntime.reset_clock()` возвращают `void` и пути отказа не имеют.
 Identity reset не должен смешивать старые и новые записи комнаты. Существующий
 `MovementAbilities.rebase_clock` сохраняет оставшийся cooldown относительно ТОЧНОГО
 old tick, включая physics activation до первого logic_step; energy/grants и физический
@@ -642,7 +672,11 @@ capture intent и не доказывают доставку событий ОС
 
 Sandbox содержит три видимые статические damageable цели, mesh оружия и фиксированный
 прицел. Убитые цели становятся серыми общим cold material, остаются видимыми и сохраняют
-collider/full handle. Это inspectable death/no-op полигон, не enemy FSM/контент M2.
+collider/full handle. Логический тик визуал не трогает: `ShotResolver.on_kill` только
+помечает цель, а материал меняется в ближайшем `_process` Sandbox. Цель с HP 0 без
+события убийства не перекрашивается. Сброс комнаты пометки и материал не снимает: цели и их HP
+переживают сброс, мёртвая цель остаётся серой. Это inspectable death/no-op полигон, не enemy
+FSM/контент M2.
 
 Unit/golden/Jolt/аллокационные проверки и команды заданы в
 [плане пакета 3](m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий).
