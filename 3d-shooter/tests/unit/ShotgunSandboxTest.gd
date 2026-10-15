@@ -4,12 +4,24 @@ const SANDBOX: PackedScene = preload("res://world/sandbox/Sandbox.tscn")
 var _scene: Node3D
 var _hp_on_hit: int
 var _energy_on_hit: int
+var _entered_rooms: PackedInt64Array = PackedInt64Array()
+
+
+func before_test() -> void:
+	_entered_rooms = PackedInt64Array()
+	EventBus.room_entered.connect(_on_room_entered)
 
 
 func after_test() -> void:
+	if EventBus.room_entered.is_connected(_on_room_entered):
+		EventBus.room_entered.disconnect(_on_room_entered)
 	if is_instance_valid(_scene):
 		_scene.free()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _on_room_entered(room_id: int) -> void:
+	_entered_rooms.append(room_id)
 
 
 func test_invalid_weapon_disables_complete_room_before_runtime_and_subscription() -> void:
@@ -24,6 +36,7 @@ func test_invalid_weapon_disables_complete_room_before_runtime_and_subscription(
 	assert_object(_scene.get(&"mobility")).is_null()
 	assert_object(_scene.get(&"shots")).is_null()
 	assert_object(_scene.get(&"resolver")).is_null()
+	assert_array(_entered_rooms).is_empty()
 
 
 func _hit(_source: int, _target: int, _epoch: int, _sequence: int, _trace: int,
@@ -78,18 +91,10 @@ func test_invalid_visual_disables_room_before_stores_binding_or_subscription() -
 	assert_object(_scene.get(&"resolver")).is_null()
 	assert_object(_scene.get(&"visuals")).is_null()
 	assert_bool((_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).is_initialized()).is_false()
-
-
-var _entered_rooms: PackedInt64Array = PackedInt64Array()
-
-
-func _on_room_entered(room_id: int) -> void:
-	_entered_rooms.append(room_id)
+	assert_array(_entered_rooms).is_empty()
 
 
 func test_kill_event_greys_target_in_frame_and_reset_announces_room() -> void:
-	_entered_rooms = PackedInt64Array()
-	EventBus.room_entered.connect(_on_room_entered)
 	_scene = SANDBOX.instantiate() as Node3D
 	_scene.set(&"room_id", 7)
 	(_scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
@@ -111,8 +116,20 @@ func test_kill_event_greys_target_in_frame_and_reset_announces_room() -> void:
 	var after_frame: Material = mesh.material_override
 	var untouched: Material = (_scene.get_node(^"Targets").get_child(1).get_child(1) as MeshInstance3D).material_override
 	_scene.call(&"reset_mobility_clock")
-	EventBus.room_entered.disconnect(_on_room_entered)
 	assert_object(after_logic).is_null()  # the logic tick does not touch visuals
 	assert_object(after_frame).is_not_null()
 	assert_object(untouched).is_null()  # HP 0 without a kill event is not repainted
 	assert_array(_entered_rooms).is_equal(PackedInt64Array([7, 7]))
+	assert_object(mesh.material_override).is_not_null()  # targets and HP survive reset
+
+
+func test_refused_room_reset_does_not_announce_room() -> void:
+	_scene = SANDBOX.instantiate() as Node3D
+	(_scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
+	(_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
+	add_child(_scene)
+	var shots: ShotBatch = _scene.get(&"shots") as ShotBatch
+	shots.epoch = ShotBatch.INT_MAX
+	await assert_error(func() -> void: _scene.call(&"reset_mobility_clock")).is_push_error(
+			"Sandbox: room epoch exhausted")
+	assert_array(_entered_rooms).is_equal(PackedInt64Array([0]))  # only the successful load

@@ -110,6 +110,22 @@ func damage_configuration_errors() -> int:
 	return _payloads.dropped_count() + damage_pipeline.configuration_errors
 
 
+## Read-only inspection: owned slots listed at this root's slot. A released root's list is
+## empty; 0 is also returned when another live root now occupies the slot.
+func owned_count(root: int) -> int:
+	if root < 0:
+		return 0
+	var slot: int = root % HandlePool.INDEX_SPAN
+	if slot >= _root.size() or (_root[slot] != root and _root[slot] != AttackContextPool.INVALID_HANDLE):
+		return 0
+	var count: int = 0
+	var index: int = _owned_head[slot]
+	while index != NO_SLOT:
+		count += 1
+		index = _owned_next[index]
+	return count
+
+
 ## Deferred owners must close through this boundary so final completion retains metadata.
 func close_context(context: int) -> bool:
 	var root: int = contexts.root_of(context)
