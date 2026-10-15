@@ -41,6 +41,9 @@
   ссылку (п. 7).
 * Unit-тесты аллокаций для `ShotResolver`, `ShotBatch`, `WeaponState`,
   `LandingEventQueue`, `ShotVisualPool`.
+* **M2.3:** перекраску мёртвых целей сейчас запускает только `ShotResolver.on_kill`;
+  убийства пульсами статусов (`StatusRuntime.on_pulse_kill` в снимке M2.3) и вторичным
+  уроном реакций при переносе нужно провести в тот же путь.
 * Мёртвая маска статусов `StatBlock` — убирается вместе с переносом M2.3: источник
   истины статусов — `StatusRuntime` с O(1) `has_status`; golden и модель `StatBlock`
   обновляются (п. 11).
