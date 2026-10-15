@@ -602,6 +602,10 @@ duplicate guard, новый room epoch и согласованная shot sequen
 `MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()` →
 `EventBus.room_entered(room_id)`. Тот же сигнал испускается после успешной загрузки
 комнаты; при отказе любого шага сброса или загрузки он не испускается.
+Отказать при сбросе могут только `ShotResolver.reset_room()` (исчерпан epoch) и
+`ShotVisualPool.reset_room(epoch)` (epoch не новее текущего); оба возвращают `bool`, и Sandbox
+прерывает комнату без `room_entered`. `EffectRunner.reset_room()`, `HitscanWeapon.reset_clock()`
+и `MobilityRuntime.reset_clock()` возвращают `void` и пути отказа не имеют.
 Identity reset не должен смешивать старые и новые записи комнаты. Существующий
 `MovementAbilities.rebase_clock` сохраняет оставшийся cooldown относительно ТОЧНОГО
 old tick, включая physics activation до первого logic_step; energy/grants и физический

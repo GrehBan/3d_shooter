@@ -115,7 +115,9 @@ func test_kill_event_greys_target_in_frame_and_reset_announces_room() -> void:
 	_scene.call(&"_process", 0.0)
 	var after_frame: Material = mesh.material_override
 	var untouched: Material = (_scene.get_node(^"Targets").get_child(1).get_child(1) as MeshInstance3D).material_override
+	var epoch_before: int = shots.epoch
 	_scene.call(&"reset_mobility_clock")
+	assert_int(shots.epoch).is_equal(epoch_before + 1)  # the reset ran to the end
 	assert_object(after_logic).is_null()  # the logic tick does not touch visuals
 	assert_object(after_frame).is_not_null()
 	assert_object(untouched).is_null()  # HP 0 without a kill event is not repainted
@@ -130,7 +132,6 @@ func test_kill_mark_pending_at_reset_is_applied_on_next_frame() -> void:
 	(_scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
 	(_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
 	add_child(_scene)
-	_scene.set_process(false)  # only the explicit frame below may apply marks
 	var mobility: MobilityRuntime = _scene.get(&"mobility") as MobilityRuntime
 	var shots: ShotBatch = _scene.get(&"shots") as ShotBatch
 	var player: int = _scene.get(&"player_handle")
@@ -142,8 +143,11 @@ func test_kill_mark_pending_at_reset_is_applied_on_next_frame() -> void:
 	shots.publish(ticket)
 	_scene.call(&"_on_logic_tick", GameLoop.get_logic_tick() + 1)
 	var before_reset: Material = mesh.material_override
+	var epoch_before: int = shots.epoch
 	_scene.call(&"reset_mobility_clock")
 	var after_reset: Material = mesh.material_override
+	assert_int(shots.epoch).is_equal(epoch_before + 1)
+	assert_array(_entered_rooms).is_equal(PackedInt64Array([0, 0]))  # load and this reset
 	_scene.call(&"_process", 0.0)
 	assert_object(before_reset).is_null()
 	assert_object(after_reset).is_null()  # the mark is still pending, reset does not drop it
