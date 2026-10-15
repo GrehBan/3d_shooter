@@ -79,15 +79,12 @@ func test_physical_floor_int64_metadata_stale_and_fifo_wrap_golden() -> void:
 		stats.set_stat(handle, StatBlock.Stat.MAX_SHIELD, INT32_MAX)
 		stats.set_stat(handle, StatBlock.Stat.ENERGY, 4321)
 		stats.set_stat(handle, StatBlock.Stat.MAX_ENERGY, 9876)
-	stats.set_status(HIGH, (1 << 60) + 17)
-	stats.set_status(REPLACEMENT, -(1 << 60) + 19)
 	stats.set_stat(1, StatBlock.Stat.MAX_HP, 100000)
 	stats.set_stat(1, StatBlock.Stat.SHIELD, 3456)
 	stats.set_stat(1, StatBlock.Stat.MAX_SHIELD, 10000)
 	stats.set_stat(1, StatBlock.Stat.ARMOR, 22222)
 	stats.set_stat(1, StatBlock.Stat.ENERGY, 765)
 	stats.set_stat(1, StatBlock.Stat.MAX_ENERGY, 1234)
-	stats.set_status(1, 7)
 	var payloads := DamagePayloadBuffer.new(3)
 	var pipeline := DamagePipeline.new(stats)
 	_hash = 2166136261
@@ -113,7 +110,6 @@ func test_physical_floor_int64_metadata_stale_and_fifo_wrap_golden() -> void:
 		for handle: int in [HIGH, 1, REPLACEMENT]:
 			for stat: int in StatBlock.STAT_COUNT:
 				_word(stats.get_stat(handle, stat))
-			_word(stats.get_status(handle))
 		payloads.pop_front()
 		if next_index < cases.size():
 			_enqueue(payloads, cases, next_index)
@@ -122,7 +118,7 @@ func test_physical_floor_int64_metadata_stale_and_fifo_wrap_golden() -> void:
 	_word(payloads.count())
 	_word(payloads.dropped_count())
 	_word(pipeline.configuration_errors)
-	assert_int(_hash).is_equal(2671520872)  # Independent Python oracle.
+	assert_int(_hash).is_equal(1201059284)  # Independent Python oracle.
 	assert_int(cases.size()).is_equal(28)
 	assert_int(positive).is_equal(14)
 	assert_int(payloads.dropped_count()).is_equal(0)

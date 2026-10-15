@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="StatusRules" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://combat/StatusRules.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+shock_ticks = 3
+shock_cooldown_ticks = 15
+burn_ticks = 90
+burn_period_ticks = 15
+burn_percent = 200
+chill_ticks = 60
+chill_slow_per_stack = 200
+freeze_ticks = 30
+freeze_cooldown_ticks = 60
+corrosion_ticks = 90
+corrosion_armor_per_stack = 10000
+corrosion_max_stacks = 3

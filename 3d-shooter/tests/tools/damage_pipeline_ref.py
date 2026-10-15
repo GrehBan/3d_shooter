@@ -92,7 +92,6 @@ def reference() -> tuple[int, int, int]:
         1: [0, 100000, 3456, 10000, 22222, 765, 1234],
         REPLACEMENT: [0, INT32_MAX, 0, INT32_MAX, 0, 4321, 9876],
     }
-    statuses = {HIGH: (1 << 60) + 17, 1: 7, REPLACEMENT: -(1 << 60) + 19}
     pending = deque(payload(i) for i in range(3))
     next_index = 3
     head = 0
@@ -112,7 +111,6 @@ def reference() -> tuple[int, int, int]:
                       record.tags, record.element, record.flags, record.phase))
         for handle in (HIGH, 1, REPLACEMENT):
             words.extend(entities[handle])
-            words.append(statuses[handle])
         pending.popleft()
         head = (head + 1) % 3
         if next_index < len(CASES):
