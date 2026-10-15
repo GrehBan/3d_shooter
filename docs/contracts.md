@@ -135,6 +135,27 @@
   ожидаемым типам: отказ с `push_error` и `false`, прежнее состояние полностью сохранено.
   При верных типах проверяются ёмкость, размеры, счётчики, free-list, флаги и поколения.
 
+### RoomCombat (`combat/RoomCombat.gd`)
+
+Владелец боевых хранилищ комнаты. `RoomCombat.new(host_capacity)` создаётся холодно при
+загрузке комнаты и создаёт единственный `StatBlock` комнаты; поле `stats` не
+переназначается. Остальные runtime комнаты (`MobilityRuntime`, `EffectRunner`,
+`ShotResolver`, `HitscanWeapon`) получают ссылку на `combat.stats` и сами `StatBlock` не
+создают: `MobilityRuntime.new(room_stats, landing_capacity)`. `EffectHost` `StatBlock` не
+получает, его ёмкость задаётся числом хостов. Обращения к `combat.stats` в горячем пути не
+выделяют память.
+
+Ошибки конфигурации: `RoomCombat.new(host_capacity)` вне `1..StatBlock.MAX_CAPACITY` и
+`MobilityRuntime.new(null)` пишут `push_error` и оставляют объект неинициализированным
+(`is_initialized() == false`); неинициализированный `MobilityRuntime` ничего не делает в
+`logic_step` и `reset_clock` (оба `void`), а `grant_content` возвращает `false`. Sandbox в этом случае
+прерывает загрузку комнаты.
+
+Сброс комнаты (`Sandbox.reset_mobility_clock`) `StatBlock` не сбрасывает: сущности, их
+статы и handle переживают сброс, жизненный цикл сущности отдельный (§6, §7). Поэтому у
+`RoomCombat` пока нет `reset_room()`; он появится вместе с состоянием комнаты, которое нужно
+сбрасывать (статусы и реакции M2.3, конфигурация комнаты), с тестом отсутствия аллокаций.
+
 ### DamagePayload и DamagePayloadBuffer (`combat/`)
 
 * `DamagePayload` — словарь: `Phase` (Base → Add → Multiply → Element → Crit → Mitigation →
@@ -510,7 +531,9 @@ reset_dropped_count сбрасывает только счётчик. Ненул
 Физическое преобразование height→mm = буквальный floor без epsilon; значения binary
 float непосредственно ниже границы остаются ниже (decimal 8.001 может дать 8000).
 Сам resolver и Python golden получают целые mm и проверяют 7999/8000/8001 bit-exact.
-Максимальная float height квантуется с cap выше; NaN/Inf/отрицательная высота дают 0.
+Высота, которая в мм достигает cap или превышает его, возвращает точный целый cap
+`922337203685485580` (без перевода cap через float, который дал бы на 12 мм меньше);
+NaN/Inf/отрицательная высота дают 0.
 Порядок входных событий от Jolt не обещан bit-exact; integer apply одинаков для одного
 и того же последовательного event stream. Очередь не переносит HP-логику в физику.
 
@@ -595,6 +618,7 @@ Root удерживается открытым до обработки всех 
 нарушают ownership. Предвыделенный реестр owned handles обеспечивает reset, не расширяя
 API существующего AttackContextPool: слоты каждого дерева связаны интрузивным списком от
 слота root, поэтому final close очищает владение за O(размер дерева), а не за O(ёмкость).
+Read-only `ShotResolver.owned_count(root)` показывает длину этого списка для проверок.
 Read-only inspection пула разрешён.
 Факт HP>0→0 снимается сразу после Apply до синхронных OnHit listeners: их последующее
 исцеление/освобождение цели не стирает OnKill этого Apply.
@@ -616,6 +640,10 @@ duplicate guard, новый room epoch и согласованная shot sequen
 `MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()` →
 `EventBus.room_entered(room_id)`. Тот же сигнал испускается после успешной загрузки
 комнаты; при отказе любого шага сброса или загрузки он не испускается.
+Отказать при сбросе могут только `ShotResolver.reset_room()` (исчерпан epoch) и
+`ShotVisualPool.reset_room(epoch)` (epoch не новее текущего); оба возвращают `bool`, и Sandbox
+прерывает комнату без `room_entered`. `EffectRunner.reset_room()`, `HitscanWeapon.reset_clock()`,
+`MobilityRuntime.reset_clock()` и `GameLoop.reset_clock()` возвращают `void` и пути отказа не имеют.
 Identity reset не должен смешивать старые и новые записи комнаты. Существующий
 `MovementAbilities.rebase_clock` сохраняет оставшийся cooldown относительно ТОЧНОГО
 old tick, включая physics activation до первого logic_step; energy/grants и физический

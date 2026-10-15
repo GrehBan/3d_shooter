@@ -30,7 +30,7 @@ func before_test() -> void:
 	_viewport.add_child(_arena)
 	_add_box(Vector3(2000.0, 1.0, 2000.0), Vector3(0.0, -0.5, 0.0))
 	_player = _make_player()
-	_runtime = MobilityRuntime.new(4, 256)
+	_runtime = MobilityRuntime.new(StatBlock.new(4), 256)
 	_entity = _spawn()
 	_player.bind_mobility(_runtime, _entity)
 	_step_barrier = PhysicsStepBarrier.new()
@@ -781,7 +781,7 @@ func test_new_generation_or_runtime_binding_starts_new_physical_lifecycle() -> v
 	_player.set_jump_pressed(true)
 	await _ticks(1)
 	assert_bool(_player._double_jump_used).is_true()
-	var different := MobilityRuntime.new(1)
+	var different := MobilityRuntime.new(StatBlock.new(1))
 	different.stats.release(different.stats.allocate())
 	var other: int = different.stats.allocate()
 	assert_int(other).is_equal(replacement)  # same full handle, DIFFERENT runtime reference

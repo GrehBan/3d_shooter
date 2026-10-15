@@ -1,6 +1,7 @@
 extends Node3D
 ## Composition root. Content and stores allocate only while loading the sandbox.
 
+var combat: RoomCombat
 var mobility: MobilityRuntime
 var player_handle: int = StatBlock.INVALID_HANDLE
 @export_dir var movement_data_directory: String = "res://data/movement"
@@ -60,27 +61,34 @@ func _ready() -> void:
 			1, ROOM_VISUAL_NODES, ROOM_VISUAL_PACKED_BYTES, ROOM_VISUAL_TEXTURE_BYTES):
 		_abort_initialization("Sandbox: invalid visual preset or room capacity")
 		return
-	mobility = MobilityRuntime.new(ROOM_HOSTS)
+	combat = RoomCombat.new(ROOM_HOSTS)
+	if not combat.is_initialized():
+		_abort_initialization("Sandbox: invalid room combat capacity")
+		return
+	mobility = MobilityRuntime.new(combat.stats)
+	if not mobility.is_initialized():
+		_abort_initialization("Sandbox: mobility runtime requires the room StatBlock")
+		return
 	effect_host = EffectHost.new(ROOM_HOSTS, ROOM_EFFECT_ENTRIES)
-	effects = EffectRunner.new(mobility.stats, effect_host, effect_definitions)
+	effects = EffectRunner.new(combat.stats, effect_host, effect_definitions)
 	if not effects.is_initialized() or effects.packed_bytes() + ROOM_EFFECT_HOST_BYTES > ROOM_EFFECT_PACKED_BYTES:
 		_abort_initialization("Sandbox: invalid effect definitions or room capacity")
 		return
-	player_handle = mobility.stats.allocate()
-	mobility.stats.set_stat(player_handle, StatBlock.Stat.MAX_HP, 100_000)
-	mobility.stats.set_stat(player_handle, StatBlock.Stat.HP, 100_000)
-	mobility.stats.set_stat(player_handle, StatBlock.Stat.ENERGY, 3000)
-	mobility.stats.set_stat(player_handle, StatBlock.Stat.MAX_ENERGY, 3000)
+	player_handle = combat.stats.allocate()
+	combat.stats.set_stat(player_handle, StatBlock.Stat.MAX_HP, 100_000)
+	combat.stats.set_stat(player_handle, StatBlock.Stat.HP, 100_000)
+	combat.stats.set_stat(player_handle, StatBlock.Stat.ENERGY, 3000)
+	combat.stats.set_stat(player_handle, StatBlock.Stat.MAX_ENERGY, 3000)
 	if not mobility.grant_content(player_handle, registry, category):
 		_abort_initialization("Sandbox: movement grant failed")
 		return
 	(get_node(^"Player") as FPSController).bind_mobility(mobility, player_handle)
 	shots = ShotBatch.new(ROOM_SHOTS, stride, ROOM_HOSTS)
-	resolver = ShotResolver.new(mobility.stats, shots, ROOM_CONTEXTS)
+	resolver = ShotResolver.new(combat.stats, shots, ROOM_CONTEXTS)
 	resolver.on_hit.connect(_on_hit)
 	resolver.on_kill.connect(_on_kill)
 	weapon = get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon
-	if not weapon.initialize(definitions[0], mobility.stats, shots, player_handle, get_node(^"Player") as FPSController):
+	if not weapon.initialize(definitions[0], combat.stats, shots, player_handle, get_node(^"Player") as FPSController):
 		_abort_initialization("Sandbox: weapon initialization failed")
 		return
 	visuals = get_node(^"ShotVisualPool") as ShotVisualPool
@@ -88,9 +96,9 @@ func _ready() -> void:
 		_abort_initialization("Sandbox: visual initialization failed")
 		return
 	for body: Node in get_node(^"Targets").get_children():
-		var target: int = mobility.stats.allocate()
-		mobility.stats.set_stat(target, StatBlock.Stat.MAX_HP, 100_000)
-		mobility.stats.set_stat(target, StatBlock.Stat.HP, 100_000)
+		var target: int = combat.stats.allocate()
+		combat.stats.set_stat(target, StatBlock.Stat.MAX_HP, 100_000)
+		combat.stats.set_stat(target, StatBlock.Stat.HP, 100_000)
 		Damageable.attach(body, target)
 		target_handles.append(target)
 		_target_meshes.append(body.get_child(1) as MeshInstance3D)

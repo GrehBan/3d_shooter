@@ -47,7 +47,7 @@ func before_test() -> void:
 	add_child(_viewport)
 	_arena = Node3D.new()
 	_viewport.add_child(_arena)
-	_mobility = MobilityRuntime.new(4)
+	_mobility = MobilityRuntime.new(StatBlock.new(4))
 	var source: int = _mobility.stats.allocate()
 	_mobility.stats.set_stat(source, StatBlock.Stat.HP, 100000)
 	_target = _mobility.stats.allocate()
