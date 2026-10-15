@@ -5,6 +5,7 @@ extends Node
 const SANDBOX: PackedScene = preload("res://world/sandbox/Sandbox.tscn")
 const FRAME_CAPACITY: int = 120000
 const TARGET_HP: int = 20000000
+const TIMER_PAIRS: int = 100000
 
 var result: RealPipelineResult = RealPipelineResult.new()
 var _sandbox: Node3D
@@ -200,6 +201,7 @@ func _capture_baseline() -> void:
 		_baseline[index] = _counter(index)
 	_occupancy = _visual_occupancy()
 	_last_logic_tick = GameLoop.get_logic_tick()
+	_sandbox.call(&"reset_phase_metrics")
 	result.warmup_ticks = _driver.ticks
 	_measure_start_usec = Time.get_ticks_usec()
 	_measuring = true
@@ -288,6 +290,10 @@ func _finish() -> void:
 	result.live_contexts = _resolver.contexts.alive_count()
 	result.visual_occupancy_delta = _visual_occupancy() - _occupancy
 	result.frame_fps_mean = float(_frame_count) * 1000000.0 / maxf(1.0, float(_frame_usec_sum))
+	result.phase_steps = _sandbox.call(&"phase_steps")
+	for phase: int in 3:
+		result.phase_usec_sum[phase] = _sandbox.call(&"phase_sum_usec", phase)
+		result.phase_usec_max[phase] = _sandbox.call(&"phase_max_usec", phase)
 	get_tree().paused = true
 	var failures: PackedStringArray = result.failures()
 	print("REAL_PIPELINE allocations: objects=%+d nodes=%+d resources=%+d orphans=%+d memory_static=%+d B" % [
@@ -300,6 +306,13 @@ func _finish() -> void:
 		result.counters[14], result.counters[15], result.counters[16], result.counters[17], result.counters[18], result.visual_occupancy_delta])
 	print("REAL_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=7000 us scope=M2.2_counter_fixture" % [
 		result.logic_samples, float(result.logic_usec_sum) / maxf(1.0, float(result.logic_samples)), result.logic_usec_max])
+	var steps: float = maxf(1.0, float(result.phase_steps))
+	print("REAL_PIPELINE phases: steps=%d resolver avg=%.1f max=%d effects avg=%.1f max=%d mobility avg=%.1f max=%d us" % [
+		result.phase_steps, float(result.phase_usec_sum[0]) / steps, result.phase_usec_max[0],
+		float(result.phase_usec_sum[1]) / steps, result.phase_usec_max[1],
+		float(result.phase_usec_sum[2]) / steps, result.phase_usec_max[2]])
+	print("REAL_PIPELINE timer: pairs=%d pair_ns=%.1f (four reads per logic tick)" % [
+		TIMER_PAIRS, _timer_pair_ns()])
 	print("REAL_PIPELINE effects: accepted=%d processed=%d inspected=%d actions=%d condition=%d cooldown=%d deferred=%d counters=%d,%d,%d,%d pending=%d" % [
 		result.counters[19], result.counters[20], result.counters[21], result.counters[22],
 		result.counters[23], result.counters[24], result.counters[25], result.counters[26],
@@ -337,6 +350,15 @@ func _report_frames() -> void:
 		print("REAL_PIPELINE frames: graphical=%s samples=%d mean_fps=%.3f p95_us=%d p99_us=%d worst_us=%d slow_fraction=%.5f" % [
 			result.graphical, _frame_count, result.frame_fps_mean, _frame_usec[int((_frame_count - 1) * 0.95)],
 			_frame_usec[int((_frame_count - 1) * 0.99)], _frame_usec[_frame_count - 1], float(slow) / float(_frame_count)])
+
+
+## Cost of one Time.get_ticks_usec() pair, averaged; measured after the monitored window.
+func _timer_pair_ns() -> float:
+	var start: int = Time.get_ticks_usec()
+	for index: int in TIMER_PAIRS:
+		Time.get_ticks_usec()
+		Time.get_ticks_usec()
+	return float(Time.get_ticks_usec() - start) * 1000.0 / float(TIMER_PAIRS)
 
 
 func _abort(reason: String) -> void:

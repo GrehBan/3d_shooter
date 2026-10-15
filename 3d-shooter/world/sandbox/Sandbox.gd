@@ -36,6 +36,14 @@ var _dead_material: StandardMaterial3D
 # Kill events mark targets here; the frame applies the defeated look.
 var _dead_pending: PackedByteArray = PackedByteArray()
 var _dead_dirty: bool = false
+## Diagnostic logic-phase timing (resolver, effects, mobility), outside the deterministic
+## contour: only benchmarks read it, gameplay logic never does.
+enum Phase { RESOLVER, EFFECTS, MOBILITY }
+const PHASE_COUNT: int = 3
+var _phase_last: PackedInt64Array = PackedInt64Array([0, 0, 0])
+var _phase_max: PackedInt64Array = PackedInt64Array([0, 0, 0])
+var _phase_sum: PackedInt64Array = PackedInt64Array([0, 0, 0])
+var _phase_steps: int = 0
 
 
 func _ready() -> void:
@@ -112,9 +120,46 @@ func _ready() -> void:
 
 
 func _on_logic_tick(tick: int) -> void:
+	var start: int = Time.get_ticks_usec()
 	resolver.logic_step(tick)
+	var resolved: int = Time.get_ticks_usec()
 	effects.logic_step(tick)
+	var effected: int = Time.get_ticks_usec()
 	mobility.logic_step(tick)
+	var finished: int = Time.get_ticks_usec()
+	_record_phase(Phase.RESOLVER, resolved - start)
+	_record_phase(Phase.EFFECTS, effected - resolved)
+	_record_phase(Phase.MOBILITY, finished - effected)
+	_phase_steps += 1
+
+
+func _record_phase(phase: int, usec: int) -> void:
+	_phase_last[phase] = usec
+	_phase_sum[phase] += usec
+	_phase_max[phase] = maxi(_phase_max[phase], usec)
+
+
+func phase_steps() -> int:
+	return _phase_steps
+
+
+func phase_last_usec(phase: Phase) -> int:
+	return _phase_last[phase]
+
+
+func phase_max_usec(phase: Phase) -> int:
+	return _phase_max[phase]
+
+
+func phase_sum_usec(phase: Phase) -> int:
+	return _phase_sum[phase]
+
+
+func reset_phase_metrics() -> void:
+	_phase_last.fill(0)
+	_phase_max.fill(0)
+	_phase_sum.fill(0)
+	_phase_steps = 0
 
 
 # Visible defeated targets preserve an inspectable collider and full handle.
@@ -161,4 +206,5 @@ func reset_mobility_clock() -> void:
 		return
 	mobility.reset_clock(old_tick)
 	GameLoop.reset_clock()
+	reset_phase_metrics()
 	EventBus.room_entered.emit(room_id)
