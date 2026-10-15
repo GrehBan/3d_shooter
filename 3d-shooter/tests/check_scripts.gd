@@ -29,10 +29,11 @@ func _initialize() -> void:
 	quit(1 if failed > 0 else 0)
 
 
-## Скрипт загружен без ошибок разбора. Абстрактный (`@abstract`) класс нельзя
-## инстанцировать по определению, поэтому для него достаточно успешной загрузки.
+## Скрипт загружен и скомпилирован: у скрипта с ошибкой разбора или типов
+## can_instantiate() возвращает false. На Godot 4.7.2 корректный `@abstract`-скрипт тоже
+## даёт true (проверено CheckScriptsTest и фикстурой), отдельной ветки для него не нужно.
 static func is_loadable(script: Script) -> bool:
-	return script != null and (script.is_abstract() or script.can_instantiate())
+	return script != null and script.can_instantiate()
 
 
 func _collect_scripts(dir_path: String, out: PackedStringArray) -> void:
