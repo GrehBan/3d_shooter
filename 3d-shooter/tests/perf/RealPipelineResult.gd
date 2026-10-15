@@ -28,6 +28,11 @@ var memory_delta: int = 0
 var logic_samples: int = 0
 var logic_usec_sum: int = 0
 var logic_usec_max: int = 0
+var phase_steps: int = 0
+const PHASE_COUNT: int = 3  # resolver, effects, mobility; mirrors Sandbox.PHASE_COUNT
+var phase_usec_sum: PackedInt64Array = PackedInt64Array()
+var phase_usec_max: PackedInt64Array = PackedInt64Array()
+var phase_usec_p99: PackedInt64Array = PackedInt64Array()
 var distance: float = 0.0
 var peak_abs_x: float = 0.0
 var look_radians: float = 0.0
@@ -49,6 +54,9 @@ var frame_fps_mean: float = 0.0
 
 func _init() -> void:
 	counters.resize(Counter.COUNT)
+	phase_usec_sum.resize(PHASE_COUNT)
+	phase_usec_max.resize(PHASE_COUNT)
+	phase_usec_p99.resize(PHASE_COUNT)
 
 
 ## Called only after monitor capture; diagnostic arrays/strings are cold output.
@@ -67,6 +75,12 @@ func failures() -> PackedStringArray:
 		out.append("static memory exceeds 1 MiB")
 	if logic_samples != MEASURE_TICKS / 2 or logic_usec_max > LOGIC_LIMIT_USEC:
 		out.append("logic sampling or M1 7000 us budget failed")
+	# Phases are timed inside the same logic_tick emission, so together they cannot exceed it.
+	var phase_total: int = 0
+	for phase: int in PHASE_COUNT:
+		phase_total += phase_usec_sum[phase]
+	if (phase_steps != MEASURE_TICKS / 2) or (phase_total > logic_usec_sum):
+		out.append("phase timing does not cover the measured logic ticks")
 	if distance <= 450.0 or peak_abs_x > 45.0 or look_radians <= 0.0:
 		out.append("movement/look activity or fixture bounds failed")
 	if configuration_errors != 0 or dropped != 0 or refusals != 0 or stale_landings != 0:

@@ -10,6 +10,9 @@ func _valid_result() -> RealPipelineResult:
 	result.measured_ticks = 3600
 	result.logic_samples = 1800
 	result.logic_usec_max = 7000
+	result.logic_usec_sum = 1800 * 100
+	result.phase_steps = 1800
+	result.phase_usec_sum = PackedInt64Array([1800 * 40, 1800 * 20, 1800 * 10])
 	result.distance = 557.0
 	result.peak_abs_x = 38.0
 	result.look_radians = 1.44
@@ -98,3 +101,13 @@ func test_every_effect_counter_and_pending_state_are_acceptance_gates() -> void:
 	result = _valid_result()
 	result.stale_effects = 1
 	assert_array(result.failures()).is_not_empty()
+
+
+func test_phase_timing_must_cover_every_measured_tick_within_the_emission() -> void:
+	var result: RealPipelineResult = _valid_result()
+	assert_array(result.failures()).is_empty()
+	result.phase_steps = 1799
+	assert_array(result.failures()).contains(["phase timing does not cover the measured logic ticks"])
+	result = _valid_result()
+	result.phase_usec_sum[0] = result.logic_usec_sum  # phases now add up to more than the emission
+	assert_array(result.failures()).contains(["phase timing does not cover the measured logic ticks"])

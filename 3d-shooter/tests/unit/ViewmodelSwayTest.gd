@@ -53,28 +53,29 @@ func test_look_sway_is_bounded() -> void:
 
 
 func test_same_motion_gives_same_pose_at_30_60_144_fps() -> void:
-	# Poses are compared while they are large (end of walking, end of turning), before
-	# anything decays; a per-frame lerp that depends on the frame rate fails this test.
-	var walk_poses: Array[Vector3] = []
-	var turn_poses: Array[Vector3] = []
-	var walk_cameras: Array[Vector2] = []
-	var turn_cameras: Array[Vector2] = []
+	# Checkpoints: 1/6 s into walking and into turning (mid-transition, where a frame-rate
+	# dependent lerp diverges by millimetres), plus the ends of both segments.
+	var poses: Array = [[], [], [], []]  # walk_mid, walk_end, turn_mid, turn_end
+	var cameras: Array = [[], [], [], []]
 	for fps: int in [30, 60, 144]:
 		var model := ViewmodelSwayModel.new()
 		var delta: float = 1.0 / float(fps)
-		_run(model, delta, 1.0, 8.0, true)
-		walk_poses.append(model.offset)
-		walk_cameras.append(model.camera_offset)
-		_run(model, delta, 0.5, 6.0, true, 2.0, 0.5)
-		turn_poses.append(model.offset)
-		turn_cameras.append(model.camera_offset)
-	for poses: Array[Vector3] in [walk_poses, turn_poses]:
-		assert_float(poses[1].length()).is_greater(0.003)
-		assert_float((poses[0] - poses[1]).length()).is_less(0.0001)
-		assert_float((poses[2] - poses[1]).length()).is_less(0.0001)
-	for cameras: Array[Vector2] in [walk_cameras, turn_cameras]:
-		assert_float((cameras[0] - cameras[1]).length()).is_less(0.0001)
-		assert_float((cameras[2] - cameras[1]).length()).is_less(0.0001)
+		var segments: Array = [[1.0 / 6.0, 8.0, 0.0, 0.0], [5.0 / 6.0, 8.0, 0.0, 0.0],
+				[1.0 / 6.0, 6.0, 2.0, 0.5], [1.0 / 3.0, 6.0, 2.0, 0.5]]
+		for index: int in segments.size():
+			var segment: Array = segments[index]
+			_run(model, delta, segment[0], segment[1], true, segment[2], segment[3])
+			poses[index].append(model.offset)
+			cameras[index].append(model.camera_offset)
+	for index: int in poses.size():
+		assert_float((poses[index][1] as Vector3).length()).is_greater(0.003)
+		assert_float(((poses[index][0] as Vector3) - poses[index][1]).length()).is_less(0.0001)
+		assert_float(((poses[index][2] as Vector3) - poses[index][1]).length()).is_less(0.0001)
+		assert_float(((cameras[index][0] as Vector2) - cameras[index][1]).length()).is_less(0.0001)
+		assert_float(((cameras[index][2] as Vector2) - cameras[index][1]).length()).is_less(0.0001)
+	# The camera bob is large at the segment ends, so its agreement there is meaningful.
+	assert_float((cameras[1][1] as Vector2).length()).is_greater(0.003)
+	assert_float((cameras[3][1] as Vector2).length()).is_greater(0.003)
 
 
 func test_non_finite_speed_does_not_stick() -> void:

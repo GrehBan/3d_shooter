@@ -36,6 +36,19 @@ var _dead_material: StandardMaterial3D
 # Kill events mark targets here; the frame applies the defeated look.
 var _dead_pending: PackedByteArray = PackedByteArray()
 var _dead_dirty: bool = false
+## Diagnostic logic-phase timing (resolver, effects, mobility), outside the deterministic
+## contour: only benchmarks read it, gameplay logic never does.
+enum Phase { RESOLVER, EFFECTS, MOBILITY }
+const PHASE_COUNT: int = 3
+var _phase_last: PackedInt64Array = PackedInt64Array([0, 0, 0])
+var _phase_max: PackedInt64Array = PackedInt64Array([0, 0, 0])
+var _phase_sum: PackedInt64Array = PackedInt64Array([0, 0, 0])
+var _phase_steps: int = 0
+## Per-phase histogram of PHASE_BUCKETS buckets of PHASE_BUCKET_USEC each (last bucket
+## collects everything slower), preallocated so recording a tick never allocates.
+const PHASE_BUCKET_USEC: int = 10
+const PHASE_BUCKETS: int = 1000
+var _phase_histogram: PackedInt32Array = _zeroes(PHASE_COUNT * PHASE_BUCKETS)
 
 
 func _ready() -> void:
@@ -112,9 +125,72 @@ func _ready() -> void:
 
 
 func _on_logic_tick(tick: int) -> void:
+	var start: int = Time.get_ticks_usec()
 	resolver.logic_step(tick)
+	var resolved: int = Time.get_ticks_usec()
 	effects.logic_step(tick)
+	var effected: int = Time.get_ticks_usec()
 	mobility.logic_step(tick)
+	var finished: int = Time.get_ticks_usec()
+	_record_phase(Phase.RESOLVER, resolved - start)
+	_record_phase(Phase.EFFECTS, effected - resolved)
+	_record_phase(Phase.MOBILITY, finished - effected)
+	_phase_steps += 1
+
+
+static func _zeroes(size: int) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	out.resize(size)
+	return out
+
+
+func _record_phase(phase: Phase, usec: int) -> void:
+	_phase_last[phase] = usec
+	_phase_sum[phase] += usec
+	_phase_max[phase] = maxi(_phase_max[phase], usec)
+	_phase_histogram[phase * PHASE_BUCKETS + clampi(usec / PHASE_BUCKET_USEC, 0, PHASE_BUCKETS - 1)] += 1
+
+
+## Upper bound of the bucket holding the given percentile (permille), e.g. 990 for p99.
+## The histogram covers 0..10 ms; a percentile in the last, open bucket returns the actual
+## phase maximum. Cold read for reports; returns 0 before any tick and for permille
+## outside 1..1000.
+func phase_percentile_usec(phase: Phase, permille: int) -> int:
+	if permille < 1 or permille > 1000 or _phase_steps == 0:
+		return 0
+	var rank: int = (_phase_steps * permille + 999) / 1000
+	var seen: int = 0
+	for bucket: int in PHASE_BUCKETS:
+		seen += _phase_histogram[phase * PHASE_BUCKETS + bucket]
+		if seen >= rank:
+			if bucket == PHASE_BUCKETS - 1:
+				return _phase_max[phase]
+			return (bucket + 1) * PHASE_BUCKET_USEC
+	return _phase_max[phase]
+
+
+func phase_steps() -> int:
+	return _phase_steps
+
+
+func phase_last_usec(phase: Phase) -> int:
+	return _phase_last[phase]
+
+
+func phase_max_usec(phase: Phase) -> int:
+	return _phase_max[phase]
+
+
+func phase_sum_usec(phase: Phase) -> int:
+	return _phase_sum[phase]
+
+
+func reset_phase_metrics() -> void:
+	_phase_last.fill(0)
+	_phase_max.fill(0)
+	_phase_sum.fill(0)
+	_phase_histogram.fill(0)
+	_phase_steps = 0
 
 
 # Visible defeated targets preserve an inspectable collider and full handle.
@@ -161,4 +237,5 @@ func reset_mobility_clock() -> void:
 		return
 	mobility.reset_clock(old_tick)
 	GameLoop.reset_clock()
+	reset_phase_metrics()
 	EventBus.room_entered.emit(room_id)
