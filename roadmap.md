@@ -1,19 +1,11 @@
 # План разработки
 
-Актуальный статус2026-10-14: PR #8–#13 слиты; `master` — `962741d`.
-Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
-Пакет5 и текущая M1 fixture приняты локально: independent review,
-Windows all/native measurements и qualitative manual movement/mouse PASS.
-По поручению пользователя начат [план M2](docs/m2-plan.md); M2.1 принят независимо
-и локально committed в `bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`.
-Зависимый M2.2 counter runner реализован локально в `codex/m2-effect-runner`;
-точные проверки и стадия независимой приёмки — в журнале.
-Публикация/PR/merge M2 не разрешены.
-Прежние draft/pending статусы ниже — история; [факты интеграции](docs/notes/pr-integration-log.md).
+Текущее состояние на 2026-10-15: `master` — `3c94d6d`. Закрыты M0, M1a и M1 (кроме
+frame-слоя), в M2 слиты пакеты M2.1 и M2.2. До начала M2.3 закрываются все долги
+из [аудита 2026-10-15](docs/notes/audit-2026-10-15.md) и [follow-ups](docs/notes/follow-ups.md).
+История публикаций и слияний — в [журнале интеграции PR](docs/notes/pr-integration-log.md).
 
 Сроков нет, поэтому вехи заданы не датами, а строгими техническими и продуктовыми критериями готовности. **Работа начинается с нуля.** Разработка ведется с применением «четырехтактного цикла» (Разработка → Валидация → Самокритика → Коммит). Технический долг приравнивается к инциденту и блокирует переход к следующей вехе. Любая фича, нарушающая лимиты производительности (Scope Creep), безжалостно отклоняется Product Owner-ом.
-
-Пока репозиторий локальный, параллельные треды работают в отдельных `git worktree`.
 
 ## M0. Строгий Фундамент и CI/CD
 
@@ -37,217 +29,9 @@ Windows all/native measurements и qualitative manual movement/mouse PASS.
 
 *Выполнено 2026-10-10: контракты описаны в `docs/contracts.md`; `Fixed`, `StatBlock`, `DamagePayload`/`DamagePayloadBuffer`, `Damageable`, `HitEventQueue`, `AttackContextPool`, `EffectHost`, `MovementAbilities` с unit- и golden-тестами; сквозной mock-тест `CombatContractsGoldenTest`; изоляция логики от узлов закреплена `LogicIsolationTest`; `regress.gd` гоняет синтетику через весь конвейер.*
 
-*Уточнение 2026-10-11: локально устранены два долга M1a — строгая проверка типов и атомарный отказ в `StatBlock.set_state()`, а также четыре независимые Python-модели существующих golden-эталонов. Исходные изменения и их интеграция прошли независимое ревью; финальные локальные проверки на Windows: импорт успешен, 41 скрипт без ошибок, 138/138 тестов, бенчмарк PASS. [Журнал работ](docs/notes/work-log.md) содержит результаты и ограничения. Эти изменения не закоммичены, PR не создан, Linux и GitHub CI для текущей версии не проверены; слияние не выполнено. M1 ещё не начата. При последующем перечитывании найдено незакрытое расхождение обработки переполнения `DamagePayloadBuffer` с общим контрактом. Следующие шаги — сначала устранить это расхождение с регрессионным тестом и независимым ревью, оформить текущие изменения по Git-потоку с обязательными CI, затем выполнять пакеты подготовленного плана M1 при выполнении prerequisites и [открытых доработок](docs/notes/follow-ups.md).*
+*Долги M1a (строгий `StatBlock.set_state()`, Python-модели эталонов, переполнение `DamagePayloadBuffer`) закрыты 2026-10-13 слиянием PR #8 и #9.*
 
 ## M1. Движение, Стрельба и Zero-Allocation
-
-*Этап подготовки 2026-10-11: по новому поручению пользователя готовится checkpoint текущих
-20 файлов в ветке `codex/foundation-checkpoint` и draft PR в `master`. Commit, push и PR
-ещё не выполнены; новая подготовленная версия требует независимого ревью. Исправление
-переполнения `DamagePayloadBuffer` остаётся открытым до M1 и в этот checkpoint не входит.
-M1 не начата; подробности и ограничения — в [журнале работ](docs/notes/work-log.md).*
-
-*Этап публикации 2026-10-12: checkpoint опубликован в `codex/foundation-checkpoint`,
-исходный commit `eb2415b6eb9581476d1aac89571f06147ffb530c`, открыт
-[draft PR #8](https://github.com/GrehBan/3d_shooter/pull/8) в `master`. Дополнительное
-ревью упаковки текущих 20 файлов пропущено по явному поручению пользователя;
-прежние одобрения относятся к ранее рассмотренным версиям. На момент публикации CI
-Linux и Windows для исходного commit выполняется, успешный итог ещё не подтверждён.
-Слияние не выполнялось; overflow-долг открыт до M1, её реализация ещё не начата.*
-
-*Принятие исправления до публикации 2026-10-12: для итогового HEAD checkpoint
-`3dfddbf0c50bbedcd1aaadaf2036f25236dd59f9` обе обязательные проверки GitHub CI
-Linux и Windows завершились SUCCESS; PR #8 остаётся OPEN/DRAFT, merge не выполнялся.
-От этой согласованной зависимой базы в `codex/buffer-overflow-contract` локально
-исправлено переполнение `DamagePayloadBuffer`: однократное уведомление, счётчик каждого
-отказа и раздельные сбросы очереди/счётчика подтверждаются регрессионными тестами.
-Независимый ревьюер на `high` проверил точный семифайловый diff: блокеров не найдено,
-исправление принято локально. Запись результата ревью в трёх MD проходит отдельную
-проверку; новое исправление ещё не опубликовано, его Linux/GitHub CI не запускался.
-После завершения проверки документации и выполнения
-prerequisites следующий пакет — FPS-контроллер и полигон по [плану M1](docs/m1-plan.md).
-M1 не начата; история устранённого долга и фактические проверки — в
-[журнале](docs/notes/work-log.md).*
-
-*Публикация исправления 2026-10-12: после итогового независимого PASS семи файлов,
-записи ревью и описания PR создан commit `b29789804efd2f57c09e911ab2f460f94072b4d1`,
-выполнен обычный push `codex/buffer-overflow-contract`, открыт отдельный
-[draft PR #9](https://github.com/GrehBan/3d_shooter/pull/9) в `master`.
-На момент первой проверки после публикации (02:03 UTC) обязательные Linux/Windows CI
-этого HEAD находятся IN_PROGRESS; успешный итог ещё не подтверждён.
-Последующая проверка подтвердила SUCCESS обеих обязательных CI для `b297898`;
-это результат опубликованного HEAD, он не относится к новым незакоммиченным MD ниже.
-PR #8 не менялся; обе зависимые ветки ещё не слиты. Настоящая запись публикации в трёх MD
-подготовлена отдельно, пока не закоммичена и ожидает независимого ревью.
-Merge не выполнялся; M1 не начата.*
-
-[Пошаговый план M1](docs/m1-plan.md) задаёт пять последовательных пакетов, prerequisites,
-владельцев областей и критерии приёмки.
-
-*Актуальное состояние 2026-10-12: итоговая запись публикации buffer fix независимо
-проверена и отправлена; HEAD PR #9 `4802c805017b7593a4f1e37d2d1d9b83ee1743f8` получил
-SUCCESS обеих обязательных CI Linux/Windows ([run 38194634272](https://github.com/GrehBan/3d_shooter/actions/runs/38194634272)).
-PR #8/#9 OPEN/DRAFT, merge не выполнялся. Координатор явно согласовал эту зависимую
-базу для отдельной ветки `codex/m1-fps-controller`; основной checkout сохранён.
-Локально реализован только пакет 1 M1: физический FPS-контроллер, обычный прыжок,
-мышь и полигон. После устранения P2 независимого ревью (мировой basis движения)
-Windows-проверки: импорт успешен, 43 скрипта без ошибок, 158/158 тестов
-в 22 suite, `regress.gd` PASS; активное движение подтвердило objects/nodes/resources/
-orphans delta 0 и static memory +1152 B в пределах 1 МиБ.
-Повторное независимое ревью точного исправленного девятифайлового diff получило PASS,
-P2 закрыт, пакет 1 принят локально; запись результата проверяется отдельно перед commit.
-Графическая плавность не проверена, собственный
-Linux/GitHub CI не запускался; вся M1 не объявляется готовой. Первое поручение пользователя
-остановиться после локального commit отменено 2026-10-12: «не останавливаемся работаем дальше».
-Следующий пакет после приёмки пакета 1 — рывок, скольжение и воздушные прыжки;
-он пока не начат. Публикация FPS без отдельного указания Git-потока не выполняется.*
-
-*Локальная фиксация 2026-10-12: после PASS кода и отдельного metadata-review создан
-commit `cf141eb166e0013d7566c46bfdb44da14a4d7672`
-(`M1: add physics FPS controller and sandbox`) в `codex/m1-fps-controller`.
-Push/PR FPS и merge не выполнялись. Новая запись факта commit проверяется отдельно;
-после её локальной фиксации координатор передаёт пакет 2 следующему исполнителю на `high`
-по последующему поручению продолжить. Пакет 2 не начат, собственный Linux/GitHub CI FPS
-и графическая плавность не проверены.*
-
-*Пакет 2 начат 2026-10-12:* после принятой metadata пакета 1 (`081d9ae`) отдельный
-исполнитель `high` в `codex/m1-mobility` реализует dash/slide/double jump и чистую
-обработку события падения. Принятые параметры, защита и проверки — [план M1](docs/m1-plan.md).
-Windows full all пакета2: import/scripts50 PASS, unit/golden189/189 в25suite,
-active mobility3600 ticks: dash30/slide15/double15/landing15/regen1800, все5allocation
-delta0 и dropped0; synthetic3032385286 PASS. Независимое ревью этого снимка выявило
-три блокирующих P2 (clock cooldown reset, cold content validation, same-identity bind);
-причины исправлены, новый full all exit0: scripts50,197/197 tests25suite; active
-objects/nodes/resources/orphans0, static memory+1152B≤1МиБ, dropped0, действия сохранены.
-Synthetic3032385286 PASS. Повторное независимое ревью точной29-file версии ожидается
-(включён пользовательский .gitignore по snapshot-поручению);
-прежний успешный all и reviewed-blocked snapshot не считаются PASS исправлений.
-Пакет 2 пока не принят, commit/push отсутствуют; PR #8/#9 draft не слиты, пакеты 3–5
-не начаты. Пользователь разрешил после ПОЛНОГО M1 финальное независимое subagent review
-и squash merge по общему решению координатора/ревьюера только с зелёными обязательными
-Linux/Windows CI точного последнего PR HEAD. Прежние записи ограничений выше — история.
-
-*История последнего замечания пакета 2, 2026-10-12:* первоначальные три P2 закрыты;
-последующие P2 о Sandbox abort и честном lifecycle/prearm тоже закрыты ревьюером.
-В последнем 32-file снимке остался P2: при выделении focus-теста было удалено
-физическое покрытие slide cooldown. Отдельный cooldown-only Jolt-тест восстановлен:
-ENERGY 3000, future ready_tick, свежий edge и действующий prearm до landing,
-отказ без оплаты или отмены падения. Новый Windows `ci/run_checks.sh all` exit0:
-import PASS, scripts50/0, 199/199 tests25suite, mobility30/30; active3900 ticks —
-objects/nodes/resources/orphans/static delta0, dropped0. Synthetic3032385286 PASS,
-static+248808B≤1МиБ, avg723.2/max3826мкс (не CPU-порог). Повторное независимое
-ревью полного 32-file diff ещё ожидается; пакет 2 пока не принят. Linux/GitHub CI
-и GUI этой версии не проверены; подробные результаты — [журнал](docs/notes/work-log.md).
-
-*Приёмка пакета 2, 2026-10-12:* независимый ревьюер на `high` дал PASS полному
-32-file снимку от базы `081d9ae627ca62c7ff4a9e833a5310580c488ad0`;
-patch SHA256 `8ef6b82144a6cccf545cb6aec7e05321e4e8ddd8985a891a9d8302f488f6ebac`,
-manifest SHA256 `d9dcc99b31de7b89407c7d2970b74c89d41e0f9040463d7d664c1ba40a54c1b6`.
-Блокеров не найдено: последний P2 cooldown и все прежние P2 закрыты.
-Ревьюер прочитал свежие логи all exit0, 199/199 tests25suite, mobility30/30;
-собственный Godot-прогон не выполнял. Пакет 2 принят локально, AIR-jump debt закрыт.
-После PASS изменены только четыре MD с записью результата; ожидается ревью этой
-документации. Runtime/test bytes сохранены; source commit ещё не создан.
-Linux/GitHub CI и GUI этой версии не подтверждены, вся M1 не завершена.
-
-*Source commit пакета 2, 2026-10-12:* после второго независимого PASS точного
-32-file снимка и записи приёмки создан локальный commit
-`499fbc2ec414eb8bcf7b13aa4f3bf5d7d44f1410`
-(`M1: implement mobility and resolve review blockers`) в `codex/m1-mobility`.
-Stage точно 32 файлов и cached diff-check0 подтверждены координатором;
-рабочее дерево после commit было чистым. Новая запись фактического SHA ожидает
-отдельного ревью и локальной фиксации; код/тесты/ресурсы не менялись.
-Linux/GitHub CI и GUI не запускались, push/PR/merge отсутствуют; вся M1 не завершена.
-
-*Новое актуальное поручение 2026-10-12:* «Коммитим текущее состояние и останавливаемся».
-Source commit создан; после отдельного ревью и фиксации записи фактического SHA —
-остановка. Пакеты3–5 не начинать;
-push/PR/merge сейчас не выполнять. Ранее разрешённый финальный squash после полного
-M1 сохраняется как история, вся M1 по-прежнему не завершена.
-
-*Текущее состояние пакета 2, 2026-10-13:* Архитектор ПО дал официальный независимый
-source PASS — «блокеров не найдено» — для `499fbc2ec414eb8bcf7b13aa4f3bf5d7d44f1410`
-в `codex/m1-mobility` относительно `081d9ae627ca62c7ff4a9e833a5310580c488ad0`.
-Это отдельный code verdict от прежних внутренних PASS и ревью MD. Все 32 content-файла
-сопоставлены с accepted patch/manifest с нормализацией CRLF/LF; runtime/tests совпадают.
-Все P2 закрыты, пакет 2 принят локально; неблокирующий P3 точности int cap высоты
-записан в [follow-ups](docs/notes/follow-ups.md#p3-точность-int-cap-высоты-падения).
-Ревью выполнено чтением diff, требований и сохранённых Windows cooldown-fix логов:
-all exit0, scripts50/0, 199/199 tests в25suite, mobility30/30, active3900 ticks
-с allocation/static delta0 и dropped0; synthetic3032385286 PASS, static+248808B≤1МиБ.
-Сам ревьюер Godot/тесты/benchmark не запускал; синтетика не подтверждает полный CPU-бюджет M1.
-Четыре MD официальной записи PASS также получили отдельный официальный PASS Архитектора
-и локально зафиксированы в `b73a4be701276373b3704b7f8c801a8815939872`.
-Linux/GitHub CI и GUI не подтверждены, вся M1 не завершена.
-Push/PR/merge этого шага не выполняются; факты и привязка логов — [журнал](docs/notes/work-log.md#официальный-source-pass-архитектора-по-для-пакета-2-m1--2026-10-13).
-
-*Подготовка договора пакета 3, 2026-10-13:* от согласованной зависимой базы `b73a4be`
-в `codex/m1-shotgun-contract` подготовлен docs-only delta пяти MD, PENDING официального
-архитектурного ревью. Сохранённый утверждённый WeaponData: 8×6000 raw, 40 м, central +7 ring, spread5°,
-semi-auto rising edge, cooldown15logic; это конкретный пресет, а не universal capacity cap.
-Зафиксированы ратифицированные sibling-pellet semantics, будущий атомарный ShotBatch,
-live/dead guard минимального resolver, lifecycle AttackContext и shots→landing→regen.
-Уточнения после P2 ревью: единый allocator sequence всех оружий каждого full source,
-identity=(room epoch, source, sequence), отказ без wrap до acceptance; coordinated reset
-сохраняет remaining weapon cooldown и held latch при очистке pending press.
-Договор и будущие проверки — [план M1](docs/m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий)
-и [контракт §7](docs/contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3).
-Код/тесты не реализованы и не запускались в этом шаге; legacy synthetic/goldens сохранены.
-Следующий кодовый шаг — только после приёмки точной документации и отдельного назначения
-реализации. Runtime пакетов3–5 не начат, пакеты4/5 не расширены; вся M1 не завершена.
-Stage/commit/push/PR/merge текущего договора не выполняются; ограничения —
-[журнал](docs/notes/work-log.md#подготовка-договора-hitscan-и-shotbatch-пакета-3-m1--2026-10-13).
-
-*Реализация пакета 3, 2026-10-13:* уточнённый договор получил независимый архитектурный
-PASS, затем координатор назначил весь пакет в `codex/m1-current-plan` от `b73a4be`.
-WeaponData/State, atomic ShotBatch, pure resolver и reused RayCast3D adapter интегрированы
-в Sandbox. Focused20/20 и Jolt9/9 PASS, active3900ticks подтвердил120shots/960hits,
-zeroobject/node/resource/orphan/static deltas и config0; independent golden3770191677.
-Финальный all и exact-diff independent runtime review ещё ожидаются. Пакеты4/5 не начаты,
-M2/cards/VFX-pools не расширены, commit/push/PR/merge отсутствуют.
-Новое поручение пользователя: записать результаты и оформить PR, затем уточнение
-«нет сейчас мы в лимиты не вместимся». Дальнейшая разработка/новые проверки/review cycles
-остановлены; координатор готовит draft PR текущего частично проверенного снимка.
-Финальный независимый full-diff PASS не получен, пакет3 не принят; merge не разрешён.
-Уже запущенный all завершился exit0: scripts61/0,230/230 tests31suites, shotgun11/11,
-active120shots/960hits/120resolved zero deltas/config0, synthetic3032385286 PASS,
-static+1152B. Source после этого не менялся; ограничения draft/review сохраняются.
-
-*Публикация текущего снимка, 2026-10-13:* source commit
-`9c88a7b6556bbbbde21dce2a407df88ee18af920` опубликован в `codex/m1-current-plan`,
-открыт [draft PR #11](https://github.com/GrehBan/3d_shooter/pull/11) в `master`.
-На первой проверке CI source Linux QUEUED, Windows IN_PROGRESS; это не PASS.
-Финальный независимый full-diff review не завершён, пакет3 не принят. Merge не выполнялся,
-пакеты4/5 не начаты; по поручению пользователя работа остановлена. Подробнее —
-[журнал публикации](docs/notes/work-log.md#публикация-текущего-снимка-m1--2026-10-13).
-
-*Текущее состояние и следующий шаг, 2026-10-13:* новое поручение «работаем дальше по
-плану» отменяет limit-stop. Runtime пакета3 принят локально: independent full-diff
-review `b73a4be` → `9a4fead` и QA PASS без блокеров, обязательные Linux/Windows CI
-HEAD `9a4feade15e98d6c870f89163e659572b7ecb9a0` SUCCESS
-([run 38421912445](https://github.com/GrehBan/3d_shooter/actions/runs/38421912445)).
-Новая запись приёмки проходит отдельное документационное ревью; после него следующий
-шаг — договор и назначение пакета4 (VFX/декали). Пакеты4/5 не реализованы, вся M1
-не завершена; графические проверки и реальный CPU-бюджет остаются открытыми.
-PR #11 OPEN/DRAFT, зависимости #8/#9/#10 не слиты; merge не выполнялся.
-В этом docs-only шаге runtime-проверки не повторялись, CI результата будущего HEAD
-нет. Точные review/логи/ограничения — [журнал приёмки](docs/notes/work-log.md#возобновление-работы-и-локальная-приёмка-runtime-пакета-3--2026-10-13).
-
-*Пакет4 назначен 2026-10-13:* после приёмки closing docs пакета3 база `d9f1a53`
-имеет mandatory Linux/Windows SUCCESS (run38424601880). В `codex/m1-visual-pools`
-единственный writer реализовал actual shotgun flashes/Decal, immutable preset,
-bounded pools5/40/80 и physical snapshots без изменения pure damage/goldens.
-Final Windows all: import PASS, scripts64/0,249/249 tests в32suites;
-active120muzzle/960impact/960marks,2040reuse/expiry,
-object/node/resource/orphan/static delta0, config/dropped0, synthetic3032385286 PASS.
-Corrected interpolationOFF native Forward+/D3D12 live proof
-прошёл на RTX4050LaptopGPU1280x720: active1/8/8, displayed pose error0, floor/wall
-marks и reset проверены. Независимые архитектурное и QA final-diff review23files PASS;
-source `ff26428d51c024ad693c916982738d96fba4096d` принят локально и закоммичен.
-Новая docs-only запись ожидает отдельного ревью; publication/CI/merge этой версии
-отсутствуют. Вся M1 и пакет5 не завершены.
-Details — [план](docs/m1-plan.md#4-пулы-используемых-vfx-и-декалей),
-[журнал](docs/notes/work-log.md#2026-10-13--назначение-визуальных-пулов-m1).
 
 * FPS-контроллер как машина состояний.
 * **Разделение тиков (Tick vs Frame):** Передвижение, физика и hitscan — в физическом тике 60 Гц с интерполяцией. Таймеры способностей и боевая логика — в логическом тике 30 Гц. Визуальная часть (покачивание камеры, интерполяция оружия) — в Frame (`_process`).
@@ -256,33 +40,36 @@ Details — [план](docs/m1-plan.md#4-пулы-используемых-vfx-�
 
 **Готово, когда:** Движение и стрельба ощущаются плавно. Бенчмарк `regress.gd` на тестовом полигоне фиксирует **ноль аллокаций**: дельта `OBJECT_COUNT`/`OBJECT_NODE_COUNT`/`OBJECT_RESOURCE_COUNT` равна 0 и прирост `MEMORY_STATIC` не более 1 МБ за 60 с активного геймплея.
 
+*Закрыта 2026-10-14 слиянием PR #10–#13, кроме frame-слоя. Состояние по пунктам:*
+
+* *FPS-контроллер (`GROUND`/`AIR`, dash, slide, double jump, урон от падения), hitscan-дробовик
+  и пулы вспышек/декалей реализованы; урон считается в логическом тике 30 Гц.*
+* *Ноль аллокаций подтверждён не синтетическим `regress.gd`, как написано в критерии, а
+  активным полигоном `res://tests/perf/RealPipelineBenchmark.tscn`: 300 тиков прогрева,
+  3600 тиков замера, дельты `OBJECT_COUNT`/`OBJECT_NODE_COUNT`/`OBJECT_RESOURCE_COUNT`/
+  `OBJECT_ORPHAN_NODE_COUNT` равны 0, `MEMORY_STATIC` в пределах 1 МиБ. Проверка идёт в CI
+  (шаг `real_pipeline`, методика — [контракт §9](docs/contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5));
+  `regress.gd` остаётся синтетическим бенчмарком.*
+* *Плавность подтверждена ручной проверкой пользователя и native-замером на RTX 4050 Laptop
+  (средний FPS 143.846, p99 кадра 9449 µs). Железо уровня Steam Deck не измерялось: это
+  критерий M3.*
+* *Не сделано: frame-слой — покачивание камеры и процедурная анимация оружия в `_process`.
+  Это долг вехи, он закрывается до начала M2.3.*
+
+План пакетов — [docs/m1-plan.md](docs/m1-plan.md).
+
 ## M2. Ядро боя, Карточек и DOD (Data-Oriented Design)
 
-Checkpoint2026-10-14 перед M2: пакет5 добавляет actual joint movement/shot/pool
-benchmark с300warmup+3600physics measure, подтверждением действий/урона и отдельной
-negative orphan probe. Synthetic3032385286 сохранён. Пользователь подтвердил
-качественную плавность movement/mouse на локальном тире с production source этой базы.
-Это не numerical60FPS или M3 budget40enemies. Final Windows all exit0 (67scripts,
-255/255tests33suites, synthetic3032385286 и jointpositive/leak/setupPASS).
-Native same-fixture PASS: Windows Forward+/D3D12 RTX4050, mean143.846FPS,
-p95/p99/worst7776/9449/11146us, slow fraction0, logic max319us и все monitor deltas0.
-Эти M1 доказательства получили independent exact-diff PASS; пакет5 принят локально,
-PR #13 слит в `962741d` после required Linux/Windows SUCCESS точного HEAD `062534d`.
-Это закрывает текущие prerequisites M1 с описанными аппаратными/M3 ограничениями.
-M2.1 добавляет физическую границу фаз и интеграцию в ShotResolver. M2.2 реализует
-ограниченный counter runner: ALWAYS/MIN_VALUE, INCREMENT_COUNTER, FIFO snapshots,
-quota16 и continuation без dropped work. State room-local по full subscription и
-owner handle, без сохранения карточки или ownership атаки. Обычный Sandbox не
-содержит карточек; counter rules включены только в активную test fixture.
-Полный M2, элементы/статусы/карточки ещё не реализованы. Порядок, владельцы, зависимости и
-локальные gates — [план M2](docs/m2-plan.md).
-Методика — [контракт§9](docs/contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5).
+*Состояние на 2026-10-15: M2.1 (физический `DamagePipeline`, PR #14) и M2.2 (`EffectRunner`
+со счётчиками, PR #15) слиты. M2.3 (элементы, статусы, реакции) существует как несмёрженный
+снимок и будет перенесён после нормализации проекта; M2.4–M2.6 не начаты.
+Пакеты, зависимости и критерии — [план M2](docs/m2-plan.md).*
 
 * Реализация `DamagePipeline`, элементов и статусов на основе парадигмы Data-Oriented Design (плотные массивы, битовая упаковка состояний в `StatBlock`).
 * Система `EffectRunner` с фиксированной целочисленной квотой работы и отдельно
-  измеряемым CPU budget. Wall-clock не определяет детерминированный результат;
-  контракт quota/continuation/ownership принят для counter foundation M2.2;
-  будущие damage/status/branch actions требуют отдельного договора до реализации.
+  измеряемым CPU-бюджетом. Время по часам не влияет на детерминированный результат.
+  Квота, продолжение работы на следующем тике и владение приняты для счётчиков M2.2;
+  урон, статусы и ветвления в `EffectRunner` требуют отдельного договора до реализации.
 * Создание 10 карточек (включая цепочку «Громового дробовика»).
 * Дебаг-консоль для логов цепочек событий.
 
