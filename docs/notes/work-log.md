@@ -46,6 +46,13 @@ effects и weapon пути отказа нет); пометка убийства
 появится вместе с состоянием комнаты M2.3. Тест `RoomCombatTest`: холодное создание,
 отсутствие аллокаций при обращениях к `combat.stats` в горячем пути, единый `StatBlock` в
 Sandbox до и после сброса комнаты. `RoomCombat` проверяется `LogicIsolationTest` по папке `combat/`.
+По ревью добавлены ошибки конфигурации: `RoomCombat.new()` с ёмкостью вне
+`1..StatBlock.MAX_CAPACITY` и `MobilityRuntime.new(null)` пишут `push_error` и остаются
+неинициализированными, неинициализированный `MobilityRuntime` ничего не делает; Sandbox
+прерывает загрузку раньше создания следующего runtime. Тесты: ёмкости 0, −5 и
+`MAX_CAPACITY + 1` (и граничные 1 и `MAX_CAPACITY` проходят), инертный `MobilityRuntime`
+отказывает в валидном замороженном пресете и не меняет тик; тест Sandbox подтверждает, что
+сброс прошёл, и что `StatBlock` общий у mobility, `EffectRunner`, `ShotResolver` и оружия.
 
 ## 2026-10-15 — события Sandbox и владение в ShotResolver
 

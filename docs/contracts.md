@@ -145,7 +145,7 @@
 получает, его ёмкость задаётся числом хостов. Обращения к `combat.stats` в горячем пути не
 выделяют память.
 
-Ошибки конфигурации: `RoomCombat.new(host_capacity)` вне `1..65536` и
+Ошибки конфигурации: `RoomCombat.new(host_capacity)` вне `1..StatBlock.MAX_CAPACITY` и
 `MobilityRuntime.new(null)` пишут `push_error` и оставляют объект неинициализированным
 (`is_initialized() == false`); неинициализированный `MobilityRuntime` в `logic_step`,
 `reset_clock` и `grant_content` ничего не делает и возвращает отказ. Sandbox в этом случае

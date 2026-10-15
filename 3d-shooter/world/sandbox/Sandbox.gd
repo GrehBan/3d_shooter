@@ -62,9 +62,12 @@ func _ready() -> void:
 		_abort_initialization("Sandbox: invalid visual preset or room capacity")
 		return
 	combat = RoomCombat.new(ROOM_HOSTS)
-	mobility = MobilityRuntime.new(combat.stats)
-	if not combat.is_initialized() or not mobility.is_initialized():
+	if not combat.is_initialized():
 		_abort_initialization("Sandbox: invalid room combat capacity")
+		return
+	mobility = MobilityRuntime.new(combat.stats)
+	if not mobility.is_initialized():
+		_abort_initialization("Sandbox: mobility runtime requires the room StatBlock")
 		return
 	effect_host = EffectHost.new(ROOM_HOSTS, ROOM_EFFECT_ENTRIES)
 	effects = EffectRunner.new(combat.stats, effect_host, effect_definitions)
