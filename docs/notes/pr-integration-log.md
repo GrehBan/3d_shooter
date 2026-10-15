@@ -1,5 +1,22 @@
 # Pull Request Integration Log
 
+## Current Status: 2026-10-14
+
+PRs #8-#13 are merged. PR #13's final published HEAD
+`062534d86352c45d4ff49d11f073d46cdbd8f752` passed both required Linux/Windows checks
+([run38595049442](https://github.com/GrehBan/3d_shooter/actions/runs/38595049442))
+before squash merge to `master` `962741d9fabc3aa599255126a03b5c2de6b54227`.
+Package5 and the current M1 fixture were locally accepted after independent review,
+Windows all, native measurements and the qualitative human movement/mouse check.
+The earlier open/pending entries below are historical checkpoints.
+
+The user then authorized starting M2. Local M2.1 physical DamagePipeline work uses
+this fresh master in isolated `codex/m2-combat-plan`; Windows all and native gates
+passed. The work log identifies the exact snapshot and independent review status.
+M2 is neither published nor merged; no M2 PR/publication/merge is authorized.
+M1 measurements and CI are evidence for their tested source, not the new M2 diff.
+See the [M2 plan](../m2-plan.md) and [work log](work-log.md).
+
 ## Audit and Order: 2026-10-13
 
 After local acceptance of package 4, the user authorized auditing and merging
