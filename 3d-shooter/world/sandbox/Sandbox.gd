@@ -152,15 +152,21 @@ func _record_phase(phase: Phase, usec: int) -> void:
 
 
 ## Upper bound of the bucket holding the given percentile (permille), e.g. 990 for p99.
-## Cold read for reports; returns 0 before any tick.
+## The histogram covers 0..10 ms; a percentile in the last, open bucket returns the actual
+## phase maximum. Cold read for reports; returns 0 before any tick and for permille
+## outside 1..1000.
 func phase_percentile_usec(phase: Phase, permille: int) -> int:
+	if permille < 1 or permille > 1000 or _phase_steps == 0:
+		return 0
 	var rank: int = (_phase_steps * permille + 999) / 1000
 	var seen: int = 0
 	for bucket: int in PHASE_BUCKETS:
 		seen += _phase_histogram[phase * PHASE_BUCKETS + bucket]
-		if rank > 0 and seen >= rank:
+		if seen >= rank:
+			if bucket == PHASE_BUCKETS - 1:
+				return _phase_max[phase]
 			return (bucket + 1) * PHASE_BUCKET_USEC
-	return 0
+	return _phase_max[phase]
 
 
 func phase_steps() -> int:

@@ -30,9 +30,9 @@ var logic_usec_sum: int = 0
 var logic_usec_max: int = 0
 var phase_steps: int = 0
 const PHASE_COUNT: int = 3  # resolver, effects, mobility; mirrors Sandbox.PHASE_COUNT
-var phase_usec_sum: PackedInt64Array = PackedInt64Array([0, 0, 0])
-var phase_usec_max: PackedInt64Array = PackedInt64Array([0, 0, 0])
-var phase_usec_p99: PackedInt64Array = PackedInt64Array([0, 0, 0])
+var phase_usec_sum: PackedInt64Array = PackedInt64Array()
+var phase_usec_max: PackedInt64Array = PackedInt64Array()
+var phase_usec_p99: PackedInt64Array = PackedInt64Array()
 var distance: float = 0.0
 var peak_abs_x: float = 0.0
 var look_radians: float = 0.0
@@ -54,6 +54,9 @@ var frame_fps_mean: float = 0.0
 
 func _init() -> void:
 	counters.resize(Counter.COUNT)
+	phase_usec_sum.resize(PHASE_COUNT)
+	phase_usec_max.resize(PHASE_COUNT)
+	phase_usec_p99.resize(PHASE_COUNT)
 
 
 ## Called only after monitor capture; diagnostic arrays/strings are cold output.

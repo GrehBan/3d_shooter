@@ -200,8 +200,9 @@ func test_phase_metrics_count_logic_ticks_and_reset_with_the_room() -> void:
 		var maximum: int = _scene.call(&"phase_max_usec", phase)
 		var total: int = _scene.call(&"phase_sum_usec", phase)
 		var p99: int = _scene.call(&"phase_percentile_usec", phase, 990)
-		# With three samples p99 is the bucket of the maximum: its upper bound, 10 us wide.
-		consistent = consistent and last >= 0 and maximum >= last and total >= maximum 				and p99 > maximum and p99 - maximum <= 10
+		# With three samples p99 is the bucket of the maximum (upper bound, at most 10 us above).
+		var ordered: bool = (last >= 0) and (maximum >= last) and (total >= maximum)
+		consistent = consistent and ordered and (p99 >= maximum) and (p99 - maximum <= 10)
 	_scene.call(&"reset_mobility_clock")
 	assert_int(steps).is_equal(3)
 	assert_bool(consistent).is_true()
