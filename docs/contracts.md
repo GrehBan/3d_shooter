@@ -577,8 +577,10 @@ Root удерживается открытым до обработки всех 
 Для miss root закрывается без children и также даёт ровно один `OnAttackResolved`.
 Отложенные владельцы создают child только через `ShotResolver.open_child(parent)`
 и закрывают через `close_context(handle)`; прямые мутации его AttackContextPool
-нарушают ownership. Предвыделенный реестр owned handles/root обеспечивает reset,
-не расширяя API существующего AttackContextPool. Read-only inspection пула разрешён.
+нарушают ownership. Предвыделенный реестр owned handles обеспечивает reset, не расширяя
+API существующего AttackContextPool: слоты каждого дерева связаны интрузивным списком от
+слота root, поэтому final close очищает владение за O(размер дерева), а не за O(ёмкость).
+Read-only inspection пула разрешён.
 Факт HP>0→0 снимается сразу после Apply до синхронных OnHit listeners: их последующее
 исцеление/освобождение цели не стирает OnKill этого Apply.
 
@@ -595,8 +597,10 @@ Room reset координируется этим же владельцем: capt
 `GameLoop.get_logic_tick()` → reset shot resolver/ShotBatch (pending, diagnostic counters,
 duplicate guard, новый room epoch и согласованная shot sequence) →
 `EffectRunner.reset_room()` только после успешного resolver reset →
-`weapon.reset_clock(old_tick)` для каждого оружия →
-`MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()`.
+`weapon.reset_clock(old_tick)` для каждого оружия → `ShotVisualPool.reset_room(epoch)` →
+`MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()` →
+`EventBus.room_entered(room_id)`. Тот же сигнал испускается после успешной загрузки
+комнаты; при отказе любого шага сброса или загрузки он не испускается.
 Identity reset не должен смешивать старые и новые записи комнаты. Существующий
 `MovementAbilities.rebase_clock` сохраняет оставшийся cooldown относительно ТОЧНОГО
 old tick, включая physics activation до первого logic_step; energy/grants и физический
@@ -642,7 +646,11 @@ capture intent и не доказывают доставку событий ОС
 
 Sandbox содержит три видимые статические damageable цели, mesh оружия и фиксированный
 прицел. Убитые цели становятся серыми общим cold material, остаются видимыми и сохраняют
-collider/full handle. Это inspectable death/no-op полигон, не enemy FSM/контент M2.
+collider/full handle. Логический тик визуал не трогает: `ShotResolver.on_kill` только
+помечает цель, а материал меняется в ближайшем `_process` Sandbox. Цель с HP 0 без
+события убийства не перекрашивается. Сброс комнаты пометки и материал не снимает: цели и их HP
+переживают сброс, мёртвая цель остаётся серой. Это inspectable death/no-op полигон, не enemy
+FSM/контент M2.
 
 Unit/golden/Jolt/аллокационные проверки и команды заданы в
 [плане пакета 3](m1-plan.md#3-дробовик-hitscan-и-разрешение-попаданий).
