@@ -58,6 +58,13 @@ func test_integer_fall_boundaries_and_cancellation() -> void:
 	# Decimal 8.001 lies just below its mm boundary as binary float; do not add epsilon.
 	assert_int(FPSController.quantize_height_mm(8.0011)).is_equal(8001)
 	assert_int(FPSController.quantize_height_mm(8.000999)).is_equal(8000)
+	# Saturated heights return the exact int cap, not the float-rounded 922337203685485568.
+	var cap_m: float = float(LandingEventQueue.MAX_HEIGHT_MM) / 1000.0
+	assert_int(FPSController.quantize_height_mm(cap_m)).is_equal(LandingEventQueue.MAX_HEIGHT_MM)
+	assert_int(FPSController.quantize_height_mm(1.0e30)).is_equal(LandingEventQueue.MAX_HEIGHT_MM)
+	assert_int(FPSController.quantize_height_mm(1.0e12)).is_equal(1_000_000_000_000_000)
+	assert_int(MobilityRuntime.fall_damage(FPSController.quantize_height_mm(1.0e30))).is_equal(
+			MobilityRuntime.fall_damage(LandingEventQueue.MAX_HEIGHT_MM))
 
 
 func test_shared_regen_once_per_logic_tick_and_stale_handles() -> void:
@@ -314,6 +321,7 @@ func test_null_room_stats_leave_mobility_inert() -> void:
 	assert_int(_made_mobility.logic_steps).is_equal(0)
 	_made_mobility.reset_clock(5)
 	assert_object(_made_mobility.abilities).is_null()  # reset neither crashes nor builds stores
+	assert_object(_made_mobility.landings).is_null()
 	# The same preset on an initialized runtime is accepted.
 	var runtime := MobilityRuntime.new(StatBlock.new(1))
 	assert_bool(runtime.grant_content(runtime.stats.allocate(), registry, category)).is_true()
