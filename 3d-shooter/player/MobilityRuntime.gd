@@ -14,10 +14,10 @@ var stale_landings: int = 0
 var _last_tick: int = -1
 
 
-func _init(host_capacity: int = StatBlock.DEFAULT_CAPACITY,
-		landing_capacity: int = LandingEventQueue.DEFAULT_CAPACITY) -> void:
-	stats = StatBlock.new(host_capacity)
-	abilities = MovementAbilities.new(host_capacity, ENERGY_REGEN)
+## `room_stats` belongs to the room (`RoomCombat`); this runtime only keeps a reference.
+func _init(room_stats: StatBlock, landing_capacity: int = LandingEventQueue.DEFAULT_CAPACITY) -> void:
+	stats = room_stats
+	abilities = MovementAbilities.new(room_stats.capacity(), ENERGY_REGEN)
 	landings = LandingEventQueue.new(landing_capacity)
 
 

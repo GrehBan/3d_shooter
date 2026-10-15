@@ -38,7 +38,7 @@ func test_armor_clamp_and_int64_damage_without_product_overflow() -> void:
 
 
 func test_integer_fall_boundaries_and_cancellation() -> void:
-	var runtime := MobilityRuntime.new(1)
+	var runtime := MobilityRuntime.new(StatBlock.new(1))
 	var entity: int = runtime.stats.allocate()
 	runtime.stats.set_stat(entity, HP, 1000)
 	for mm: int in [7999, 8000, 8001]:
@@ -59,7 +59,7 @@ func test_integer_fall_boundaries_and_cancellation() -> void:
 
 
 func test_shared_regen_once_per_logic_tick_and_stale_handles() -> void:
-	var runtime := MobilityRuntime.new(2)
+	var runtime := MobilityRuntime.new(StatBlock.new(2))
 	var a: int = runtime.stats.allocate()
 	var b: int = runtime.stats.allocate()
 	for entity: int in [a, b]:
@@ -96,7 +96,7 @@ func test_registry_content_grants_only_cold_and_initial_balance() -> void:
 	var category: int = registry.add_category(&"movement", preload("res://player/MovementAbilityData.gd"))
 	assert_int(registry.load_directory(category, "res://data/movement")).is_equal(3)
 	registry.freeze()
-	var runtime := MobilityRuntime.new(1)
+	var runtime := MobilityRuntime.new(StatBlock.new(1))
 	var entity: int = runtime.stats.allocate()
 	runtime.stats.set_stat(entity, ENERGY, 3000)
 	runtime.stats.set_stat(entity, MAX_ENERGY, 3000)
@@ -146,7 +146,7 @@ func test_landing_ring_wrap_overflow_report_once_and_reset_contract() -> void:
 	assert_int(queue.dropped_count()).is_equal(1)
 
 func test_clock_reset_preserves_remaining_cooldown_energy_grants_and_resumes_regen() -> void:
-	var runtime := MobilityRuntime.new(1)
+	var runtime := MobilityRuntime.new(StatBlock.new(1))
 	var entity: int = runtime.stats.allocate()
 	runtime.stats.set_stat(entity, ENERGY, 3000)
 	runtime.stats.set_stat(entity, MAX_ENERGY, 3000)
@@ -180,7 +180,7 @@ func test_clock_reset_preserves_remaining_cooldown_energy_grants_and_resumes_reg
 
 
 func test_cooldown_rebase_does_not_allocate() -> void:
-	var runtime := MobilityRuntime.new(1)
+	var runtime := MobilityRuntime.new(StatBlock.new(1))
 	var entity: int = runtime.stats.allocate()
 	runtime.abilities.grant(entity, MovementAbilityData.Kind.DASH, 0, 6, true, true)
 	for i: int in 300:
@@ -218,7 +218,7 @@ func _preset(definitions: Array[MovementAbilityData]) -> Registry:
 
 
 func test_invalid_content_is_atomic_for_missing_duplicate_extra_kind_and_parameter_bounds() -> void:
-	var runtime := MobilityRuntime.new(1)
+	var runtime := MobilityRuntime.new(StatBlock.new(1))
 	var entity: int = runtime.stats.allocate()
 	runtime.stats.set_stat(entity, ENERGY, 3000)
 	runtime.stats.set_stat(entity, MAX_ENERGY, 3000)
@@ -267,13 +267,13 @@ func test_invalid_content_flags_never_create_partial_grants_and_int32_limits_are
 				definitions[kind].usable_on_ground = not definitions[kind].usable_on_ground
 			else:
 				definitions[kind].usable_in_air = not definitions[kind].usable_in_air
-			var runtime := MobilityRuntime.new(1)
+			var runtime := MobilityRuntime.new(StatBlock.new(1))
 			var entity: int = runtime.stats.allocate()
 			assert_bool(runtime.grant_content(entity, _preset(definitions), 0)).is_false()
 			assert_int(runtime.abilities.active_count()).is_equal(0)
 			for k: int in 3:
 				assert_bool(runtime.abilities.is_granted(entity, k as MovementAbilityData.Kind)).is_false()
-	var runtime := MobilityRuntime.new(1)
+	var runtime := MobilityRuntime.new(StatBlock.new(1))
 	var entity: int = runtime.stats.allocate()
 	runtime.stats.set_stat(entity, ENERGY, StatBlock.VALUE_MAX)
 	runtime.stats.set_stat(entity, MAX_ENERGY, StatBlock.VALUE_MAX)
