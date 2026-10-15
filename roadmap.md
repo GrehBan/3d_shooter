@@ -4,8 +4,10 @@
 Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
 Пакет5 и текущая M1 fixture приняты локально: independent review,
 Windows all/native measurements и qualitative manual movement/mouse PASS.
-По поручению пользователя начат [план M2](docs/m2-plan.md); M2.1 реализован локально,
-Windows all/native PASS; стадия независимой приёмки — в журнале.
+По поручению пользователя начат [план M2](docs/m2-plan.md); M2.1 принят независимо
+и локально committed в `bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`.
+Зависимый M2.2 counter runner реализован локально в `codex/m2-effect-runner`;
+точные проверки и стадия независимой приёмки — в журнале.
 Публикация/PR/merge M2 не разрешены.
 Прежние draft/pending статусы ниже — история; [факты интеграции](docs/notes/pr-integration-log.md).
 
@@ -267,15 +269,20 @@ p95/p99/worst7776/9449/11146us, slow fraction0, logic max319us и все monitor
 Эти M1 доказательства получили independent exact-diff PASS; пакет5 принят локально,
 PR #13 слит в `962741d` после required Linux/Windows SUCCESS точного HEAD `062534d`.
 Это закрывает текущие prerequisites M1 с описанными аппаратными/M3 ограничениями.
-M2.1 добавляет только физическую границу фаз и интеграцию в ShotResolver; полный
-M2, элементы/статусы/карточки ещё не реализованы. Порядок, владельцы, зависимости и
+M2.1 добавляет физическую границу фаз и интеграцию в ShotResolver. M2.2 реализует
+ограниченный counter runner: ALWAYS/MIN_VALUE, INCREMENT_COUNTER, FIFO snapshots,
+quota16 и continuation без dropped work. State room-local по full subscription и
+owner handle, без сохранения карточки или ownership атаки. Обычный Sandbox не
+содержит карточек; counter rules включены только в активную test fixture.
+Полный M2, элементы/статусы/карточки ещё не реализованы. Порядок, владельцы, зависимости и
 локальные gates — [план M2](docs/m2-plan.md).
 Методика — [контракт§9](docs/contracts.md#9-m1-реальный-интеграционный-бенчмарк-пакет-5).
 
 * Реализация `DamagePipeline`, элементов и статусов на основе парадигмы Data-Oriented Design (плотные массивы, битовая упаковка состояний в `StatBlock`).
 * Система `EffectRunner` с фиксированной целочисленной квотой работы и отдельно
   измеряемым CPU budget. Wall-clock не определяет детерминированный результат;
-  quota/continuation/ownership контракт принимается до реализации M2.2.
+  контракт quota/continuation/ownership принят для counter foundation M2.2;
+  будущие damage/status/branch actions требуют отдельного договора до реализации.
 * Создание 10 карточек (включая цепочку «Громового дробовика»).
 * Дебаг-консоль для логов цепочек событий.
 

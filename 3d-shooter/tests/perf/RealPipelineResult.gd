@@ -1,17 +1,21 @@
 class_name RealPipelineResult
 extends RefCounted
-## Acceptance policy for the active M1 fixture, outside deterministic gameplay.
+## Acceptance policy for the active movement/shot/counter fixture.
 
 enum Counter { SHOTS, TRACES, HITS, RESOLVED, TARGET_DAMAGE, SIGNAL_DAMAGE,
 	DASH, SLIDE, DOUBLE_JUMP, LANDINGS, RESOLVED_LANDINGS, MOBILITY_STEPS,
-	SHOT_STEPS, GROUND_JUMPS, MUZZLES, IMPACTS, MARKS, EXPIRED, REUSED, COUNT }
+	SHOT_STEPS, GROUND_JUMPS, MUZZLES, IMPACTS, MARKS, EXPIRED, REUSED,
+	EFFECT_ACCEPTED, EFFECT_PROCESSED, EFFECT_INSPECTED, EFFECT_ACTIONS,
+	EFFECT_CONDITION, EFFECT_COOLDOWN, EFFECT_DEFERRED,
+	EFFECT_COUNTER_0, EFFECT_COUNTER_1, EFFECT_COUNTER_2, EFFECT_COUNTER_3, COUNT }
 
 const WARMUP_TICKS: int = 300
 const MEASURE_TICKS: int = 3600
 const MEMORY_LIMIT: int = 1024 * 1024
 const LOGIC_LIMIT_USEC: int = 7000
 const EXPECTED: PackedInt64Array = [120, 960, 960, 120, 5760000, 5760000,
-	30, 15, 15, 15, 15, 1800, 1800, 15, 120, 960, 960, 2040]
+	30, 15, 15, 15, 15, 1800, 1800, 15, 120, 960, 960, 2040, 2040,
+	960, 960, 3840, 2160, 960, 720, 120, 960, 1920, 0, 720]
 
 var counters: PackedInt64Array = PackedInt64Array()
 var warmup_ticks: int = 0
@@ -35,6 +39,8 @@ var no_op_traces: int = 0
 var kills: int = 0
 var pending_shots: int = 0
 var pending_landings: int = 0
+var pending_effects: int = 0
+var stale_effects: int = 0
 var live_contexts: int = 0
 var visual_occupancy_delta: int = 0
 var graphical: bool = false
@@ -66,7 +72,7 @@ func failures() -> PackedStringArray:
 	if configuration_errors != 0 or dropped != 0 or refusals != 0 or stale_landings != 0:
 		out.append("pipeline diagnostics are nonzero")
 	if no_op_traces != 0 or kills != 0 or pending_shots != 0 or pending_landings != 0 \
-			or live_contexts != 0 or visual_occupancy_delta != 0:
+			or live_contexts != 0 or visual_occupancy_delta != 0 or pending_effects != 0 or stale_effects != 0:
 		out.append("pipeline is inactive, incomplete or not quiescent")
 	if graphical and frame_fps_mean < 60.0:
 		out.append("graphical mean FPS below 60")

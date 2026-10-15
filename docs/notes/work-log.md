@@ -4,6 +4,127 @@
 открытые долги — в [follow-ups.md](follow-ups.md), гарантии API — в [contracts.md](../contracts.md).
 Локальная проверка и независимое ревью не означают публикацию, прохождение GitHub CI или слияние.
 
+## 2026-10-14 — M2.1 committed и зависимый M2.2 counter foundation
+
+Closing документация M2.1 прошла повторное независимое ревью итоговых18 файлов:
+final file-manifest SHA256
+`b16726e0ebb1052e4ddc1a59de41bb0df10151b62065b762df9d92120d327cb5`.
+Это завершает исторический pending checkpoint ниже с более ранним manifest
+`a2cef8bc498ec42522139053c7a4575ef9c1f770c43675f4d45f6a6918e40f44`.
+M2.1 локально committed как `bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`;
+не published, PR/GitHub CI/merge M2 отсутствуют. Исходная master база M1 остаётся
+`962741d9fabc3aa599255126a03b5c2de6b54227`; её PR #13 CI не является проверкой M2.
+
+По действующему поручению «работаем» координатор открыл согласованный зависимый
+worktree `C:/Users/maxim/.codex/worktrees/m2-effect-runner/3d_shooter`, ветку
+`codex/m2-effect-runner` от точного M2.1 commit выше. Lead developer владеет runtime,
+unit/integration/benchmark/CI; QA/SDET — независимыми Python oracle и golden;
+завершение документации передано отдельному designated writer. Независимый
+архитектор проверяет точный итоговый полный diff после финальных измерений.
+Публикация/PR/merge M2 по-прежнему не входят в поручение.
+
+До кода принят ограниченный контракт M2.2: ALWAYS/MIN_VALUE над captured int value,
+только INCREMENT_COUNTER, immutable cold scalar copies максимум64 definitions.
+Room-local state keyed by full subscription + owner handle, без CardInstance/save
+и без использования `EffectHost.state_slot`. Atomic admission фиксирует упорядоченные
+full handles; новые подписки невидимы, снятые/переиспользованные пропускаются.
+Очередь32 events ×8 snapshots, admission≤9 visits, quota16 inspected candidates:
+stale/condition/cooldown/overflow тоже расходуют квоту. FIFO cursor сохраняется
+между тиками, обычное исчерпание квоты не теряет события. Queue/snapshot overflow
+отвергает целое событие с per-event config/drop и one-time constant diagnostic.
+Counter overflow проверяется до state/cooldown writes; cooldown начинается только
+после успеха, elapsed-tick comparison безопасен у INT64_MAX. Повторные/обратные
+тики не исполняют работу. `reset_diagnostics()` сохраняет FIFO/state/time/activity;
+`reset_room()` отменяет FIFO и очищает room-local state/time/counters, сохраняя
+definitions/subscriptions. Детали — [контракт](../contracts.md#effectruledata-и-effectrunner-effects-m22).
+
+Bridge OnHit копирует source + фактический HP damage; target/context/lease не хранит
+и не закрывает. HP0-valid source допустим; stale full source отвергается. Поэтому
+post-hit counter не задерживает существующее завершение атаки и не наносит урон.
+Единственный Sandbox subscriber: resolver → effects → mobility. Resolver reset
+выполняется первым; его отказ сохраняет FIFO/state/time runner. Обычный Sandbox
+имеет пустые definitions; четыре `.tres` из tests включены только в benchmark.
+Отдельный32768B packed cap включает EffectHost/HandlePool + runner:
+4992+4800=9792B empty,9904B four definitions,11584B at64; Godot wrappers,
+allocator и холодные Resource не включены. Weapon/visual caps и баланс M1 сохранены.
+
+Focused final `ci-logs/m22-runner/focused-final.log`:21/21 PASS в4 suites,
+0 errors/failures/skipped/orphans, exit0. Это11 runner tests,2 Sandbox tests,
+7 RealPipelineResult tests и1 golden. Покрыты ordering/mutation/reuse/stale/full
+handles>Int32, immutable cold copy, cooldown/int64 boundary, atomic malformed/
+capacity/counter refusal, diagnostic/room reset. Active mutation:300 warmup +20k
+итераций,20300 actions/stale skips/processed и40600 inspections, все5 monitor deltas0
+до assertions. Suppressed malformed20k loop: config20001, accepted0,
+object/static-memory deltas0. Sandbox доказывает immediate context completion,
+captured damage после death/despawn цели и preservation при failed resolver reset.
+Отдельный Python oracle `res://tests/tools/effect_runner_ref.py`: golden3633298175,
+343 words; независимая модель ожидает960 accepted/processed,3840 inspections,
+2160 actions,960 condition refusals,720 cooldown refusals,120 deferrals,
+counter deltas `[960,1920,0,720]`. Synthetic reference3032385286 не менялся.
+
+На этом checkpoint полный fresh Windows all и native same-fixture M2.2 ещё
+ожидались; прерванные ранние all-прогоны не являются PASS. Итоговые измерения и
+exact-diff review записываются отдельно ниже. M2.2 ещё не принят, не staged/committed/published;
+M2 GitHub/Linux CI и merge отсутствуют. Scope не включает secondary damage,
+spawn/status/branch actions, persistent cards, новый баланс или M3 workload
+40 enemies/effect storms. Новая ручная OS input/smoothness проверка не заявляется.
+
+### Финальная проверка M2.2 — 2026-10-15
+
+После runtime freeze координатор завершил fresh `ci/run_checks.sh all`, exit0,
+Godot4.7.2-stable; логи `ci-logs/m22-runner/all-complete/`. Import PASS,
+scripts75/0,280/280tests в38 suites за5m00.134s (`report_4`),
+errors/failures/flaky/skipped/orphans0. Synthetic3032385286 PASS: все5 monitor
+deltas0, dropped/config0,1800 logic samples avg675.9us/max1092us (информационно).
+
+Активная headless joint fixture PASS:120shots/960traces/960hits/120resolved,
+damage5,760,000=signal damage; dash30/slide15/double15/landing15/groundjump15,
+distance557.12m/peakX35.79m/look1.44; visuals120/960/960, expiry/reuse2040,
+occupancy delta0. Whole-GameLoop1800 samples avg28.1us/max440us при limit7000us.
+Runner: accepted960/processed960/inspected3840/actions2160, condition960,
+cooldown720/deferred120, counters `[960,1920,0,720]`, pending0. Все5 monitor deltas,
+cumulative configuration/drop/refusals/stale/noops/kills/pending/landings/contexts0.
+Negative probe исполнил тот же полный action/effect workload и отказал только
+по allocations (+1object/+1orphan/+768B static); ожидаемый exit1 подтверждён
+runner, cleanup object/orphan deltas0. Strict effects marker исключает inactive
+negative fixture. Unknown-option setup refusal — ожидаемый exit2, gate PASS.
+
+Native same-fixture PASS, exit0: Windows Forward+/D3D12, NVIDIA GeForce RTX4050
+Laptop GPU, vsync1; requested/captured pixels1280×720, reported logical viewport
+1152×648. После300warmup измерены3600physics ticks за60005.1ms wall time:
+8578 actual frame intervals, mean142.984FPS, p95/p99/worst7589/7741/8160us,
+slow fraction0;1800 whole-GameLoop samples avg51.4us/max431us. Те же action,
+damage, visual и effect counters, pending0; все5 monitor deltas и cumulative
+diagnostics0. `native-errors.log` пуст. Координатор просмотрел `native.png`:
+непустая сцена, target/gun/crosshair/retained marks видимы; нового visual content нет.
+Headless FPS не используется как graphical evidence. Новая ручная OS input/
+smoothness проверка не выполнялась. Это подтверждает только текущую counter
+fixture на указанной конфигурации, не M3 с40enemies/effect storms или каждый GPU.
+
+После freeze runtime/tests/fixtures/CI не менялись; полный all/native проверяет
+те же21 runtime-related files. Финальные8 MD дополняют29-file review snapshot.
+Markdown structure, все relative file links/heading anchors изменённых MD и
+`git diff --check` PASS; Godot ради последующих MD не перезапускался.
+Независимый exact full-diff review ещё ожидается. M2.2 не принят, не staged/
+committed/published; M2 PR, GitHub/Linux CI и merge отсутствуют.
+
+### Локальная приёмка M2.2 — 2026-10-15
+
+Независимый архитектор проверил точный итоговый diff всех29 файлов относительно
+M2.1 базы `bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`, включая runtime,
+integration/benchmark/CI, unit/golden/Python oracle и восемь MD. Вердикт PASS,
+замечаний нет. Reviewer и координатор независимо подтвердили file-manifest SHA256
+`04d39ad2b8fdb9e870382b8e79ce12c21d1f7967eb9450ace2ae2f434a1664c4`.
+Это закрывает сохранённый выше pre-review checkpoint. Координатор принял M2.2
+локально. Следующий шаг — числовой контракт M2.3: элементы/реакции/статусы,
+длительности, stacking/refresh, immunities, crit/RNG и порядок фаз до зависимого кода.
+
+Эта closing запись и актуализация плана изменяют только два MD и передаются на
+повторное независимое review closing delta. Runtime/tests/fixtures/CI совпадают с
+проверенной версией, Godot повторно не запускался. M2.2 ещё не staged/committed/
+published; M2 PR, GitHub/Linux CI и merge отсутствуют. Публикация/слияние M2
+не входят в поручение пользователя.
+
 ## 2026-10-14 — начало M2.1 после слияния M1
 
 По явному поручению пользователя PR #13 squash-слит после required Linux/Windows

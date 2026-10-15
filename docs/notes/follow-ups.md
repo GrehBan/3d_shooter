@@ -4,7 +4,9 @@
 Required Linux/Windows CI точного HEAD #13 `062534d` — SUCCESS, run38595049442.
 Пакет5 и текущая M1 fixture приняты локально после independent review,
 Windows all/native measurements и qualitative manual movement/mouse PASS.
-M2.1 реализован локально, Windows all/native PASS; стадия независимой приёмки — в журнале.
+M2.1 принят независимо и локально committed в `bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`.
+Зависимый M2.2 counter runner реализован локально; проверки и независимая приёмка —
+в журнале. Публикация/PR/merge M2 не разрешены.
 Прежние draft/pending статусы ниже — история; [факты интеграции](pr-integration-log.md).
 
 Пакет5 не подтверждает M3 performance40enemies/effect storms или Steam Deck-class
@@ -32,12 +34,21 @@ reference. Mean graphicalFPS≥60 на конкретном GPU не гаран�
 
 ## Prerequisites следующих пакетов M2
 
-M2.1 ограничен physical foundation. До EffectRunner нужны fixed work quota,
-continuation/trigger ordering и close/release ownership; wall-clock остаётся
-измерением, не источником детерминированных решений. До элементов/статусов/критов
+M2.1 ограничен physical foundation. M2.2 закрепил integer candidate quota,
+FIFO continuation, full subscription snapshots, cooldown и room reset для
+INCREMENT_COUNTER. Wall-clock остаётся измерением. Runner не хранит target/context
+и не владеет атакой; его room-local state не является persistent `CardInstance`.
+До secondary damage/status/spawn/branch actions нужны собственные payload,
+target validation, depth/hit/work quotas, continuation и close/release ownership;
+текущий counter workload их не подтверждает. До элементов/статусов/критов
 нужны утверждённые numerical/stacking/RNG правила; до content — точные десять карточек
 и их баланс. Эти зависимые решения не подменяются числами в foundation.
 Последовательность и критерии — [план M2](../m2-plan.md).
+
+Принятый packed cap M2.2 покрывает только payload EffectHost/HandlePool + runner,
+без wrappers/allocator/Resource heap; полная room RAM/VRAM требует отдельного
+измерения при расширении контента. Текущая активная fixture измеряет counters
+вместе с M1, не workload M3 с 40 врагами и effect storms.
 
 ## P3: точность int cap высоты падения
 

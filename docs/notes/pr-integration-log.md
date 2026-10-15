@@ -10,9 +10,11 @@ Package5 and the current M1 fixture were locally accepted after independent revi
 Windows all, native measurements and the qualitative human movement/mouse check.
 The earlier open/pending entries below are historical checkpoints.
 
-The user then authorized starting M2. Local M2.1 physical DamagePipeline work uses
-this fresh master in isolated `codex/m2-combat-plan`; Windows all and native gates
-passed. The work log identifies the exact snapshot and independent review status.
+The user then authorized starting M2. M2.1 physical DamagePipeline passed Windows
+all/native gates and independent final-diff review, then was committed locally as
+`bc1810450ffe150cd6ccea5930b6bc31a69b5bb2`. M2.2 counter foundation uses that agreed
+dependent base in isolated `codex/m2-effect-runner`; it is implemented locally.
+The work log identifies its exact checks and independent review status.
 M2 is neither published nor merged; no M2 PR/publication/merge is authorized.
 M1 measurements and CI are evidence for their tested source, not the new M2 diff.
 See the [M2 plan](../m2-plan.md) and [work log](work-log.md).
