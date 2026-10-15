@@ -8,6 +8,8 @@ var player_handle: int = StatBlock.INVALID_HANDLE
 @export_dir var weapon_data_directory: String = "res://data/weapons"
 @export var visual_data: ShotVisualData = preload("res://data/visuals/shotgun.tres")
 @export var effect_definitions: Array[EffectRuleData] = []
+## Identity passed to EventBus.room_entered on successful load and room reset.
+@export var room_id: int = 0
 const ROOM_SHOTS: int = 4
 const ROOM_TRACE_CAP: int = 32
 const ROOM_PACKED_BYTES: int = 131_072
@@ -31,6 +33,9 @@ var visuals: ShotVisualPool
 var target_handles: PackedInt64Array = PackedInt64Array()
 var _target_meshes: Array[MeshInstance3D] = []
 var _dead_material: StandardMaterial3D
+# Kill events mark targets here; the frame applies the defeated look.
+var _dead_pending: PackedByteArray = PackedByteArray()
+var _dead_dirty: bool = false
 
 
 func _ready() -> void:
@@ -75,6 +80,7 @@ func _ready() -> void:
 	shots = ShotBatch.new(ROOM_SHOTS, stride, ROOM_HOSTS)
 	resolver = ShotResolver.new(combat.stats, shots, ROOM_CONTEXTS)
 	resolver.on_hit.connect(_on_hit)
+	resolver.on_kill.connect(_on_kill)
 	weapon = get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon
 	if not weapon.initialize(definitions[0], combat.stats, shots, player_handle, get_node(^"Player") as FPSController):
 		_abort_initialization("Sandbox: weapon initialization failed")
@@ -90,19 +96,35 @@ func _ready() -> void:
 		Damageable.attach(body, target)
 		target_handles.append(target)
 		_target_meshes.append(body.get_child(1) as MeshInstance3D)
+	_dead_pending.resize(target_handles.size())
 	_dead_material = StandardMaterial3D.new()
 	_dead_material.albedo_color = Color(0.22, 0.25, 0.27)
 	GameLoop.logic_tick.connect(_on_logic_tick)
+	EventBus.room_entered.emit(room_id)
 
 
 func _on_logic_tick(tick: int) -> void:
 	resolver.logic_step(tick)
 	effects.logic_step(tick)
 	mobility.logic_step(tick)
-	# Visible defeated targets preserve an inspectable collider and full handle.
-	for index: int in target_handles.size():
-		if mobility.stats.get_stat(target_handles[index], StatBlock.Stat.HP) <= 0:
+
+
+# Visible defeated targets preserve an inspectable collider and full handle.
+func _process(_delta: float) -> void:
+	if not _dead_dirty:
+		return
+	_dead_dirty = false
+	for index: int in _dead_pending.size():
+		if _dead_pending[index] != 0:
+			_dead_pending[index] = 0
 			_target_meshes[index].material_override = _dead_material
+
+
+func _on_kill(_source: int, target: int, _epoch: int, _sequence: int, _trace: int) -> void:
+	for index: int in target_handles.size():
+		if target_handles[index] == target:
+			_dead_pending[index] = 1
+			_dead_dirty = true
 
 
 func _on_hit(source: int, _target: int, _epoch: int, _sequence: int,
@@ -131,3 +153,4 @@ func reset_mobility_clock() -> void:
 		return
 	mobility.reset_clock(old_tick)
 	GameLoop.reset_clock()
+	EventBus.room_entered.emit(room_id)
