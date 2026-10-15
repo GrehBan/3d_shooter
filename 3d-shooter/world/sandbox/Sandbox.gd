@@ -92,7 +92,7 @@ func _ready() -> void:
 		_abort_initialization("Sandbox: weapon initialization failed")
 		return
 	visuals = get_node(^"ShotVisualPool") as ShotVisualPool
-	if not visuals.initialize(visual_data, weapon, weapon.get_node(^"MuzzleSocket") as Node3D, shots.epoch):
+	if not visuals.initialize(visual_data, weapon, weapon.get_node(^"Viewmodel/MuzzleSocket") as Node3D, shots.epoch):
 		_abort_initialization("Sandbox: visual initialization failed")
 		return
 	for body: Node in get_node(^"Targets").get_children():
@@ -103,6 +103,8 @@ func _ready() -> void:
 		target_handles.append(target)
 		_target_meshes.append(body.get_child(1) as MeshInstance3D)
 	_dead_pending.resize(target_handles.size())
+	(weapon.get_node(^"Viewmodel") as ViewmodelSway).bind(get_node(^"Player") as FPSController,
+			get_node(^"Player/Camera3D") as Camera3D)
 	_dead_material = StandardMaterial3D.new()
 	_dead_material.albedo_color = Color(0.22, 0.25, 0.27)
 	GameLoop.logic_tick.connect(_on_logic_tick)

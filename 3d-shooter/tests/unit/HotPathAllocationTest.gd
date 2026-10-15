@@ -9,6 +9,7 @@ extends GdUnitTestSuite
 ## * MEMORY_STATIC is held to 4 KiB.
 ## Temporary Array, Dictionary and String values are not Objects and are not caught here.
 
+const GdUnitErrorCount: Script = preload("res://tests/util/GdUnitErrorCount.gd")
 const WARMUP: int = 300
 const MEASURED: int = 3600
 const MEMORY_TOLERANCE: int = 4096
@@ -224,9 +225,7 @@ func test_landing_event_queue_suppressed_overflow() -> void:
 			queue.push(9, 9000, 0)
 	)
 	await notification.is_push_error("LandingEventQueue: overflow, landing event dropped")
-	# gdUnit4 6.2.1 matches a message but does not count them; read its pinned logger.
-	var logger: GodotGdErrorMonitor.GdUnitLogger = notification.get("_logger")
-	assert_int(logger.entries().size()).is_equal(1)
+	assert_int(GdUnitErrorCount.entries(notification)).is_equal(1)
 	queue.reset_dropped_count()
 	_begin()
 	for i: int in MEASURED:

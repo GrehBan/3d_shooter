@@ -1,6 +1,7 @@
 extends GdUnitTestSuite
 ## DamagePayloadBuffer: FIFO, перенос через границу кольца, переполнение, int64-поля.
 
+const GdUnitErrorCount: Script = preload("res://tests/util/GdUnitErrorCount.gd")
 const OVERFLOW_ERROR: String = "DamagePayloadBuffer: переполнение, записи отбрасываются"
 
 
@@ -12,10 +13,7 @@ func _assert_single_overflow(callback: Callable) -> void:
 	var notification: GdUnitGodotErrorAssert = assert_error(callback)
 	await notification.is_push_error(OVERFLOW_ERROR)
 	# gdUnit4 6.2.1: is_push_error ищет совпадение, но не проверяет число сообщений.
-	# Его приватный logger захватывает push/script errors независимо от настроек suite.
-	# Читаем pinned API только в тесте; addon не меняется.
-	var logger: GodotGdErrorMonitor.GdUnitLogger = notification.get("_logger")
-	assert_int(logger.entries().size()).is_equal(1)
+	assert_int(GdUnitErrorCount.entries(notification)).is_equal(1)
 
 
 func _first_overflow(buffer: DamagePayloadBuffer, value: int) -> void:

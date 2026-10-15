@@ -1,5 +1,6 @@
 extends GdUnitTestSuite
 
+const GdUnitErrorCount: Script = preload("res://tests/util/GdUnitErrorCount.gd")
 var _stats: StatBlock
 var _pipeline: DamagePipeline
 var _payloads: DamagePayloadBuffer
@@ -36,8 +37,7 @@ func _expect_first_error() -> void:
 	var notification: GdUnitGodotErrorAssert = assert_error(func() -> void:
 		assert_int(_pipeline.resolve_front(_payloads)).is_equal(DamagePipeline.INVALID_RESULT))
 	await notification.is_push_error(DamagePipeline.INVALID_PAYLOAD_ERROR)
-	var logger: GodotGdErrorMonitor.GdUnitLogger = notification.get("_logger")
-	assert_int(logger.entries().size()).is_equal(1)
+	assert_int(GdUnitErrorCount.entries(notification)).is_equal(1)
 
 
 func test_front_only_physical_shield_armor_and_opaque_metadata() -> void:

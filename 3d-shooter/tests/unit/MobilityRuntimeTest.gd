@@ -1,5 +1,6 @@
 extends GdUnitTestSuite
 
+const GdUnitErrorCount: Script = preload("res://tests/util/GdUnitErrorCount.gd")
 const HP := StatBlock.Stat.HP
 const SHIELD := StatBlock.Stat.SHIELD
 const ARMOR := StatBlock.Stat.ARMOR
@@ -131,9 +132,7 @@ func test_landing_ring_wrap_overflow_report_once_and_reset_contract() -> void:
 		results.append(queue.push(3, 9000, 0))
 		results.append(queue.push(4, 9000, 0)))
 	await notification.is_push_error("LandingEventQueue: overflow, landing event dropped")
-	# Same pinned logger API as DamagePayloadBufferTest; explicitly count notifications.
-	var logger: GodotGdErrorMonitor.GdUnitLogger = notification.get("_logger")
-	assert_int(logger.entries().size()).is_equal(1)
+	assert_int(GdUnitErrorCount.entries(notification)).is_equal(1)
 	assert_array(results).is_equal([false, false])
 	assert_int(queue.dropped_count()).is_equal(2)
 	assert_int(queue.get_entity(0)).is_equal(0x100000000)
