@@ -42,8 +42,6 @@
   (п. 9, 10, 12).
 * Владелец `StatBlock` — комната (`RoomCombat` или аналог), `MobilityRuntime` получает
   ссылку (п. 7).
-* Unit-тесты аллокаций для `ShotResolver`, `ShotBatch`, `WeaponState`,
-  `LandingEventQueue`, `ShotVisualPool`.
 * Мёртвая маска статусов `StatBlock` — убирается вместе с переносом M2.3: источник
   истины статусов — `StatusRuntime` с O(1) `has_status`; golden и модель `StatBlock`
   обновляются (п. 11).

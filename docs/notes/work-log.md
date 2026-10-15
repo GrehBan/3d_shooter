@@ -4,6 +4,18 @@
 открытые долги — в [follow-ups.md](follow-ups.md), гарантии API — в [contracts.md](../contracts.md).
 Локальная проверка и независимое ревью не означают публикацию, прохождение GitHub CI или слияние.
 
+## 2026-10-15 — тесты аллокаций горячих путей
+
+Шаг `claude/alloc-tests` (решение по [аудиту](audit-2026-10-15.md)). Новый
+`tests/unit/HotPathAllocationTest.gd` проверяет отдельно, без полного полигона,
+`ShotBatch` (reserve/write/publish/abort/prepare/consume и сброс комнаты), `WeaponState`
+(нажатие, выстрел, отпускание, перенос часов), `ShotResolver` (`logic_step` восьми дробин со
+слушателем `on_hit`), `LandingEventQueue` (запись, чтение, очистка, переполнение) и
+`ShotVisualPool` (вспышки, контакты, истечение и следование за сокетом). Каждый случай —
+300 итераций прогрева и 3600 замера; дельты `OBJECT_COUNT` и `OBJECT_NODE_COUNT` равны 0,
+`MEMORY_STATIC` ≤ 1 МиБ, снимаются до первого `assert_*`. Отрицательная проверка: временно
+внедрённое выделение в `ShotBatch.prepare()` роняет тест.
+
 ## 2026-10-15 — процесс и исключения манифеста
 
 Шаг `claude/process-manifest` (п. 3, 6, 8 [аудита](audit-2026-10-15.md)).
