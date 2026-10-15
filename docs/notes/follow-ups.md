@@ -37,10 +37,11 @@
 
 ### Решения по [аудиту 2026-10-15](audit-2026-10-15.md)
 
-* Владелец `StatBlock` — комната (`RoomCombat` или аналог), `MobilityRuntime` получает
-  ссылку (п. 7).
 * Unit-тесты аллокаций для `ShotResolver`, `ShotBatch`, `WeaponState`,
   `LandingEventQueue`, `ShotVisualPool`.
+* **M2.3:** `RoomCombat.reset_room()` и тест отсутствия аллокаций при сбросе появляются
+  вместе с состоянием комнаты (`StatusRuntime`, `ReactionRuntime`, ресурс конфигурации
+  комнаты); `StatBlock` при сбросе комнаты не сбрасывается.
 * **M2.3:** перекраску мёртвых целей сейчас запускает только `ShotResolver.on_kill`;
   убийства пульсами статусов (`StatusRuntime.on_pulse_kill` в снимке M2.3) и вторичным
   уроном реакций при переносе нужно провести в тот же путь.
