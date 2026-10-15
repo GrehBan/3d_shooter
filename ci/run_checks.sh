@@ -85,6 +85,14 @@ run_real_pipeline() {
 	echo "real_pipeline_unknown_option: OK"
 }
 
+# gdUnit4 rotates old reports itself, but on this Windows/OneDrive checkout it fails to
+# remove the emptied report directories and floods the log with "Delete ... failed". Start
+# from an empty report directory instead; reports are build output and ignored by git.
+run_tests() {
+	rm -rf "$PROJECT_DIR/reports"
+	run_step tests -s addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode --add res://tests/
+}
+
 case "${1:-all}" in
 	import)
 		run_step import --import
@@ -93,7 +101,7 @@ case "${1:-all}" in
 		run_step scripts -s res://tests/check_scripts.gd
 		;;
 	tests)
-		run_step tests -s addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode --add res://tests/
+		run_tests
 		;;
 	regress)
 		run_step regress --fixed-fps 60 -s res://tests/perf/regress.gd
@@ -104,7 +112,7 @@ case "${1:-all}" in
 	all)
 		run_step import --import
 		run_step scripts -s res://tests/check_scripts.gd
-		run_step tests -s addons/gdUnit4/bin/GdUnitCmdTool.gd --ignoreHeadlessMode --add res://tests/
+		run_tests
 		run_step regress --fixed-fps 60 -s res://tests/perf/regress.gd
 		run_real_pipeline
 		;;
