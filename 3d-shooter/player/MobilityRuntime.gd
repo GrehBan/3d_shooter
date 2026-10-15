@@ -4,6 +4,7 @@ extends RefCounted
 ## Bind several physical controllers to this same runtime; none subscribes independently.
 
 const ENERGY_REGEN: int = 50  # raw per 30 Hz logic tick, 1500 raw/second
+const CONFIGURATION_ERROR: String = "MobilityRuntime: the room StatBlock is required"
 
 var stats: StatBlock
 var abilities: MovementAbilities
@@ -15,16 +16,24 @@ var _last_tick: int = -1
 
 
 ## `room_stats` belongs to the room (`RoomCombat`); this runtime only keeps a reference.
+## A null StatBlock is a configuration error: the runtime stays uninitialized and inert.
 func _init(room_stats: StatBlock, landing_capacity: int = LandingEventQueue.DEFAULT_CAPACITY) -> void:
+	if room_stats == null:
+		push_error(CONFIGURATION_ERROR)
+		return
 	stats = room_stats
 	abilities = MovementAbilities.new(room_stats.capacity(), ENERGY_REGEN)
 	landings = LandingEventQueue.new(landing_capacity)
 
 
+func is_initialized() -> bool:
+	return stats != null
+
+
 ## Cold initialization only. Validate the complete M1 preset before ANY grant.
 ## false is a caller configuration error: do not start this room with invalid content.
 func grant_content(entity: int, registry: Registry, category: int) -> bool:
-	if not stats.is_valid(entity) or registry == null or not registry.is_frozen() or registry.count(category) != 3:
+	if not is_initialized() or not stats.is_valid(entity) or registry == null or not registry.is_frozen() or registry.count(category) != 3:
 		return false
 	var seen: int = 0
 	for id: int in registry.count(category):
@@ -53,7 +62,7 @@ func grant_content(entity: int, registry: Registry, category: int) -> bool:
 
 ## Monotonic logic tick; duplicate composition-root calls cannot double regenerate.
 func logic_step(tick: int) -> void:
-	if tick <= _last_tick:
+	if not is_initialized() or tick <= _last_tick:
 		return
 	_last_tick = tick
 	for i: int in landings.count():
@@ -77,6 +86,8 @@ static func fall_damage(height_mm: int) -> int:
 ## Explicit room clock reset: discard pending events and preserve remaining cooldown.
 ## old_logic_tick MUST come from the caller's GameLoop before its reset, not _last_tick.
 func reset_clock(old_logic_tick: int) -> void:
+	if not is_initialized():
+		return
 	abilities.rebase_clock(old_logic_tick)
 	_last_tick = -1
 	landings.clear()

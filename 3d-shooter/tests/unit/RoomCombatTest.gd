@@ -3,6 +3,8 @@ extends GdUnitTestSuite
 
 const SANDBOX: PackedScene = preload("res://world/sandbox/Sandbox.tscn")
 var _scene: Node3D
+var _made_combat: RoomCombat
+var _made_mobility: MobilityRuntime
 
 
 func after_test() -> void:
@@ -18,14 +20,15 @@ func test_cold_creation_then_hot_stat_access_does_not_allocate() -> void:
 	var entity: int = combat.stats.allocate()
 	var mobility := MobilityRuntime.new(combat.stats)
 	for i: int in 300:
-		combat.stats.set_stat(entity, StatBlock.Stat.HP, i)
+		combat.stats.set_stat(entity, StatBlock.Stat.HP, combat.stats.get_stat(entity, StatBlock.Stat.HP) + 1)
 		combat.stats.add_stat_clamped(entity, StatBlock.Stat.ENERGY, 50, 0, 3000)
+		mobility.logic_step(i + 1)
 	var objects: int = int(Performance.get_monitor(Performance.OBJECT_COUNT))
 	var memory: int = int(Performance.get_monitor(Performance.MEMORY_STATIC))
 	for i: int in 3600:
 		combat.stats.set_stat(entity, StatBlock.Stat.HP, combat.stats.get_stat(entity, StatBlock.Stat.HP) + 1)
 		combat.stats.add_stat_clamped(entity, StatBlock.Stat.ENERGY, 50, 0, 3000)
-		mobility.logic_step(i + 1)
+		mobility.logic_step(300 + i + 1)
 	var object_delta: int = int(Performance.get_monitor(Performance.OBJECT_COUNT)) - objects
 	var memory_delta: int = int(Performance.get_monitor(Performance.MEMORY_STATIC)) - memory
 	assert_int(created).is_greater(0)  # creation is the cold path and does allocate
@@ -33,7 +36,8 @@ func test_cold_creation_then_hot_stat_access_does_not_allocate() -> void:
 	assert_int(memory_delta).is_less_equal(1024 * 1024)
 	assert_object(mobility.stats).is_same(combat.stats)
 	assert_int(combat.stats.capacity()).is_equal(4)
-	assert_int(combat.stats.get_stat(entity, StatBlock.Stat.HP)).is_equal(299 + 3600)
+	assert_int(combat.stats.get_stat(entity, StatBlock.Stat.HP)).is_equal(300 + 3600)
+	assert_int(mobility.logic_steps).is_equal(300 + 3600)
 
 
 func test_sandbox_room_owns_the_single_stat_block_and_reset_keeps_it() -> void:
@@ -44,12 +48,41 @@ func test_sandbox_room_owns_the_single_stat_block_and_reset_keeps_it() -> void:
 	var combat: RoomCombat = _scene.get(&"combat") as RoomCombat
 	var mobility: MobilityRuntime = _scene.get(&"mobility") as MobilityRuntime
 	var player: int = _scene.get(&"player_handle")
+	var shots: ShotBatch = _scene.get(&"shots") as ShotBatch
 	var stats_before: StatBlock = combat.stats
 	var alive_before: int = combat.stats.alive_count()
 	combat.stats.set_stat(player, StatBlock.Stat.HP, 12345)
+	for frame: int in 6:
+		await get_tree().physics_frame
+	var tick_before: int = GameLoop.get_logic_tick()
+	var epoch_before: int = shots.epoch
 	_scene.call(&"reset_mobility_clock")
+	assert_int(tick_before).is_greater(0)
+	assert_int(GameLoop.get_logic_tick()).is_equal(0)  # the reset really ran to the end
+	assert_int(shots.epoch).is_equal(epoch_before + 1)
+	assert_int(_scene.process_mode).is_not_equal(Node.PROCESS_MODE_DISABLED)
 	assert_object(mobility.stats).is_same(combat.stats)
+	assert_object(_scene.get(&"effects").get(&"_stats")).is_same(combat.stats)
+	assert_object(_scene.get(&"resolver").get(&"_stats")).is_same(combat.stats)
+	assert_object(_scene.get(&"weapon").get(&"_stats")).is_same(combat.stats)
 	assert_object(combat.stats).is_same(stats_before)
 	assert_int(alive_before).is_equal(4)  # player and three targets
 	assert_int(combat.stats.alive_count()).is_equal(4)
 	assert_int(combat.stats.get_stat(player, StatBlock.Stat.HP)).is_equal(12345)
+
+
+func test_invalid_room_capacity_is_a_configuration_error() -> void:
+	await assert_error(func() -> void: _made_combat = RoomCombat.new(0)).is_push_error(
+			RoomCombat.CONFIGURATION_ERROR)
+	assert_bool(_made_combat.is_initialized()).is_false()
+	assert_object(_made_combat.stats).is_null()
+
+
+func test_null_room_stats_leave_mobility_inert() -> void:
+	await assert_error(func() -> void: _made_mobility = MobilityRuntime.new(null)).is_push_error(
+			MobilityRuntime.CONFIGURATION_ERROR)
+	assert_bool(_made_mobility.is_initialized()).is_false()
+	_made_mobility.logic_step(1)
+	_made_mobility.reset_clock(1)
+	assert_bool(_made_mobility.grant_content(0, null, 0)).is_false()
+	assert_int(_made_mobility.logic_steps).is_equal(0)

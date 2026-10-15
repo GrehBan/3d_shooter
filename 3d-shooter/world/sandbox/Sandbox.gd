@@ -63,6 +63,9 @@ func _ready() -> void:
 		return
 	combat = RoomCombat.new(ROOM_HOSTS)
 	mobility = MobilityRuntime.new(combat.stats)
+	if not combat.is_initialized() or not mobility.is_initialized():
+		_abort_initialization("Sandbox: invalid room combat capacity")
+		return
 	effect_host = EffectHost.new(ROOM_HOSTS, ROOM_EFFECT_ENTRIES)
 	effects = EffectRunner.new(combat.stats, effect_host, effect_definitions)
 	if not effects.is_initialized() or effects.packed_bytes() + ROOM_EFFECT_HOST_BYTES > ROOM_EFFECT_PACKED_BYTES:
