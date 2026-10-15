@@ -135,6 +135,27 @@
   ожидаемым типам: отказ с `push_error` и `false`, прежнее состояние полностью сохранено.
   При верных типах проверяются ёмкость, размеры, счётчики, free-list, флаги и поколения.
 
+### RoomCombat (`combat/RoomCombat.gd`)
+
+Владелец боевых хранилищ комнаты. `RoomCombat.new(host_capacity)` создаётся холодно при
+загрузке комнаты и создаёт единственный `StatBlock` комнаты; поле `stats` не
+переназначается. Остальные runtime комнаты (`MobilityRuntime`, `EffectRunner`,
+`ShotResolver`, `HitscanWeapon`) получают ссылку на `combat.stats` и сами `StatBlock` не
+создают: `MobilityRuntime.new(room_stats, landing_capacity)`. `EffectHost` `StatBlock` не
+получает, его ёмкость задаётся числом хостов. Обращения к `combat.stats` в горячем пути не
+выделяют память.
+
+Ошибки конфигурации: `RoomCombat.new(host_capacity)` вне `1..65536` и
+`MobilityRuntime.new(null)` пишут `push_error` и оставляют объект неинициализированным
+(`is_initialized() == false`); неинициализированный `MobilityRuntime` в `logic_step`,
+`reset_clock` и `grant_content` ничего не делает и возвращает отказ. Sandbox в этом случае
+прерывает загрузку комнаты.
+
+Сброс комнаты (`Sandbox.reset_mobility_clock`) `StatBlock` не сбрасывает: сущности, их
+статы и handle переживают сброс, жизненный цикл сущности отдельный (§6, §7). Поэтому у
+`RoomCombat` пока нет `reset_room()`; он появится вместе с состоянием комнаты, которое нужно
+сбрасывать (статусы и реакции M2.3, конфигурация комнаты), с тестом отсутствия аллокаций.
+
 ### DamagePayload и DamagePayloadBuffer (`combat/`)
 
 * `DamagePayload` — словарь: `Phase` (Base → Add → Multiply → Element → Crit → Mitigation →

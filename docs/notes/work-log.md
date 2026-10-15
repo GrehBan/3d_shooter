@@ -36,6 +36,17 @@ effects и weapon пути отказа нет); пометка убийства
 `room_entered`. Контракт §7 упоминает read-only `ShotResolver.owned_count` и перечисляет, какие
 шаги сброса могут отказать.
 
+## 2026-10-15 — RoomCombat как владелец StatBlock
+
+Шаг `claude/room-combat` (п. 7 [аудита](audit-2026-10-15.md)). Новый чистый
+`combat/RoomCombat.gd` создаёт единственный `StatBlock` комнаты; `MobilityRuntime` больше не
+создаёт его, а получает ссылку (`MobilityRuntime.new(room_stats, landing_capacity)`), Sandbox
+передаёт `combat.stats` во все runtime комнаты. Решение координатора: сброс комнаты
+`StatBlock` не сбрасывает (сущности и статы переживают сброс), `reset_room()` у `RoomCombat`
+появится вместе с состоянием комнаты M2.3. Тест `RoomCombatTest`: холодное создание,
+отсутствие аллокаций при обращениях к `combat.stats` в горячем пути, единый `StatBlock` в
+Sandbox до и после сброса комнаты. `RoomCombat` проверяется `LogicIsolationTest` по папке `combat/`.
+
 ## 2026-10-15 — события Sandbox и владение в ShotResolver
 
 Шаг `claude/sandbox-events` (п. 9, 10, 12 [аудита](audit-2026-10-15.md)). Sandbox больше не
