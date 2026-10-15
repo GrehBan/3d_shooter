@@ -4,7 +4,7 @@ extends RefCounted
 ## of the room (mobility, effects, weapons, resolver) receives references to these stores.
 ## Room clock reset keeps entities and stats: entity lifecycle is separate (contracts §6, §7).
 
-const CONFIGURATION_ERROR: String = "RoomCombat: host capacity must be within 1..65536"
+const CONFIGURATION_ERROR: String = "RoomCombat: host capacity must be within 1..StatBlock.MAX_CAPACITY"
 
 ## The single StatBlock of the room. Never reassign it: runtimes hold this exact reference.
 var stats: StatBlock

@@ -115,12 +115,44 @@ func test_kill_event_greys_target_in_frame_and_reset_announces_room() -> void:
 	_scene.call(&"_process", 0.0)
 	var after_frame: Material = mesh.material_override
 	var untouched: Material = (_scene.get_node(^"Targets").get_child(1).get_child(1) as MeshInstance3D).material_override
+	var epoch_before: int = shots.epoch
 	_scene.call(&"reset_mobility_clock")
+	assert_int(shots.epoch).is_equal(epoch_before + 1)  # the reset ran to the end
 	assert_object(after_logic).is_null()  # the logic tick does not touch visuals
 	assert_object(after_frame).is_not_null()
 	assert_object(untouched).is_null()  # HP 0 without a kill event is not repainted
 	assert_array(_entered_rooms).is_equal(PackedInt64Array([7, 7]))
 	assert_object(mesh.material_override).is_not_null()  # targets and HP survive reset
+	# Reset order (contracts §7): the visual pool follows the new ShotBatch epoch.
+	assert_int((_scene.get(&"visuals") as ShotVisualPool).room_epoch).is_equal(shots.epoch)
+
+
+func test_kill_mark_pending_at_reset_is_applied_on_next_frame() -> void:
+	_scene = SANDBOX.instantiate() as Node3D
+	(_scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
+	(_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
+	add_child(_scene)
+	var mobility: MobilityRuntime = _scene.get(&"mobility") as MobilityRuntime
+	var shots: ShotBatch = _scene.get(&"shots") as ShotBatch
+	var player: int = _scene.get(&"player_handle")
+	var targets: PackedInt64Array = _scene.get(&"target_handles")
+	var mesh: MeshInstance3D = _scene.get_node(^"Targets").get_child(0).get_child(1) as MeshInstance3D
+	mobility.stats.set_stat(targets[0], StatBlock.Stat.HP, 6000)
+	var ticket: int = shots.reserve(player, 1, 6000)
+	shots.write_trace(ticket, 0, targets[0])
+	shots.publish(ticket)
+	_scene.call(&"_on_logic_tick", GameLoop.get_logic_tick() + 1)
+	var before_reset: Material = mesh.material_override
+	var epoch_before: int = shots.epoch
+	_scene.call(&"reset_mobility_clock")
+	var after_reset: Material = mesh.material_override
+	assert_int(shots.epoch).is_equal(epoch_before + 1)
+	assert_array(_entered_rooms).is_equal(PackedInt64Array([0, 0]))  # load and this reset
+	_scene.call(&"_process", 0.0)
+	assert_object(before_reset).is_null()
+	assert_object(after_reset).is_null()  # the mark is still pending, reset does not drop it
+	assert_object(mesh.material_override).is_not_null()
+	assert_int(mobility.stats.get_stat(targets[0], StatBlock.Stat.HP)).is_equal(0)
 
 
 func test_refused_room_reset_does_not_announce_room() -> void:
@@ -133,3 +165,17 @@ func test_refused_room_reset_does_not_announce_room() -> void:
 	await assert_error(func() -> void: _scene.call(&"reset_mobility_clock")).is_push_error(
 			"Sandbox: room epoch exhausted")
 	assert_array(_entered_rooms).is_equal(PackedInt64Array([0]))  # only the successful load
+
+
+func test_refused_visual_reset_does_not_announce_room() -> void:
+	# effects.reset_room() and weapon.reset_clock() have no refusal path; the resolver
+	# refusal is covered above, the visual pool refusal here.
+	_scene = SANDBOX.instantiate() as Node3D
+	(_scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
+	(_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
+	add_child(_scene)
+	(_scene.get(&"visuals") as ShotVisualPool).room_epoch = ShotBatch.INT_MAX
+	await assert_error(func() -> void: _scene.call(&"reset_mobility_clock")).is_push_error(
+			"Sandbox: visual epoch reset failed")
+	assert_int(_scene.process_mode).is_equal(Node.PROCESS_MODE_DISABLED)
+	assert_array(_entered_rooms).is_equal(PackedInt64Array([0]))

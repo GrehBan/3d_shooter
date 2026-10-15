@@ -4,7 +4,6 @@ extends GdUnitTestSuite
 const SANDBOX: PackedScene = preload("res://world/sandbox/Sandbox.tscn")
 var _scene: Node3D
 var _made_combat: RoomCombat
-var _made_mobility: MobilityRuntime
 
 
 func after_test() -> void:
@@ -72,17 +71,11 @@ func test_sandbox_room_owns_the_single_stat_block_and_reset_keeps_it() -> void:
 
 
 func test_invalid_room_capacity_is_a_configuration_error() -> void:
-	await assert_error(func() -> void: _made_combat = RoomCombat.new(0)).is_push_error(
-			RoomCombat.CONFIGURATION_ERROR)
-	assert_bool(_made_combat.is_initialized()).is_false()
-	assert_object(_made_combat.stats).is_null()
-
-
-func test_null_room_stats_leave_mobility_inert() -> void:
-	await assert_error(func() -> void: _made_mobility = MobilityRuntime.new(null)).is_push_error(
-			MobilityRuntime.CONFIGURATION_ERROR)
-	assert_bool(_made_mobility.is_initialized()).is_false()
-	_made_mobility.logic_step(1)
-	_made_mobility.reset_clock(1)
-	assert_bool(_made_mobility.grant_content(0, null, 0)).is_false()
-	assert_int(_made_mobility.logic_steps).is_equal(0)
+	for capacity: int in [0, -5, StatBlock.MAX_CAPACITY + 1]:
+		_made_combat = null
+		await assert_error(func() -> void: _made_combat = RoomCombat.new(capacity)).is_push_error(
+				RoomCombat.CONFIGURATION_ERROR)
+		assert_bool(_made_combat.is_initialized()).is_false()
+		assert_object(_made_combat.stats).is_null()
+	assert_bool(RoomCombat.new(StatBlock.MAX_CAPACITY).is_initialized()).is_true()
+	assert_bool(RoomCombat.new(1).is_initialized()).is_true()

@@ -6,6 +6,8 @@ const ARMOR := StatBlock.Stat.ARMOR
 const ENERGY := StatBlock.Stat.ENERGY
 const MAX_ENERGY := StatBlock.Stat.MAX_ENERGY
 
+var _made_mobility: MobilityRuntime
+
 
 func test_damage_shield_then_percentage_and_hp_clamp() -> void:
 	var stats := StatBlock.new(1)
@@ -293,3 +295,25 @@ func test_invalid_content_flags_never_create_partial_grants_and_int32_limits_are
 	wrong_type.freeze()
 	assert_bool(runtime.grant_content(entity, wrong_type, 0)).is_false()
 	assert_int(runtime.abilities.ready_tick(entity, MovementAbilityData.Kind.DASH)).is_equal(1000 + StatBlock.VALUE_MAX)
+
+
+func test_null_room_stats_leave_mobility_inert() -> void:
+	await assert_error(func() -> void: _made_mobility = MobilityRuntime.new(null)).is_push_error(
+			MobilityRuntime.CONFIGURATION_ERROR)
+	var registry := Registry.new()
+	var category: int = registry.add_category(&"movement", preload("res://player/MovementAbilityData.gd"))
+	assert_int(registry.load_directory(category, "res://data/movement")).is_equal(3)
+	registry.freeze()
+	assert_bool(_made_mobility.is_initialized()).is_false()
+	assert_object(_made_mobility.abilities).is_null()
+	assert_object(_made_mobility.landings).is_null()
+	# A valid frozen preset is still refused: an inert runtime grants nothing.
+	assert_bool(_made_mobility.grant_content(0, registry, category)).is_false()
+	_made_mobility.logic_step(5)
+	assert_int(_made_mobility.get(&"_last_tick")).is_equal(-1)  # an initialized runtime would store 5
+	assert_int(_made_mobility.logic_steps).is_equal(0)
+	_made_mobility.reset_clock(5)
+	assert_object(_made_mobility.abilities).is_null()  # reset neither crashes nor builds stores
+	# The same preset on an initialized runtime is accepted.
+	var runtime := MobilityRuntime.new(StatBlock.new(1))
+	assert_bool(runtime.grant_content(runtime.stats.allocate(), registry, category)).is_true()

@@ -145,7 +145,7 @@
 получает, его ёмкость задаётся числом хостов. Обращения к `combat.stats` в горячем пути не
 выделяют память.
 
-Ошибки конфигурации: `RoomCombat.new(host_capacity)` вне `1..65536` и
+Ошибки конфигурации: `RoomCombat.new(host_capacity)` вне `1..StatBlock.MAX_CAPACITY` и
 `MobilityRuntime.new(null)` пишут `push_error` и оставляют объект неинициализированным
 (`is_initialized() == false`); неинициализированный `MobilityRuntime` в `logic_step`,
 `reset_clock` и `grant_content` ничего не делает и возвращает отказ. Sandbox в этом случае
@@ -601,6 +601,7 @@ Root удерживается открытым до обработки всех 
 нарушают ownership. Предвыделенный реестр owned handles обеспечивает reset, не расширяя
 API существующего AttackContextPool: слоты каждого дерева связаны интрузивным списком от
 слота root, поэтому final close очищает владение за O(размер дерева), а не за O(ёмкость).
+Read-only `ShotResolver.owned_count(root)` показывает длину этого списка для проверок.
 Read-only inspection пула разрешён.
 Факт HP>0→0 снимается сразу после Apply до синхронных OnHit listeners: их последующее
 исцеление/освобождение цели не стирает OnKill этого Apply.
@@ -622,6 +623,10 @@ duplicate guard, новый room epoch и согласованная shot sequen
 `MobilityRuntime.reset_clock(old_tick)` → `GameLoop.reset_clock()` →
 `EventBus.room_entered(room_id)`. Тот же сигнал испускается после успешной загрузки
 комнаты; при отказе любого шага сброса или загрузки он не испускается.
+Отказать при сбросе могут только `ShotResolver.reset_room()` (исчерпан epoch) и
+`ShotVisualPool.reset_room(epoch)` (epoch не новее текущего); оба возвращают `bool`, и Sandbox
+прерывает комнату без `room_entered`. `EffectRunner.reset_room()`, `HitscanWeapon.reset_clock()`
+и `MobilityRuntime.reset_clock()` возвращают `void` и пути отказа не имеют.
 Identity reset не должен смешивать старые и новые записи комнаты. Существующий
 `MovementAbilities.rebase_clock` сохраняет оставшийся cooldown относительно ТОЧНОГО
 old tick, включая physics activation до первого logic_step; energy/grants и физический
