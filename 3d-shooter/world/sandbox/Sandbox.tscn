@@ -4,6 +4,7 @@
 [ext_resource type="Script" path="res://world/sandbox/Sandbox.gd" id="2_root"]
 [ext_resource type="Script" path="res://weapons/HitscanWeapon.gd" id="3_weapon"]
 [ext_resource type="Script" path="res://visuals/ShotVisualPool.gd" id="4_visual"]
+[ext_resource type="Script" path="res://visuals/ViewmodelSway.gd" id="5_sway"]
 
 [sub_resource type="StandardMaterial3D" id="Material_target"]
 albedo_color = Color(0.8, 0.12, 0.16, 1)
@@ -183,20 +184,23 @@ current = true
 [node name="HitscanWeapon" type="Node3D" parent="Player/Camera3D"]
 script = ExtResource("3_weapon")
 
-[node name="Receiver" type="MeshInstance3D" parent="Player/Camera3D/HitscanWeapon"]
+[node name="Viewmodel" type="Node3D" parent="Player/Camera3D/HitscanWeapon"]
+script = ExtResource("5_sway")
+
+[node name="Receiver" type="MeshInstance3D" parent="Player/Camera3D/HitscanWeapon/Viewmodel"]
 position = Vector3(0.27, -0.24, -0.5)
 mesh = SubResource("Mesh_receiver")
 cast_shadow = 0
 layers = 2
 
-[node name="Barrel" type="MeshInstance3D" parent="Player/Camera3D/HitscanWeapon"]
+[node name="Barrel" type="MeshInstance3D" parent="Player/Camera3D/HitscanWeapon/Viewmodel"]
 position = Vector3(0.27, -0.2, -0.9)
 rotation = Vector3(1.5707963, 0, 0)
 mesh = SubResource("Mesh_barrel")
 cast_shadow = 0
 layers = 2
 
-[node name="MuzzleSocket" type="Node3D" parent="Player/Camera3D/HitscanWeapon"]
+[node name="MuzzleSocket" type="Node3D" parent="Player/Camera3D/HitscanWeapon/Viewmodel"]
 position = Vector3(0.27, -0.2, -1.2)
 
 [node name="Targets" type="Node3D" parent="."]
