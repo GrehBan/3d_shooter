@@ -91,7 +91,7 @@ func test_every_invalid_room_config_field_refuses_the_room() -> void:
 		["context_capacity", func(c: RoomConfig) -> void: c.context_capacity = 0],
 		["context_capacity", func(c: RoomConfig) -> void: c.context_capacity = over],
 		["deferred_reserve", func(c: RoomConfig) -> void: c.deferred_reserve = -1],
-		["deferred_reserve", func(c: RoomConfig) -> void: c.deferred_reserve = 64],
+		["deferred_reserve", func(c: RoomConfig) -> void: c.deferred_reserve = c.context_capacity],
 		["landing_capacity", func(c: RoomConfig) -> void: c.landing_capacity = 0],
 		["landing_capacity", func(c: RoomConfig) -> void: c.landing_capacity = LandingEventQueue.MAX_CAPACITY + 1],
 		["effect_entries", func(c: RoomConfig) -> void: c.effect_entries = 0],
@@ -103,6 +103,9 @@ func test_every_invalid_room_config_field_refuses_the_room() -> void:
 		["visual_nodes", func(c: RoomConfig) -> void: c.visual_nodes = 0],
 		["visual_packed_bytes", func(c: RoomConfig) -> void: c.visual_packed_bytes = 0],
 		["visual_texture_bytes", func(c: RoomConfig) -> void: c.visual_texture_bytes = 0],
+		["reaction_candidates", func(c: RoomConfig) -> void: c.reaction_candidates = 0],
+		["reaction_candidates",
+				func(c: RoomConfig) -> void: c.reaction_candidates = AttackContextPool.HITS_PER_CONTEXT + 1],
 	]
 	for entry: Array in cases:
 		var config := RoomConfig.new()

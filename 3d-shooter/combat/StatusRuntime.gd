@@ -203,6 +203,18 @@ func acid_stacks(target: int) -> int:
 	return 0 if index < 0 else _slots_32[index * WIDTH_32 + Field32.ACID_STACKS]
 
 
+## An admitted toxic explosion consumes the primary target's corrosion (M2.3b). Refused
+## while a step, contact or pulse is in progress; an unregistered or stale handle is a no-op.
+func consume_corrosion(target: int) -> bool:
+	if not _initialized or _busy:
+		return _refuse()
+	var index: int = _index(target)
+	if index >= 0:
+		_slots_32[index * WIDTH_32 + Field32.ACID_STACKS] = 0
+		_slots_64[index * WIDTH_64 + Field64.ACID_UNTIL] = 0
+	return true
+
+
 func chill_stacks(target: int) -> int:
 	var index: int = _index(target)
 	return 0 if index < 0 else _slots_32[index * WIDTH_32 + Field32.CHILL_STACKS]

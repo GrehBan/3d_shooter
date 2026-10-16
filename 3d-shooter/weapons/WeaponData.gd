@@ -24,10 +24,14 @@ func is_valid() -> bool:
 
 
 ## Room limits belong to the composition root, not the gameplay pellet preset.
+## candidates: reaction candidates per trace (K, 0 = none). With reactions every pellet
+## may own a reaction child, so each shot reserves 1 + 2 * stride contexts instead of
+## 1 + stride.
 static func validate_room(definitions: Array[WeaponData], shots: int, trace_cap: int,
-		memory_cap: int, hosts: int, context_capacity: int, deferred_reserve: int) -> int:
+		memory_cap: int, hosts: int, context_capacity: int, deferred_reserve: int,
+		candidates: int = 0, reactions: bool = false) -> int:
 	if definitions.is_empty() or shots <= 0 or trace_cap <= 0 or memory_cap <= 0 \
-			or hosts <= 0 or hosts > HandlePool.MAX_CAPACITY or deferred_reserve < 0:
+			or hosts <= 0 or hosts > HandlePool.MAX_CAPACITY or deferred_reserve < 0 or candidates < 0:
 		return -1
 	var stride: int = 0
 	for data: WeaponData in definitions:
@@ -35,7 +39,7 @@ static func validate_room(definitions: Array[WeaponData], shots: int, trace_cap:
 			return -1
 		stride = maxi(stride, data.pellet_count)
 	# Conservative packed-store budget, including context handles/hit sets and metadata.
-	var bytes_per_shot: int = 68 + stride * 9
+	var bytes_per_shot: int = 68 + stride * (9 + 4 + 8 * candidates)
 	if hosts > memory_cap / 16 or context_capacity <= 0 or context_capacity > memory_cap / 640:
 		return -1
 	var fixed_bytes: int = hosts * 16 + context_capacity * 640
@@ -43,6 +47,6 @@ static func validate_room(definitions: Array[WeaponData], shots: int, trace_cap:
 		return -1
 	if context_capacity <= 0 or context_capacity > HandlePool.MAX_CAPACITY \
 			or deferred_reserve > context_capacity \
-			or shots > (context_capacity - deferred_reserve) / (1 + stride):
+			or shots > (context_capacity - deferred_reserve) / (1 + (2 if reactions else 1) * stride):
 		return -1
 	return stride

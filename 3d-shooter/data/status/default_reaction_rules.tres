@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ReactionRules" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://combat/ReactionRules.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+radius_mm = 3000
+arc_targets = 2
+conducting_targets = 4
+explosion_targets = 4
+electric_percent = 500
+explosion_percent = 750

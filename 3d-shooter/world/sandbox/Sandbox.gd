@@ -25,6 +25,13 @@ var _dead_material: StandardMaterial3D
 # Kill events mark targets here; the frame applies the defeated look.
 var _dead_pending: PackedByteArray = PackedByteArray()
 var _dead_dirty: bool = false
+## Reaction teams: the player and the room's hostile targets (0 would be neutral).
+const TEAM_PLAYER: int = 1
+const TEAM_HOSTILE: int = 2
+# Set only by a complete load; logic_step refuses before it, after an abort and for
+# a tick that is not newer than the last one it ran.
+var _loaded: bool = false
+var _last_logic_step: int = -1
 ## Diagnostic logic-phase timing (statuses, resolver, effects, mobility), outside the
 ## deterministic contour: only benchmarks read it, gameplay logic never does.
 enum Phase { STATUSES, RESOLVER, EFFECTS, MOBILITY }
@@ -60,7 +67,8 @@ func _ready() -> void:
 		return
 	var config: RoomConfig = combat.config
 	var stride: int = WeaponData.validate_room(definitions, config.shot_capacity, config.trace_cap,
-			config.shot_packed_bytes, config.host_capacity, config.context_capacity, config.deferred_reserve)
+			config.shot_packed_bytes, config.host_capacity, config.context_capacity, config.deferred_reserve,
+			config.reaction_candidates, true)
 	if stride < 0:
 		_abort_initialization("Sandbox: invalid weapon preset or room capacity")
 		return
@@ -83,7 +91,8 @@ func _ready() -> void:
 	combat.statuses.on_pulse_hit.connect(_on_pulse_hit)
 	combat.statuses.on_pulse_kill.connect(_on_pulse_kill)
 	player_handle = combat.stats.allocate()
-	if not combat.statuses.register_target(player_handle, StatusRuntime.Profile.PLAYER):
+	if not combat.statuses.register_target(player_handle, StatusRuntime.Profile.PLAYER) \
+			or not combat.reactions.register_target(player_handle, TEAM_PLAYER):
 		_abort_initialization("Sandbox: player status registration failed")
 		return
 	combat.stats.set_stat(player_handle, StatBlock.Stat.MAX_HP, 100_000)
@@ -94,12 +103,16 @@ func _ready() -> void:
 		_abort_initialization("Sandbox: movement grant failed")
 		return
 	(get_node(^"Player") as FPSController).bind_mobility(mobility, player_handle)
-	shots = ShotBatch.new(config.shot_capacity, stride, config.host_capacity)
-	resolver = ShotResolver.new(combat.stats, shots, config.context_capacity, combat.statuses)
+	shots = ShotBatch.new(config.shot_capacity, stride, config.host_capacity, config.reaction_candidates)
+	resolver = ShotResolver.new(combat.stats, shots, config.context_capacity, combat.statuses,
+			combat.reactions)
 	resolver.on_hit.connect(_on_hit)
 	resolver.on_kill.connect(_on_kill)
+	# Secondary reaction hits only repaint kills; they never reach EffectRunner in M2.3b.
+	resolver.on_secondary_kill.connect(_on_kill)
 	weapon = get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon
-	if not weapon.initialize(definitions[0], combat.stats, shots, player_handle, get_node(^"Player") as FPSController):
+	if not weapon.initialize(definitions[0], combat.stats, shots, player_handle, get_node(^"Player") as FPSController) \
+			or not weapon.bind_reactions(combat.reactions):
 		_abort_initialization("Sandbox: weapon initialization failed")
 		return
 	visuals = get_node(^"ShotVisualPool") as ShotVisualPool
@@ -108,7 +121,8 @@ func _ready() -> void:
 		return
 	for body: Node in get_node(^"Targets").get_children():
 		var target: int = combat.stats.allocate()
-		if not combat.statuses.register_target(target, StatusRuntime.Profile.ORDINARY):
+		if not combat.statuses.register_target(target, StatusRuntime.Profile.ORDINARY) \
+				or not combat.reactions.register_target(target, TEAM_HOSTILE):
 			_abort_initialization("Sandbox: target status registration failed")
 			return
 		combat.stats.set_stat(target, StatBlock.Stat.MAX_HP, 100_000)
@@ -122,6 +136,7 @@ func _ready() -> void:
 	_dead_material = StandardMaterial3D.new()
 	_dead_material.albedo_color = Color(0.22, 0.25, 0.27)
 	GameLoop.logic_tick.connect(_on_logic_tick)
+	_loaded = true
 	EventBus.room_entered.emit(room_id)
 
 
@@ -130,8 +145,12 @@ func _on_logic_tick(tick: int) -> void:
 
 
 ## The room's single logic subscriber, public so tests and benchmarks can drive a tick:
-## statuses (expiry, burn pulses) -> resolver -> effects -> mobility.
+## statuses (expiry, burn pulses) -> resolver -> effects -> mobility. A no-op before a
+## complete load, after an aborted one and for a tick not newer than the last step.
 func logic_step(tick: int) -> void:
+	if not _loaded or tick <= _last_logic_step:
+		return
+	_last_logic_step = tick
 	var start: int = Time.get_ticks_usec()
 	if not combat.statuses.logic_step(tick):
 		_abort_initialization("Sandbox: status tick failed")
@@ -261,6 +280,7 @@ func _on_pulse_hit(source: int, _target: int, _credit: int, _generation: int, _o
 
 
 func _abort_initialization(message: String) -> void:
+	_loaded = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 	if GameLoop.logic_tick.is_connected(_on_logic_tick):
 		GameLoop.logic_tick.disconnect(_on_logic_tick)
@@ -284,5 +304,6 @@ func reset_mobility_clock() -> void:
 		return
 	mobility.reset_clock(old_tick)
 	GameLoop.reset_clock()
+	_last_logic_step = -1
 	reset_phase_metrics()
 	EventBus.room_entered.emit(room_id)
