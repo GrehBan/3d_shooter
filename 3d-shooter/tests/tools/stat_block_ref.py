@@ -2,7 +2,7 @@
 
 Run from the repository root: python 3d-shooter/tests/tools/stat_block_ref.py
 Entities are records keyed by complete handles, rather than the game's SoA.
-Only the allocation/stat/status contract exercised by the golden is modeled;
+Only the allocation/stat contract exercised by the golden is modeled;
 save-state validation is covered separately by the GDScript unit tests.
 """
 
@@ -21,7 +21,6 @@ def fnv(h: int, value: int) -> int:
 @dataclass
 class Entity:
     stats: list[int] = field(default_factory=lambda: [0] * STAT_COUNT)
-    status: int = 0
 
 
 class StatBlock:
@@ -71,17 +70,6 @@ class StatBlock:
         self.set_stat(handle, stat, value)
         return value
 
-    def set_status(self, handle: int, mask: int) -> bool:
-        entity = self.entities.get(handle)
-        if entity is None:
-            return False
-        entity.status = mask
-        return True
-
-    def get_status(self, handle: int) -> int:
-        entity = self.entities.get(handle)
-        return 0 if entity is None else entity.status
-
 
 def allocation_scenario() -> tuple[int, list[int]]:
     block = StatBlock(8)
@@ -100,7 +88,6 @@ def allocation_scenario() -> tuple[int, list[int]]:
             block.set_stat(handle, MAX_HP, 100_000)
             block.set_stat(handle, HP, step * 1000)
             h = fnv(h, block.add_stat_clamped(handle, HP, -step * 37, 0, 100_000))
-            block.set_status(handle, (1 << 40) | step)
         for handle in dead[-3:]:
             h = fnv(h, int(block.set_stat(handle, ARMOR, 999)))
             h = fnv(h, block.get_stat(handle, HP))
@@ -108,9 +95,6 @@ def allocation_scenario() -> tuple[int, list[int]]:
     for handle in handles:
         for stat in range(STAT_COUNT):
             h = fnv(h, block.get_stat(handle, stat))
-        status = block.get_status(handle)
-        h = fnv(h, status)
-        h = fnv(h, status >> 32)
     return h, handles
 
 

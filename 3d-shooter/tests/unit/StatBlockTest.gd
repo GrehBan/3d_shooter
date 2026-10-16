@@ -9,7 +9,6 @@ func test_allocate_gives_zeroed_entity_and_valid_handle() -> void:
 	assert_int(sb.alive_count()).is_equal(1)
 	for stat: int in StatBlock.STAT_COUNT:
 		assert_int(sb.get_stat(h, stat)).is_equal(0)
-	assert_int(sb.get_status(h)).is_equal(0)
 
 
 func test_indices_are_issued_from_zero_upwards() -> void:
@@ -76,12 +75,14 @@ func test_add_stat_clamped() -> void:
 	assert_int(sb.add_stat_clamped(h, StatBlock.Stat.HP, -1, 0, 100_000)).is_equal(99_999)
 
 
-func test_status_mask_uses_64_bits() -> void:
+## Statuses live only in StatusRuntime: the snapshot has exactly seven fields.
+func test_state_has_no_status_field() -> void:
 	var sb := StatBlock.new(2)
-	var h: int = sb.allocate()
-	var mask: int = (1 << 62) | (1 << 33) | 1
-	assert_bool(sb.set_status(h, mask)).is_true()
-	assert_int(sb.get_status(h)).is_equal(mask)
+	sb.allocate()
+	var keys: Array = sb.get_state().keys()
+	keys.sort()
+	assert_array(keys).is_equal(["alive", "alive_count", "capacity", "data", "free",
+			"free_count", "generation"])
 
 
 func test_state_roundtrip_preserves_entities_and_generations() -> void:
@@ -91,14 +92,14 @@ func test_state_roundtrip_preserves_entities_and_generations() -> void:
 	sb.set_stat(a, StatBlock.Stat.HP, 42_000)
 	sb.release(b)
 	var c: int = sb.allocate()  # переиспользует индекс b с новым поколением
-	sb.set_status(c, 0b101)
+	sb.set_stat(c, StatBlock.Stat.ARMOR, 0b101)
 	var state: Dictionary = sb.get_state()
 
 	var restored: StatBlock = _populated_target()
 	assert_bool(restored.set_state(state)).is_true()
 	assert_dict(restored.get_state()).is_equal(state)
 	assert_int(restored.get_stat(a, StatBlock.Stat.HP)).is_equal(42_000)
-	assert_int(restored.get_status(c)).is_equal(0b101)
+	assert_int(restored.get_stat(c, StatBlock.Stat.ARMOR)).is_equal(0b101)
 	assert_bool(restored.is_valid(b)).is_false()
 	assert_int(restored.alive_count()).is_equal(2)
 	# Порядок выдачи после восстановления тот же, что у оригинала.
@@ -118,14 +119,12 @@ func _populated_target(capacity: int = 4) -> StatBlock:
 		handles.append(handle)
 		for stat: int in StatBlock.STAT_COUNT:
 			target.set_stat(handle, stat, (index + 1) * 10_000 + stat)
-		target.set_status(handle, (1 << 62) | (1 << (index + 32)))
 	if capacity > 1:
 		target.release(handles[capacity - 1])
 	target.release(handles[0])
 	var reused: int = target.allocate()  # индекс 0 с поколением 1
 	for stat: int in StatBlock.STAT_COUNT:
 		target.set_stat(reused, stat, -20_000 - stat)
-	target.set_status(reused, (1 << 61) | 1)
 	return target
 
 
@@ -191,19 +190,16 @@ func test_state_with_bool_counters_is_rejected_without_coercion() -> void:
 
 
 func test_state_with_plain_arrays_is_rejected() -> void:
-	for field: String in ["data", "status", "generation", "alive", "free"]:
+	for field: String in ["data", "generation", "alive", "free"]:
 		var state: Dictionary = _sample_state()
 		state[field] = Array(state[field])  # правильные элементы и размер, неверный тип
 		await _corrupted_state_is_rejected(state)
 
 
 func test_state_with_wrong_packed_array_types_is_rejected() -> void:
-	for field: String in ["data", "status", "generation", "alive", "free"]:
+	for field: String in ["data", "generation", "alive", "free"]:
 		var state: Dictionary = _sample_state()
-		if field == "status":
-			state[field] = PackedInt32Array(Array(state[field]))
-		else:
-			state[field] = PackedInt64Array(Array(state[field]))
+		state[field] = PackedInt64Array(Array(state[field]))
 		await _corrupted_state_is_rejected(state)
 
 

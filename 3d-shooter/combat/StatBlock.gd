@@ -5,7 +5,7 @@ extends RefCounted
 ## Значения — int ×1000 в одном PackedInt32Array, разложенном по статам:
 ## _data[stat * capacity + index]. Каждый стат лежит непрерывно, что удобно для
 ## пакетной обработки. Лимит Int32: 2 147 483 ед. ×1000, то есть ~2.1 млн HP.
-## Статусы — 64-битная маска на сущность (битовая упаковка для M2).
+## Статусов здесь нет: их единственный источник истины — StatusRuntime комнаты.
 ##
 ## Handle сущности (int64) = generation · HANDLE_INDEX_SPAN + index. Хранить
 ## handle только в int64 (PackedInt64Array): после 32768 переиспользований
@@ -28,7 +28,6 @@ const VALUE_MAX: int = 2_147_483_647
 
 var _capacity: int = 0
 var _data: PackedInt32Array = PackedInt32Array()
-var _status: PackedInt64Array = PackedInt64Array()
 var _generation: PackedInt32Array = PackedInt32Array()
 var _alive: PackedByteArray = PackedByteArray()
 var _free: PackedInt32Array = PackedInt32Array()  # стек свободных индексов
@@ -40,7 +39,6 @@ func _init(capacity: int = DEFAULT_CAPACITY) -> void:
 	assert(capacity > 0 and capacity <= MAX_CAPACITY, "StatBlock: недопустимая ёмкость")
 	_capacity = clampi(capacity, 1, MAX_CAPACITY)
 	_data.resize(_capacity * STAT_COUNT)
-	_status.resize(_capacity)
 	_generation.resize(_capacity)
 	_alive.resize(_capacity)
 	_free.resize(_capacity)
@@ -64,7 +62,6 @@ func allocate() -> int:
 	var index: int = _free[_free_count]
 	for stat: int in STAT_COUNT:
 		_data[stat * _capacity + index] = 0
-	_status[index] = 0
 	_alive[index] = 1
 	_alive_count += 1
 	return _generation[index] * HANDLE_INDEX_SPAN + index
@@ -130,27 +127,11 @@ func add_stat_clamped(handle: int, stat: Stat, delta: int, min_value: int, max_v
 	return value
 
 
-func get_status(handle: int) -> int:
-	var index: int = index_of(handle)
-	if index < 0:
-		return 0
-	return _status[index]
-
-
-func set_status(handle: int, mask: int) -> bool:
-	var index: int = index_of(handle)
-	if index < 0:
-		return false
-	_status[index] = mask
-	return true
-
-
 ## Снимок для SaveSystem (Zero-Trust State). Аллоцирует: только при сохранении.
 func get_state() -> Dictionary:
 	return {
 		"capacity": _capacity,
 		"data": _data.duplicate(),
-		"status": _status.duplicate(),
 		"generation": _generation.duplicate(),
 		"alive": _alive.duplicate(),
 		"free": _free.duplicate(),
@@ -166,7 +147,6 @@ func set_state(state: Dictionary) -> bool:
 			or typeof(state.get("free_count")) != TYPE_INT \
 			or typeof(state.get("alive_count")) != TYPE_INT \
 			or typeof(state.get("data")) != TYPE_PACKED_INT32_ARRAY \
-			or typeof(state.get("status")) != TYPE_PACKED_INT64_ARRAY \
 			or typeof(state.get("generation")) != TYPE_PACKED_INT32_ARRAY \
 			or typeof(state.get("alive")) != TYPE_PACKED_BYTE_ARRAY \
 			or typeof(state.get("free")) != TYPE_PACKED_INT32_ARRAY:
@@ -176,13 +156,12 @@ func set_state(state: Dictionary) -> bool:
 		push_error("StatBlock.set_state: ёмкость снимка не совпадает")
 		return false
 	var data: PackedInt32Array = state["data"]
-	var status: PackedInt64Array = state["status"]
 	var generation: PackedInt32Array = state["generation"]
 	var alive: PackedByteArray = state["alive"]
 	var free: PackedInt32Array = state["free"]
 	var free_count: int = int(state["free_count"])
 	var alive_count: int = int(state["alive_count"])
-	if data.size() != _capacity * STAT_COUNT or status.size() != _capacity \
+	if data.size() != _capacity * STAT_COUNT \
 			or generation.size() != _capacity or alive.size() != _capacity \
 			or free.size() != _capacity or free_count < 0 or free_count > _capacity \
 			or alive_count != _capacity - free_count \
@@ -190,7 +169,6 @@ func set_state(state: Dictionary) -> bool:
 		push_error("StatBlock.set_state: повреждённый снимок")
 		return false
 	_data = data.duplicate()
-	_status = status.duplicate()
 	_generation = generation.duplicate()
 	_alive = alive.duplicate()
 	_free = free.duplicate()

@@ -92,6 +92,9 @@ jobs:
       - name: Real M1 pipeline and deliberate leak rejection
         run: bash ci/run_checks.sh real_pipeline
 
+      - name: M2.3 status profile 40+1 and deliberate leak rejection
+        run: bash ci/run_checks.sh status_pipeline
+
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

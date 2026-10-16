@@ -88,8 +88,9 @@ EffectRunner, карточки и элементы в пакет не входя
 универсальными техническими максимумами. Подробности игровой семантики —
 [GDD](../gdd.md#принято-для-m1-минимальный-hitscan-дробовик--2026-10-13),
 транспорт, контексты и интеграция — [контракт §7](contracts.md#7-m1-hitscan-дробовик-и-shotbatch-пакет-3).
-Реализованный Sandbox назначает лимиты комнаты: shots 4, trace cap 32, stride 8, hosts 16,
-contexts 64, deferred reserve 16 и консервативный лимит packed-хранилищ 128 КиБ. RayCast3D
+Лимиты комнаты Sandbox задаёт `RoomConfig` (`data/rooms/sandbox_room.tres`): shots 4, trace
+cap 8, stride 8, hosts 16, contexts 64, deferred reserve 16 и консервативный лимит
+packed-хранилищ 128 КиБ. RayCast3D
 предсозданы холодно; world range сохраняется при supported yaw/pitch/uniform scale.
 Shared ACP API/MAX_DEPTH и legacy stores/эталоны сохранены. Deferred owners используют
 только resolver.open_child/close_context; quiescent reset отменяет owned trees без

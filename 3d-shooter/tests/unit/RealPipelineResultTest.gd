@@ -12,7 +12,7 @@ func _valid_result() -> RealPipelineResult:
 	result.logic_usec_max = 7000
 	result.logic_usec_sum = 1800 * 100
 	result.phase_steps = 1800
-	result.phase_usec_sum = PackedInt64Array([1800 * 40, 1800 * 20, 1800 * 10])
+	result.phase_usec_sum = PackedInt64Array([1800 * 5, 1800 * 40, 1800 * 20, 1800 * 10])
 	result.distance = 557.0
 	result.peak_abs_x = 38.0
 	result.look_radians = 1.44

@@ -1,3 +1,4 @@
+class_name Sandbox
 extends Node3D
 ## Composition root. Content and stores allocate only while loading the sandbox.
 
@@ -8,22 +9,10 @@ var player_handle: int = StatBlock.INVALID_HANDLE
 @export_dir var weapon_data_directory: String = "res://data/weapons"
 @export var visual_data: ShotVisualData = preload("res://data/visuals/shotgun.tres")
 @export var effect_definitions: Array[EffectRuleData] = []
+## Every room capacity and quota; validated when the room loads (contracts §2, RoomConfig).
+@export var room_config: RoomConfig = preload("res://data/rooms/sandbox_room.tres")
 ## Identity passed to EventBus.room_entered on successful load and room reset.
 @export var room_id: int = 0
-const ROOM_SHOTS: int = 4
-const ROOM_TRACE_CAP: int = 32
-const ROOM_PACKED_BYTES: int = 131_072
-const ROOM_HOSTS: int = 16
-const ROOM_CONTEXTS: int = 64
-const ROOM_DEFERRED_RESERVE: int = 16
-const ROOM_VISUAL_NODES: int = 128
-const ROOM_VISUAL_PACKED_BYTES: int = 16384
-const ROOM_VISUAL_TEXTURE_BYTES: int = 32768
-const ROOM_EFFECT_ENTRIES: int = 64
-const ROOM_EFFECT_PACKED_BYTES: int = 32768
-# EffectHost: heads, owner/host lists, HandlePool and ten int32 + one int64 columns.
-const ROOM_EFFECT_HOST_BYTES: int = ROOM_HOSTS * (EffectTrigger.TRIGGER_COUNT * 4 + 12) \
-		+ ROOM_EFFECT_ENTRIES * 57
 var effect_host: EffectHost
 var effects: EffectRunner
 var shots: ShotBatch
@@ -36,13 +25,13 @@ var _dead_material: StandardMaterial3D
 # Kill events mark targets here; the frame applies the defeated look.
 var _dead_pending: PackedByteArray = PackedByteArray()
 var _dead_dirty: bool = false
-## Diagnostic logic-phase timing (resolver, effects, mobility), outside the deterministic
-## contour: only benchmarks read it, gameplay logic never does.
-enum Phase { RESOLVER, EFFECTS, MOBILITY }
-const PHASE_COUNT: int = 3
-var _phase_last: PackedInt64Array = PackedInt64Array([0, 0, 0])
-var _phase_max: PackedInt64Array = PackedInt64Array([0, 0, 0])
-var _phase_sum: PackedInt64Array = PackedInt64Array([0, 0, 0])
+## Diagnostic logic-phase timing (statuses, resolver, effects, mobility), outside the
+## deterministic contour: only benchmarks read it, gameplay logic never does.
+enum Phase { STATUSES, RESOLVER, EFFECTS, MOBILITY }
+const PHASE_COUNT: int = 4
+var _phase_last: PackedInt64Array = _zeroes_64(PHASE_COUNT)
+var _phase_max: PackedInt64Array = _zeroes_64(PHASE_COUNT)
+var _phase_sum: PackedInt64Array = _zeroes_64(PHASE_COUNT)
 var _phase_steps: int = 0
 ## Per-phase histogram of PHASE_BUCKETS buckets of PHASE_BUCKET_USEC each (last bucket
 ## collects everything slower), preallocated so recording a tick never allocates.
@@ -65,29 +54,38 @@ func _ready() -> void:
 	var definitions: Array[WeaponData] = []
 	for id: int in registry.count(weapon_category):
 		definitions.append(registry.get_resource(weapon_category, id) as WeaponData)
-	var stride: int = WeaponData.validate_room(definitions, ROOM_SHOTS, ROOM_TRACE_CAP,
-			ROOM_PACKED_BYTES, ROOM_HOSTS, ROOM_CONTEXTS, ROOM_DEFERRED_RESERVE)
+	combat = RoomCombat.new(room_config)
+	if not combat.is_initialized():
+		_abort_initialization("Sandbox: invalid room configuration")
+		return
+	var config: RoomConfig = combat.config
+	var stride: int = WeaponData.validate_room(definitions, config.shot_capacity, config.trace_cap,
+			config.shot_packed_bytes, config.host_capacity, config.context_capacity, config.deferred_reserve)
 	if stride < 0:
 		_abort_initialization("Sandbox: invalid weapon preset or room capacity")
 		return
-	if not ShotVisualData.validate_room(visual_data, definitions, ROOM_SHOTS, stride,
-			1, ROOM_VISUAL_NODES, ROOM_VISUAL_PACKED_BYTES, ROOM_VISUAL_TEXTURE_BYTES):
+	if not ShotVisualData.validate_room(visual_data, definitions, config.shot_capacity, stride,
+			1, config.visual_nodes, config.visual_packed_bytes, config.visual_texture_bytes):
 		_abort_initialization("Sandbox: invalid visual preset or room capacity")
 		return
-	combat = RoomCombat.new(ROOM_HOSTS)
-	if not combat.is_initialized():
-		_abort_initialization("Sandbox: invalid room combat capacity")
-		return
-	mobility = MobilityRuntime.new(combat.stats)
+	mobility = MobilityRuntime.new(combat.stats, config.landing_capacity, combat.statuses)
 	if not mobility.is_initialized():
-		_abort_initialization("Sandbox: mobility runtime requires the room StatBlock")
+		_abort_initialization("Sandbox: mobility runtime requires the room stores")
 		return
-	effect_host = EffectHost.new(ROOM_HOSTS, ROOM_EFFECT_ENTRIES)
-	effects = EffectRunner.new(combat.stats, effect_host, effect_definitions)
-	if not effects.is_initialized() or effects.packed_bytes() + ROOM_EFFECT_HOST_BYTES > ROOM_EFFECT_PACKED_BYTES:
+	effect_host = EffectHost.new(config.host_capacity, config.effect_entries)
+	# Worst-case events and quota of one logic tick (contracts §2, RoomConfig).
+	effects = EffectRunner.new(combat.stats, effect_host, effect_definitions,
+			config.effect_event_capacity(), config.effect_max_subscriptions, config.effect_work_quota())
+	if not effects.is_initialized() \
+			or effects.packed_bytes() + effect_host_bytes(config) > config.effect_packed_bytes:
 		_abort_initialization("Sandbox: invalid effect definitions or room capacity")
 		return
+	combat.statuses.on_pulse_hit.connect(_on_pulse_hit)
+	combat.statuses.on_pulse_kill.connect(_on_pulse_kill)
 	player_handle = combat.stats.allocate()
+	if not combat.statuses.register_target(player_handle, StatusRuntime.Profile.PLAYER):
+		_abort_initialization("Sandbox: player status registration failed")
+		return
 	combat.stats.set_stat(player_handle, StatBlock.Stat.MAX_HP, 100_000)
 	combat.stats.set_stat(player_handle, StatBlock.Stat.HP, 100_000)
 	combat.stats.set_stat(player_handle, StatBlock.Stat.ENERGY, 3000)
@@ -96,8 +94,8 @@ func _ready() -> void:
 		_abort_initialization("Sandbox: movement grant failed")
 		return
 	(get_node(^"Player") as FPSController).bind_mobility(mobility, player_handle)
-	shots = ShotBatch.new(ROOM_SHOTS, stride, ROOM_HOSTS)
-	resolver = ShotResolver.new(combat.stats, shots, ROOM_CONTEXTS)
+	shots = ShotBatch.new(config.shot_capacity, stride, config.host_capacity)
+	resolver = ShotResolver.new(combat.stats, shots, config.context_capacity, combat.statuses)
 	resolver.on_hit.connect(_on_hit)
 	resolver.on_kill.connect(_on_kill)
 	weapon = get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon
@@ -110,6 +108,9 @@ func _ready() -> void:
 		return
 	for body: Node in get_node(^"Targets").get_children():
 		var target: int = combat.stats.allocate()
+		if not combat.statuses.register_target(target, StatusRuntime.Profile.ORDINARY):
+			_abort_initialization("Sandbox: target status registration failed")
+			return
 		combat.stats.set_stat(target, StatBlock.Stat.MAX_HP, 100_000)
 		combat.stats.set_stat(target, StatBlock.Stat.HP, 100_000)
 		Damageable.attach(body, target)
@@ -125,14 +126,25 @@ func _ready() -> void:
 
 
 func _on_logic_tick(tick: int) -> void:
+	logic_step(tick)
+
+
+## The room's single logic subscriber, public so tests and benchmarks can drive a tick:
+## statuses (expiry, burn pulses) -> resolver -> effects -> mobility.
+func logic_step(tick: int) -> void:
 	var start: int = Time.get_ticks_usec()
+	if not combat.statuses.logic_step(tick):
+		_abort_initialization("Sandbox: status tick failed")
+		return
+	var stepped: int = Time.get_ticks_usec()
 	resolver.logic_step(tick)
 	var resolved: int = Time.get_ticks_usec()
 	effects.logic_step(tick)
 	var effected: int = Time.get_ticks_usec()
 	mobility.logic_step(tick)
 	var finished: int = Time.get_ticks_usec()
-	_record_phase(Phase.RESOLVER, resolved - start)
+	_record_phase(Phase.STATUSES, stepped - start)
+	_record_phase(Phase.RESOLVER, resolved - stepped)
 	_record_phase(Phase.EFFECTS, effected - resolved)
 	_record_phase(Phase.MOBILITY, finished - effected)
 	_phase_steps += 1
@@ -142,6 +154,18 @@ static func _zeroes(size: int) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	out.resize(size)
 	return out
+
+
+static func _zeroes_64(size: int) -> PackedInt64Array:
+	var out := PackedInt64Array()
+	out.resize(size)
+	return out
+
+
+## EffectHost packed bytes: heads, owner/host lists, HandlePool and ten int32 + one int64
+## columns. Counted with the runner against RoomConfig.effect_packed_bytes.
+static func effect_host_bytes(config: RoomConfig) -> int:
+	return config.host_capacity * (EffectTrigger.TRIGGER_COUNT * 4 + 12) + config.effect_entries * 57
 
 
 func _record_phase(phase: Phase, usec: int) -> void:
@@ -193,8 +217,13 @@ func reset_phase_metrics() -> void:
 	_phase_steps = 0
 
 
-# Visible defeated targets preserve an inspectable collider and full handle.
 func _process(_delta: float) -> void:
+	apply_dead_marks()
+
+
+## Frame-side half of the kill path: greys the targets marked by kill events since the last
+## frame. Visible defeated targets keep an inspectable collider and full handle.
+func apply_dead_marks() -> void:
 	if not _dead_dirty:
 		return
 	_dead_dirty = false
@@ -205,6 +234,15 @@ func _process(_delta: float) -> void:
 
 
 func _on_kill(_source: int, target: int, _epoch: int, _sequence: int, _trace: int) -> void:
+	_mark_dead(target)
+
+
+func _on_pulse_kill(_source: int, target: int, _credit: int, _generation: int, _ordinal: int,
+		_hp_damage: int, _epoch: int, _sequence: int, _trace: int, _tags: int) -> void:
+	_mark_dead(target)
+
+
+func _mark_dead(target: int) -> void:
 	for index: int in target_handles.size():
 		if target_handles[index] == target:
 			_dead_pending[index] = 1
@@ -213,6 +251,12 @@ func _on_kill(_source: int, target: int, _epoch: int, _sequence: int, _trace: in
 
 func _on_hit(source: int, _target: int, _epoch: int, _sequence: int,
 		_trace: int, _child: int, hp_damage: int) -> void:
+	effects.enqueue(source, EffectTrigger.Trigger.ON_HIT, hp_damage)
+
+
+## Burn pulses credit their original full source handle; a reused slot receives nothing.
+func _on_pulse_hit(source: int, _target: int, _credit: int, _generation: int, _ordinal: int,
+		hp_damage: int, _epoch: int, _sequence: int, _trace: int, _tags: int) -> void:
 	effects.enqueue(source, EffectTrigger.Trigger.ON_HIT, hp_damage)
 
 
@@ -229,6 +273,9 @@ func reset_mobility_clock() -> void:
 	var old_tick: int = GameLoop.get_logic_tick()
 	if not resolver.reset_room():
 		_abort_initialization("Sandbox: room epoch exhausted")
+		return
+	if not combat.reset_room():
+		_abort_initialization("Sandbox: room combat reset failed")
 		return
 	effects.reset_room()
 	weapon.reset_clock(old_tick)

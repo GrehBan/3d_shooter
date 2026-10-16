@@ -19,6 +19,7 @@ var _source: PackedInt64Array = PackedInt64Array()
 var _sequence: PackedInt64Array = PackedInt64Array()
 var _epoch: PackedInt64Array = PackedInt64Array()
 var _damage: PackedInt64Array = PackedInt64Array()
+var _element: PackedInt32Array = PackedInt32Array()
 var _count: PackedInt32Array = PackedInt32Array()
 var _written_count: PackedInt32Array = PackedInt32Array()
 var _state: PackedByteArray = PackedByteArray()
@@ -38,6 +39,7 @@ func _init(shots: int, stride: int, hosts: int) -> void:
 	_sequence.resize(shots)
 	_epoch.resize(shots)
 	_damage.resize(shots)
+	_element.resize(shots)
 	_count.resize(shots)
 	_written_count.resize(shots)
 	_state.resize(shots)
@@ -66,8 +68,10 @@ func pending_count() -> int:
 
 
 ## Reserve before cooldown, resources, effects or raycasts. No wrap is permitted.
-func reserve(source: int, traces: int, damage: int) -> int:
+func reserve(source: int, traces: int, damage: int,
+		element: DamagePayload.Element = DamagePayload.Element.NONE) -> int:
 	if source < 0 or traces <= 0 or traces > _stride or damage <= 0 \
+			or element < DamagePayload.Element.NONE or element > DamagePayload.Element.ACID \
 			or _occupied >= _shots or _next_ticket == INT_MAX:
 		return reject_configuration()
 	var host: int = source % HandlePool.INDEX_SPAN
@@ -88,6 +92,7 @@ func reserve(source: int, traces: int, damage: int) -> int:
 	_next_sequence[host] += 1
 	_epoch[slot] = epoch
 	_damage[slot] = damage
+	_element[slot] = element
 	_count[slot] = traces
 	_written_count[slot] = 0
 	_state[slot] = 1
@@ -162,6 +167,10 @@ func epoch_at(index: int) -> int:
 
 func damage_at(index: int) -> int:
 	return _damage[_order[index]]
+
+
+func element_at(index: int) -> DamagePayload.Element:
+	return _element[_order[index]] as DamagePayload.Element
 
 
 func trace_count_at(index: int) -> int:

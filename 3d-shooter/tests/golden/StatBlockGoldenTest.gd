@@ -30,7 +30,6 @@ func test_allocation_scenario_hash() -> void:
 			sb.set_stat(handle, StatBlock.Stat.MAX_HP, 100_000)
 			sb.set_stat(handle, StatBlock.Stat.HP, step * 1000)
 			h = _fnv(h, sb.add_stat_clamped(handle, StatBlock.Stat.HP, -step * 37, 0, 100_000))
-			sb.set_status(handle, (1 << 40) | step)
 		# Устаревшие handle обязаны отвергаться.
 		for d: int in dead.slice(maxi(0, dead.size() - 3)):
 			h = _fnv(h, 1 if sb.set_stat(d, StatBlock.Stat.ARMOR, 999) else 0)
@@ -38,8 +37,6 @@ func test_allocation_scenario_hash() -> void:
 	for handle: int in handles:
 		for stat: int in StatBlock.STAT_COUNT:
 			h = _fnv(h, sb.get_stat(handle, stat))
-		h = _fnv(h, sb.get_status(handle))
-		h = _fnv(h, sb.get_status(handle) >> 32)
 	assert_int(handles.size()).is_equal(6)
 	assert_array(handles.slice(0, 4)).is_equal([458754, 851972, 589830, 458759])
-	assert_int(h).is_equal(1088715370)
+	assert_int(h).is_equal(2581150791)

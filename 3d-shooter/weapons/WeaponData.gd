@@ -9,6 +9,8 @@ extends Resource
 @export var cooldown_ticks: int = 15
 @export var pattern: StringName = &"central_ring"
 @export var semi_auto: bool = true
+## Element of every pellet; NONE is physical. Statuses come from the room StatusRuntime.
+@export var element: DamagePayload.Element = DamagePayload.Element.NONE
 
 
 func is_valid() -> bool:
@@ -17,7 +19,8 @@ func is_valid() -> bool:
 			and range_mm > 0 and range_mm <= StatBlock.VALUE_MAX \
 			and spread_millidegrees >= 0 and spread_millidegrees < 90_000 \
 			and cooldown_ticks > 0 and cooldown_ticks <= StatBlock.VALUE_MAX \
-			and pattern == &"central_ring" and semi_auto
+			and pattern == &"central_ring" and semi_auto \
+			and element >= DamagePayload.Element.NONE and element <= DamagePayload.Element.ACID
 
 
 ## Room limits belong to the composition root, not the gameplay pellet preset.
@@ -32,7 +35,7 @@ static func validate_room(definitions: Array[WeaponData], shots: int, trace_cap:
 			return -1
 		stride = maxi(stride, data.pellet_count)
 	# Conservative packed-store budget, including context handles/hit sets and metadata.
-	var bytes_per_shot: int = 64 + stride * 9
+	var bytes_per_shot: int = 68 + stride * 9
 	if hosts > memory_cap / 16 or context_capacity <= 0 or context_capacity > memory_cap / 640:
 		return -1
 	var fixed_bytes: int = hosts * 16 + context_capacity * 640

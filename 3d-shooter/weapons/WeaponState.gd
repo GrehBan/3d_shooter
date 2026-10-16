@@ -8,6 +8,7 @@ var accepted_shots: int = 0
 var _pellets: int = 0
 var _damage: int = 0
 var _cooldown: int = 0
+var _element: DamagePayload.Element = DamagePayload.Element.NONE
 var _held: bool = false
 var _pending: bool = false
 
@@ -18,6 +19,7 @@ func configure(data: WeaponData, entity: int) -> bool:
 	_pellets = data.pellet_count
 	_damage = data.damage_raw
 	_cooldown = data.cooldown_ticks
+	_element = data.element
 	source = entity
 	ready_tick = 0
 	accepted_shots = 0
@@ -39,7 +41,7 @@ func request_shot(batch: ShotBatch, stats: StatBlock, tick: int) -> int:
 		return ShotBatch.INVALID
 	if tick > ShotBatch.INT_MAX - _cooldown:
 		return batch.reject_configuration()
-	var ticket: int = batch.reserve(source, _pellets, _damage)
+	var ticket: int = batch.reserve(source, _pellets, _damage, _element)
 	if ticket == ShotBatch.INVALID:
 		return ticket
 	ready_tick = tick + _cooldown
