@@ -15,7 +15,9 @@
   Общий событийный транспорт — `HitEventQueue.push()`; здесь также вызывается
   `MovementAbilities.try_activate()`. Для hitscan-дробовика пакета 3 оговорено отдельное
   weapon-specific исключение: полная запись выстрела в ShotBatch (§7),
-  а не поштучные `HitEventQueue.push()` для дробин.
+  а не поштучные `HitEventQueue.push()` для дробин. Кандидаты реакций M2.3b физический
+  адаптер `ReactionCandidates` пишет в ту же запись тоже только в физическом тике, до
+  публикации; логика читает их только из подготовленных записей.
 * **Логический тик, 30 Гц**: `GameLoop` испускает `logic_tick(tick)` на каждом втором
   физическом тике. У `GameLoop` `process_physics_priority = 1000`, поэтому логика идёт после
   всех физических обработчиков этого тика и видит их события: попадание raycast-hitscan
@@ -48,6 +50,11 @@
   конфигурации (см. ниже).
 * `StatusRuntime` детерминирован целиком: обход по возрастанию слота `StatBlock`, целые
   сроки и суммы, пульсы через `DamagePipeline`; эталон — `StatusGoldenTest`.
+* `ReactionRuntime` детерминирован при заданном наборе кандидатов: фильтр по команде, HP и
+  исключениям, порядок по полному handle, целые доли урона; эталон — `ReactionGoldenTest`.
+  Сам набор кандидатов даёт физика (какие хитбоксы пересекают сферу), он вне гарантии,
+  как вся физика, в том числе при переполнении ёмкости K. Позиций и `Vector3` в логике нет
+  (`LogicIsolationTest`).
 * ShotBatch канонизирует полные source/sequence, затем trace index (§7).
   Его integer resolver детерминирован для одинаковых завершённых записей выстрелов;
   физический raycast и input не приобретают побитовую гарантию.
@@ -100,6 +107,11 @@
   время шага, контакта или пульса, смену профиля, отвергнутый снимок; сообщение
   `CONFIGURATION_ERROR` однократно до `reset_diagnostics()` или `reset_room()`. Ошибки
   `RoomConfig` описаны в его разделе.
+* `ReactionRuntime.configuration_errors` — то же для реакций (вызов не в своём порядке,
+  реентерабельность, неверная команда); `ShotResolver.reaction_refusals` считает реакции,
+  для которых не нашлось контекста или бюджета ударов (кислота тогда не тратится).
+  Переполнение кандидатов (`ReactionCandidates.overflows`) — штатная толпа, а не ошибка
+  конфигурации: счётчик и одно предупреждение до `reset_diagnostics()`.
 * Для ShotBatch (§7) отказ атомарен для всего запроса ДО принятия выстрела;
   диагностическое сообщение однократно до явного reset, счётчик растёт на каждый отказ.
   Ненулевые ошибки транспорта/пулов блокируют приёмку пакета.
@@ -148,13 +160,14 @@
 
 Владелец боевых хранилищ комнаты. `RoomCombat.new(room_config)` создаётся холодно при
 загрузке комнаты (`null` — `RoomConfig` по умолчанию), проверяет конфигурацию и создаёт
-единственные `StatBlock` (ёмкость `host_capacity`) и `StatusRuntime` комнаты. `config` —
+единственные `StatBlock` (ёмкость `host_capacity`), `StatusRuntime` и `ReactionRuntime`
+комнаты. `config` —
 свойство только для чтения: каждое чтение отдаёт новую копию проверенной конфигурации
 (холодный путь), присваивание пишет `push_error(READ_ONLY_ERROR)` и ничего не меняет. Поля
-`stats` и `statuses` не переназначаются.
+`stats`, `statuses` и `reactions` не переназначаются.
 Остальные runtime комнаты получают ссылки и своих хранилищ не создают:
 `MobilityRuntime.new(combat.stats, landing_capacity, combat.statuses)`,
-`ShotResolver.new(combat.stats, batch, contexts, combat.statuses)`, `EffectRunner` и
+`ShotResolver.new(combat.stats, batch, contexts, combat.statuses, combat.reactions)`, `EffectRunner` и
 `HitscanWeapon` — `combat.stats`. `EffectHost` `StatBlock` не получает, его ёмкость задаётся
 числом хостов. Обращения к хранилищам в горячем пути не выделяют память.
 
@@ -167,10 +180,11 @@
 (`StatusRuntime.effective_armor()`), базовый `ARMOR` не пишется. Только для чтения:
 `MobilityRuntime.uses_statuses(statuses)` и `DamagePipeline.uses_statuses(statuses)`.
 
-`reset_room() -> bool` сбрасывает состояние комнаты — статусы (`StatusRuntime.reset_room()`).
-`StatBlock` не сбрасывается: сущности, их статы, handle и регистрации профилей переживают
-сброс, жизненный цикл сущности отдельный (§6, §7). Отказ (`false`) возможен только во время
-шага, контакта или пульса статусов. Сброс не выделяет памяти (`RoomCombatTest`).
+`reset_room() -> bool` сбрасывает состояние комнаты — статусы (`StatusRuntime.reset_room()`)
+и метрики реакций (`ReactionRuntime.reset_room()`). `StatBlock` не сбрасывается: сущности,
+их статы, handle, профили статусов и команды реакций переживают сброс, жизненный цикл
+сущности отдельный (§6, §7). Отказ (`false`, без каких-либо изменений) возможен только во
+время шага, контакта, пульса или реакции. Сброс не выделяет памяти (`RoomCombatTest`).
 
 ### RoomConfig (`combat/RoomConfig.gd`, M2.3)
 
@@ -180,7 +194,8 @@
 1..`AttackContextPool.HITS_PER_CONTEXT`, `shot_packed_bytes` ≥ 1, `context_capacity` ≥ 1,
 `deferred_reserve` 0..`context_capacity − 1`, `landing_capacity` 1..65536, `effect_entries` ≥ 1,
 `effect_max_subscriptions` 1..64, `effect_packed_bytes`, `visual_nodes`,
-`visual_packed_bytes`, `visual_texture_bytes` ≥ 1 (верхние границы ёмкостей пулов — 65536).
+`visual_packed_bytes`, `visual_texture_bytes` ≥ 1 (верхние границы ёмкостей пулов — 65536),
+`reaction_candidates` (K, кандидатов реакции на дробину) 1..`HITS_PER_CONTEXT`.
 `validation_error()` возвращает пустую строку либо `"RoomConfig: invalid <поле>"` для первого
 недопустимого поля; `RoomCombat.new` пишет это сообщение через `push_error` и остаётся
 неинициализированным, Sandbox прерывает загрузку («Sandbox: invalid room configuration») до
@@ -193,7 +208,8 @@ Sandbox. `RoomCombat` хранит копию (`duplicate()`): правка ис
 
 * `effect_event_capacity() = shot_capacity × trace_cap + host_capacity` — худший приём за
   логический тик: `OnHit` каждой дробины всех выстрелов тика и по одному пульсу горения на
-  запись статусов;
+  запись статусов. Вторичные попадания реакций в `EffectRunner` в M2.3b не идут
+  (инвариант: только первичный `OnHit` и пульсы), поэтому в формуле их нет;
 * `effect_work_quota() = effect_event_capacity() × effect_max_subscriptions` — каждое событие
   захватывает не больше `effect_max_subscriptions` записей, каждая стоит единицу работы.
 
@@ -258,6 +274,10 @@ Sandbox. `RoomCombat` хранит копию (`duplicate()`): правка ис
   (раскол) → `DamageApply.apply_with_armor()` с `StatusRuntime.effective_armor()` →
   `end_contact()` с фактическим HP-уроном → `POST_HIT`. Крит отключён: `CRIT` и любые флаги
   прямого контакта отвергаются.
+* `resolve_secondary_front(payloads, reactions)` (M2.3b) принимает только `ELECTRIC` или
+  `FIRE` с флагами ровно `SECONDARY`, только пока этот `ReactionRuntime` исполняет свою
+  реакцию (`is_executing()`) и только на pipeline с его `StatusRuntime`. Щит, эффективная
+  броня и HP применяются один раз; статусов, раскола, крита и новых реакций нет.
 * `resolve_dot_front(payloads, statuses)` принимает только `FIRE` с флагами ровно
   `DOT | SECONDARY` и только пока этот `StatusRuntime` исполняет собственный пульс
   (`is_resolving_pulse()`). `DamageApply.apply_with_armor(stats, entity, raw, armor)` — та же
@@ -287,16 +307,19 @@ int32 (`Field32`: profile, стаки охлаждения и коррозии) 
 
 **Шаг.** `logic_step(tick) -> bool` Sandbox вызывает первым в логическом тике. Принимается
 любой первый тик: комната загружается посреди забега, когда `GameLoop` уже не на 0; до
-первого шага логическое время 0. Повтор и прошлый тик — no-op (`true`), отрицательный тик и
-тик больше `MAX_TICK = 2^62` — отказ. Пропуск тиков — защитный путь, `GameLoop` выдаёт тики
-подряд: каждое активное горение за шаг исполняет не больше одного просроченного пульса
+первого шага логическое время 0: прямой контакт до первого шага ставит сроки от 0, и они
+истекают на первом шаге. В Sandbox таких контактов нет (статусы шагают первыми), а
+реакции M2.3b новых прямых контактов не создают: вторичные попадания статусов не дают.
+Повтор и прошлый тик — no-op (`true`), отрицательный тик и тик больше `MAX_TICK = 2^62` —
+отказ. Пропуск тиков — защитный путь, `GameLoop` выдаёт тики подряд: каждое активное горение за шаг исполняет не больше одного просроченного пульса
 (`due ≤ tick`), следующий срок считается от текущего тика (`tick + 15`), горение снимается,
 если этот срок позже его конца. Шаг обходит только слоты с живым состоянием, включая
 кулдауны, по возрастанию слота: O(активных), без пиков. В слоте сначала снимаются истёкшие
 статусы (`until ≤ tick`), затем исполняется пульс; устаревшие цели отвязываются, мёртвые
 очищаются, слоты без состояния выпадают из списка. `visited_slots` считает посещения.
 
-**Контакт.** Только `DamagePipeline`: `begin_contact()` до записи урона, `end_contact(source,
+**Контакт.** Публичный протокол только для `DamagePipeline` (другие вызывающие его не
+используют): `begin_contact()` до записи урона, `end_contact(source,
 target, raw, element, hp_damage, shattered, credit, epoch, sequence, trace, tags)` после.
 Статус накладывается при HP-уроне > 0 по живой цели; удар только в щит, броня 100 % и нулевой
 урон статусов не дают. Раскол снимает заморозку и охлаждение, лёд этим ударом не копится.
@@ -326,6 +349,8 @@ source, credit, `generation`, `ordinal`, HP-урон и провенанс вы�
 **Запросы.** O(1), по полному handle: `status_mask`, `has_status(target, Mask)`,
 `movement_scale` (0 при шоке или заморозке), `control_blocked`, `is_frozen`,
 `effective_armor`, `acid_stacks`, `chill_stacks`, `profile_of`, `burn_field`, `active_count`.
+`consume_corrosion(target)` — снятие коррозии допущенным взрывом M2.3b; во время шага,
+контакта или пульса отказывает.
 Устаревший handle и мёртвая цель дают пустой результат. Потребители движения и атак врагов —
 M3.
 
@@ -355,7 +380,74 @@ compatible_tick`, совпадение свидетеля, привязку hand
 `tests/tools/status_ref.py`: хеш 4200031361 на тиках 1..125 с переиспользованием handle и
 восстановлением, 2162921167 при старте с тика 500 с пропуском, повтором и прошлым тиком,
 2613431295 для цели, которую убили и вылечили: смерть снимает статусы и оба кулдауна),
-`HotPathAllocationTest`, `RoomCombatTest` и [профиль 40 + 1](#10-m23a-профиль-статусов-40--1).
+`HotPathAllocationTest`, `RoomCombatTest` и [профиль 40 + 1](#10-m23-профиль-40--1-статусы-и-реакции).
+
+### ReactionRuntime (`combat/ReactionRuntime.gd`) и ReactionCandidates (`weapons/`, M2.3b)
+
+Числа — утверждённый [пресет реакций GDD §5](../gdd.md#5-система-карточек-и-эффектов-effect-engine)
+в `ReactionRules` (`data/status/default_reaction_rules.tres`, `is_valid()` принимает только
+его): радиус 3 м; ELECTRIC без коррозии и WET — дуги на 2 цели по 50 % raw; ELECTRIC по
+корродированной или WET цели — проводящий импульс на 4 цели по 50 %; FIRE по корродированной
+цели — токсичный взрыв на 4 цели по 75 %, коррозия снимается. Иначе реакции нет. Доли —
+от raw прямого контакта до раскола и брони, с округлением вниз; нулевая доля реакции не даёт.
+
+**Регистр.** `ReactionRuntime` создаёт `RoomCombat` на тех же `StatBlock` и `StatusRuntime`.
+На каждый слот: полный handle, команда (int32, 0 — нейтральный) и флаг WET (байт), 13 B на
+слот плюс выборка (`packed_bytes()`). `register_target(handle, team, wet)` — холодная
+регистрация при спавне; Sandbox даёт игроку `TEAM_PLAYER` = 1, мишеням `TEAM_HOSTILE` = 2.
+WET — вводимая способность сущности, воды в мире нет. Регистрации переживают сброс комнаты.
+
+**Кандидаты.** Физика ищет, логика выбирает. `ReactionCandidates` — физический адаптер
+оружия (`HitscanWeapon.bind_reactions(reactions)`): один заранее созданный `ShapeCast3D`
+(сфера радиуса пресета, маска хитбоксов — слой 7, `max_results = K + 2`) в физическом тике,
+до публикации, ставится в центр тела поражённой цели и пишет полные handle хитбоксов,
+кроме самой цели, в ячейки `ShotBatch` этой дробины (`add_candidate`, не больше K =
+`RoomConfig.reaction_candidates`). Запрос делается только для элементов, у которых реакция
+задевает соседей (`ReactionRuntime.needs_candidates(element)`, из определений реакций), по
+одному на различную цель выстрела: следующие дробины по той же цели копируют результат
+(`copy_candidates`). Больше K хитбоксов в сфере — штатная толпа: лишние отбрасываются,
+`overflows` растёт, предупреждение одно. Стоимость запросов на кадр выстрела по native p99
+не больше 0,5 мс (профиль 40 + 1, §10); при превышении предусмотрен переход на кеш соседей
+с раунд-робином.
+
+**Порядок для каждой прямой дробины** (`ShotResolver`):
+1. `plan(source, primary, raw, element)` до контакта захватывает команду источника,
+   коррозию и WET цели до попадания; неизвестные handle и нейтральный источник реакции
+   не дают.
+2. Прямой контакт через `DamagePipeline` (статусы M2.3a), фиксация убийства.
+3. Если HP-урон > 0 (в том числе летальный): проверка бюджета ударов дерева
+   (`planned_limit()`), открытие дочернего контекста реакции (глубина 2) через
+   `ShotResolver.open_child`, затем `admit()` — взрыв снимает коррозию цели здесь, даже если
+   целей не окажется. Нет контекста или бюджета — `reaction_refusals`, кислота не тратится.
+4. Колбэки первичного `OnHit` / `OnKill`.
+5. `execute()`: выборка из кандидатов этой дробины — зарегистрированный полный handle,
+   команда не 0 и не команда источника, HP > 0, не цель и не источник; по возрастанию
+   полного handle берутся первые 2 или 4. Каждый выбранный регистрируется в контексте
+   реакции (повтор в ветке запрещён), получает вторичный урон через
+   `resolve_secondary_front`; умершие после выборки — `stale_skips`, без перевыбора.
+6. Закрытие контекста реакции, `finish()`, снятие записи, закрытие дочернего контекста.
+
+Бюджет ударов корня — `traces × (1 + max_targets())`; контекстов на выстрел — `1 + 2 × stride`
+(`WeaponData.validate_room(..., candidates, reactions = true)`). Цепочек нет: вторичные
+попадания не дают статусов и реакций.
+
+**Сигналы.** `ReactionRuntime.on_hit` / `on_kill` пробрасываются как отдельные
+`ShotResolver.on_secondary_hit` / `on_secondary_kill`, а не `on_hit` / `on_kill`. Инвариант
+M2.3b: `EffectRunner` получает только первичный `OnHit` и пульсы горения; вторичные
+попадания идут наблюдателям и в путь перекраски убитых целей (Sandbox подписывает
+`on_secondary_kill`). Маршрут вторичных `OnHit` в карточки — [follow-ups](notes/follow-ups.md).
+
+**Реентерабельность.** Пока реакция спланирована или исполняется, `register_target`, `plan`,
+`admit`, `execute` и `reset_room` отказывают с ошибкой конфигурации; вторичный урон
+принимается только внутри `execute`.
+
+**Сброс и снимки.** `reset_room()` обнуляет метрики и диагностику, сохраняя регистр. Снимка
+у регистра нет: это данные спавна, их восстанавливает загрузка комнаты.
+
+**Проверки.** `ReactionRuntimeTest`, `ReactionCandidatesTest` (сфера, слой, исключение цели,
+переполнение, дедуп и шлюз элемента в оружии, отсутствие аллокаций запроса),
+`ReactionSandboxTest`, `ReactionGoldenTest` (модель `tests/tools/reaction_ref.py`, хеш
+2234811627), `HotPathAllocationTest`, `LogicIsolationTest` и [профиль 40 + 1](#10-m23-профиль-40--1-статусы-и-реакции).
 
 ### Damageable (`combat/Damageable.gd`)
 
@@ -541,7 +633,7 @@ golden 3633298175; исходный synthetic checksum 3032385286 сохранё
 `seeded_rng_ref.py`, `fixed_ref.py`, `stat_block_ref.py`, `hit_event_queue_ref.py`,
 `acp_ref.py`, `effect_host_ref.py`, `movement_ref.py`, `combat_contracts_ref.py`,
 `landing_ref.py`, `shotgun_ref.py`, `damage_pipeline_ref.py`, `effect_runner_ref.py`,
-`status_ref.py`.
+`status_ref.py`, `reaction_ref.py`.
 Запуск — `python 3d-shooter/tests/tools/<модель>.py` из корня репозитория; вывод модели
 совпадает с константой своего golden-теста. Пути моделей указаны в шапках golden-тестов.
 
@@ -726,6 +818,9 @@ NaN/Inf/отрицательная высота дают 0.
   Identity = (room epoch, full source, sequence); переиспользование entity slot не стирает
   поколение source. Переполнение sequence/epoch не допускает wrap и отвергает запрос
   до acceptance, cooldown, ресурсов, VFX и трасс с тем же диагностическим контрактом.
+* С реакциями каждая трасса записи хранит до K кандидатов (`add_candidate`,
+  `copy_candidates` — только до `publish`; `candidate_count_at`, `candidate_at` — только из
+  подготовленных записей), см. ReactionRuntime в §2.
 * `WeaponData.element` (по умолчанию `NONE`, утверждённый дробовик физический) копируется
   `WeaponState` в каждую запись ShotBatch (`reserve(..., element)`, `element_at()`); элемент
   вне `NONE..ACID` отвергает запрос. Resolver передаёт элемент и провенанс выстрела в
@@ -825,13 +920,14 @@ owned trees отменяются без OnAttackResolved. Старые handles �
 
 Ёмкости Sandbox — из `RoomConfig` `data/rooms/sandbox_room.tres`: `C_shots = 4`, trace cap 8,
 `C_trace = max(N) = 8` для единственного разрешённого shotgun.tres, host capacity 16, context
-capacity 64, deferred reserve 16.
+capacity 128, deferred reserve 16, K = 8 кандидатов реакции на трассу.
 Cold `WeaponData.validate_room` проверяет все presets до создания stores/bind/subscriber:
-memory cap 128 КиБ покрывает консервативный бюджет packed-хранилищ: `68 + 9 * C_trace` байт на
-shot (с колонкой элемента), 16 на source allocator, 640 на context с HandlePool/hit-set/metadata/owned registry.
+memory cap 128 КиБ покрывает консервативный бюджет packed-хранилищ:
+`68 + C_trace * (13 + 8 * K)` байт на shot (элемент и кандидаты реакций), 16 на source allocator, 640 на context с HandlePool/hit-set/metadata/owned registry.
 Этот cap относится к packed combat stores, не к внутренней памяти Godot ray/mesh nodes;
 их число фиксируется холодной загрузкой и проверяется активными monitor deltas.
-Context sizing требует `C_shots*(1+C_trace)+deferred_reserve<=context_capacity`;
+Context sizing требует `C_shots*(1+2*C_trace)+deferred_reserve<=context_capacity` (с реакциями
+у каждой дробины может быть дочерний контекст реакции; без них — `1+C_trace`);
 удержание сверх назначенного резерва является ошибкой конфигурации, а не новой механикой.
 
 `ShotBatch.reserve` выдаёт монотонный reservation ticket без wrap; `write_trace` принимает
@@ -843,7 +939,8 @@ Room reset повышает epoch и сбрасывает sequences; ticket не
 старый незавершённый writer не может записать в новый slot после reset.
 
 HitscanWeapon создаёт `C_trace` RayCast3D при загрузке, исключает тело игрока и использует
-world/enemy/hitbox mask. Physics priority 10 следует за FPS (priority 0) и предшествует
+world/enemy/hitbox mask. `bind_reactions(reactions)` холодно создаёт дочерний
+`ReactionCandidates` (§2). Physics priority 10 следует за FPS (priority 0) и предшествует
 `GameLoop` (1000). Фиксированные central+ring endpoints сохраняют world range 40 м при yaw/pitch
 и поддержанном положительном uniform scale контроллера; после acceptance все rays
 обновляются и unconditional publish выполняется вне assert, включая release build.
@@ -853,11 +950,11 @@ release очищает latch и вне capture. Capture loss/focus loss очищ
 driven command release допускается при pause. Headless route tests используют injected
 capture intent и не доказывают доставку событий ОС.
 
-Sandbox содержит три видимые статические damageable цели, mesh оружия и фиксированный
+Sandbox содержит три видимые статические damageable цели на слое хитбоксов, mesh оружия и фиксированный
 прицел. Убитые цели становятся серыми общим cold material, остаются видимыми и сохраняют
-collider/full handle. Логический тик визуал не трогает: `ShotResolver.on_kill`
-и `StatusRuntime.on_pulse_kill` только помечают цель, а материал меняется в ближайшем
-`_process` Sandbox. Цель с HP 0 без
+collider/full handle. Логический тик визуал не трогает: `ShotResolver.on_kill`,
+`ShotResolver.on_secondary_kill` и `StatusRuntime.on_pulse_kill` только помечают цель, а
+материал меняется в ближайшем `_process` Sandbox (`apply_dead_marks()`). Цель с HP 0 без
 события убийства не перекрашивается. Сброс комнаты пометки и материал не снимает: цели и их HP
 переживают сброс, мёртвая цель остаётся серой. Это inspectable death/no-op полигон, не enemy
 FSM/контент M2.
@@ -867,7 +964,8 @@ Unit/golden/Jolt/аллокационные проверки и команды �
 
 ## 8. M1 presentation pools (пакет 4)
 
-Утверждённый визуальный пресет и лимиты комнаты — в [плане M1](m1-plan.md#4-пулы-используемых-vfx-и-декалей).
+Утверждённый визуальный пресет и лимиты комнаты — в
+[плане M1](m1-plan.md#4-пулы-используемых-vfx-и-декалей).
 Представление вне детерминированного боя: точка и нормаль столкновения не попадают
 в `ShotBatch` и resolver. Снимки `HitscanWeapon` предвыделены и доступны только
 синхронному слушателю опубликованного выстрела; ссылки на packed-массивы не выдаются.
@@ -949,7 +1047,9 @@ no-op и убийств — 0. Обязательны 30 dash, по 15 slide, do
 включая Sandbox и наблюдатель урона бенчмарка. Максимум ≤ 7000 µs — жёсткий порог этой
 fixture M1; это не подтверждение будущих 40 врагов и шторма эффектов M3.
 
-Пофазный замер: Sandbox в `_on_logic_tick` берёт `Time.get_ticks_usec()` вокруг фаз
+Пофазный замер: Sandbox в `logic_step(tick)` (его вызывает обработчик `GameLoop.logic_tick`;
+до полной загрузки, после прерванной и для тика не новее последнего это no-op) берёт
+`Time.get_ticks_usec()` вокруг фаз
 statuses, resolver, effects и mobility и копит последнее, максимум, сумму (предвыделенные
 `PackedInt64Array`) и гистограмму по 10 µs (предвыделенный `PackedInt32Array`):
 `phase_steps()`, `phase_last_usec()`, `phase_max_usec()`, `phase_sum_usec()`,
@@ -983,26 +1083,33 @@ p95/p99/худший интервал и доля кадров > 16 667 µs. С�
 60 в каждом кадре и не является эталоном производительности M3. Опциональный
 `--capture=<path>` сохраняет PNG только после снимка мониторов и паузы.
 
-## 10. M2.3a: профиль статусов 40 + 1
+## 10. M2.3: профиль 40 + 1 (статусы и реакции)
 
 `res://tests/perf/StatusPipelineBenchmark.tscn` холодно создаёт настоящий Sandbox с
 `RoomConfig` `tests/fixtures/rooms/status_load_40.tres` (48 слотов, 4 подписки на событие:
-80 событий, квота 320), четырьмя определениями счётчиков M2.2 на игроке и 40 целями: три
-мишени сцены и 37 дополнительных сущностей, HP 10^9 raw, броня 30 000. Драйвер физики
+80 событий, квота 320; 128 контекстов, K = 8), четырьмя определениями счётчиков M2.2 на
+игроке и 40 хитбоксами-мишенями: три мишени сцены и 37 их копий до входа Sandbox в дерево,
+на сетке 8 × 5 с шагом 3 м по x и 2 м по z, HP 10^9 raw, броня 30 000. Сфера 3 м вокруг
+внутренней мишени пересекает ровно 8 соседей, переполнения нет. Драйвер физики
 (priority −100, до `GameLoop`) каждый второй физический тик публикует в `ShotBatch` одну
-запись из 8 дробин по 1000 raw: пять групп по восемь целей по кругу, элемент меняется через
-каждые пять записей (FIRE, ICE, ACID, ELECTRIC, NONE). Это одна запись на логический тик,
-в 15 раз чаще кулдауна дробовика; лучи и Jolt в профиль не входят, их меряет §9. Все цели
-постоянно горят, охлаждаются, замерзают, раскалываются и корродируют.
+запись из 8 дробин по 1000 raw: один ряд сетки на запись, каждая дробина по своей цели,
+элемент меняется через каждые пять записей (FIRE, ICE, ACID, ELECTRIC, NONE; последний ряд
+вместо ACID получает ELECTRIC, не корродирует и даёт дуги). Для FIRE и ELECTRIC драйвер
+вызывает настоящий запрос `ReactionCandidates` для каждой из 8 различных целей — худший
+случай на кадр выстрела — и меряет его. Это одна запись на логический тик, в 15 раз чаще
+кулдауна дробовика; лучи и Jolt движения в профиль не входят, их меряет §9.
 
 300 физических тиков прогрева, затем 3600 измеряемых. Обязательны: дельты objects/nodes/
 resources/orphans 0, static ≤ 1 МиБ; 1800 замеров тика и шагов фаз; максимум всего выпуска
-`logic_tick` ≤ 7000 µs; 40 активных записей статусов; нулевые ошибки конфигурации, потери,
-отказы, отложенная работа `EffectRunner` и живые контексты. Активность детерминирована, и
-`run_checks.sh` сверяет её точно: `hits=14400 pulses=4800 statuses_applied=11520
-pulse_damage=960000 effect_events=19200 effect_actions=21000 active=40 kills=0`. Строка
-`STATUS_PIPELINE phases` выводит среднее, p99 и максимум фаз statuses, resolver, effects и
-mobility. `--inject-leak` должен дать exit 1 с objects +1 / orphans +1 и очисткой 0/0,
-неизвестная опция — exit 2. Шаг `status_pipeline` входит в `run_checks.sh all` и в workflow.
-Графический запуск той же сцены — native-замер по правилам темпа §9. Это нагрузка статусов
-M2.3a, а не M3 с 40 врагами, реакциями и штормом эффектов.
+`logic_tick` ≤ 7000 µs; 40 активных записей статусов; ненулевые дуги, проводящие импульсы,
+взрывы и вторичные попадания; ноль переполнений кандидатов; нулевые ошибки конфигурации,
+отказы реакций, потери, отказы, отложенная работа `EffectRunner` и живые контексты.
+Активность детерминирована, и бенчмарк сам сверяет её с `EXPECTED_ACTIVITY`: попадания,
+пульсы, наложенные статусы, урон пульсов, события и действия `EffectRunner`, реакции, дуги,
+импульсы, взрывы, вторичные попадания и их урон, число запросов. Строки `STATUS_PIPELINE
+phases` и `STATUS_PIPELINE candidates` выводят среднее, p99 и максимум фаз statuses, resolver
+(с реакциями), effects, mobility и стоимость запросов кандидатов на кадр выстрела.
+`--inject-leak` должен дать exit 1 только из-за objects +1 / orphans +1 и очистку 0/0,
+неизвестная опция — exit 2; оба проверяет шаг `status_pipeline` в `run_checks.sh all` и в
+workflow. Графический запуск той же сцены — native-замер по правилам темпа §9. Это
+нагрузка статусов и реакций M2.3, а не M3 с 40 врагами, ИИ и штормом эффектов.
