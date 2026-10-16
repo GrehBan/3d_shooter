@@ -8,7 +8,7 @@ const TARGET_HP: int = 20000000
 const TIMER_PAIRS: int = 100000
 
 var result: RealPipelineResult = RealPipelineResult.new()
-var _sandbox: Node3D
+var _sandbox: Sandbox
 var _player: FPSController
 var _camera: Camera3D
 var _weapon: HitscanWeapon
@@ -92,13 +92,13 @@ func _ready() -> void:
 		return
 	_baseline.resize(RealPipelineResult.Counter.COUNT)
 	_frame_usec.resize(FRAME_CAPACITY)
-	_sandbox = SANDBOX.instantiate() as Node3D
+	_sandbox = SANDBOX.instantiate() as Sandbox
 	var effect_definitions: Array[EffectRuleData] = [
 		preload("res://tests/fixtures/effects/count_hit.tres"),
 		preload("res://tests/fixtures/effects/min_damage.tres"),
 		preload("res://tests/fixtures/effects/refuse_damage.tres"),
 		preload("res://tests/fixtures/effects/cooldown_hit.tres")]
-	_sandbox.set(&"effect_definitions", effect_definitions)
+	_sandbox.effect_definitions = effect_definitions
 	_player = _sandbox.get_node(^"Player") as FPSController
 	_player.hardware_input_enabled = false
 	_camera = _player.get_node(^"Camera3D") as Camera3D
@@ -106,20 +106,20 @@ func _ready() -> void:
 	_weapon.hardware_input_enabled = false
 	_prepare_geometry()
 	add_child(_sandbox)
-	_mobility = _sandbox.get(&"mobility") as MobilityRuntime
-	_resolver = _sandbox.get(&"resolver") as ShotResolver
-	_batch = _sandbox.get(&"shots") as ShotBatch
-	_visuals = _sandbox.get(&"visuals") as ShotVisualPool
-	_effects = _sandbox.get(&"effects") as EffectRunner
+	_mobility = _sandbox.mobility
+	_resolver = _sandbox.resolver
+	_batch = _sandbox.shots
+	_visuals = _sandbox.visuals
+	_effects = _sandbox.effects
 	if _mobility == null or _resolver == null or not _weapon.is_initialized():
 		_abort("Sandbox initialization failed")
 		return
-	var effect_host: EffectHost = _sandbox.get(&"effect_host") as EffectHost
-	var player_handle: int = _sandbox.get(&"player_handle")
+	var effect_host: EffectHost = _sandbox.effect_host
+	var player_handle: int = _sandbox.player_handle
 	for index: int in effect_definitions.size():
 		_effect_entries.append(effect_host.add_effect(player_handle, EffectTrigger.Trigger.ON_HIT,
 				EffectTrigger.Phase.MAIN, index, index, index, index))
-	var targets: PackedInt64Array = _sandbox.get(&"target_handles")
+	var targets: PackedInt64Array = _sandbox.target_handles
 	_target = targets[1]
 	_mobility.stats.set_stat(_target, StatBlock.Stat.MAX_HP, TARGET_HP)
 	_mobility.stats.set_stat(_target, StatBlock.Stat.HP, TARGET_HP)
@@ -201,7 +201,7 @@ func _capture_baseline() -> void:
 		_baseline[index] = _counter(index)
 	_occupancy = _visual_occupancy()
 	_last_logic_tick = GameLoop.get_logic_tick()
-	_sandbox.call(&"reset_phase_metrics")
+	_sandbox.reset_phase_metrics()
 	result.warmup_ticks = _driver.ticks
 	_measure_start_usec = Time.get_ticks_usec()
 	_measuring = true
@@ -276,11 +276,11 @@ func _finish() -> void:
 		result.counters[index] = _counter(index) - _baseline[index]
 	result.configuration_errors = _batch.configuration_errors + _visuals.configuration_errors + _frame_overflows \
 			+ _resolver.damage_configuration_errors() + _effects.configuration_errors \
-			+ (_sandbox as Sandbox).combat.statuses.configuration_errors
+			+ _sandbox.combat.statuses.configuration_errors
 	result.dropped = _mobility.landings.dropped_count() + _visuals.dropped_count + _effects.dropped_events
 	result.refusals = _resolver.contexts.capacity_refusals + _resolver.contexts.hit_set_overflows \
 			+ _resolver.contexts.budget_refusals + _resolver.contexts.depth_refusals \
-			+ (_sandbox.get(&"effect_host") as EffectHost).capacity_refusals
+			+ _sandbox.effect_host.capacity_refusals
 	result.stale_landings = _mobility.stale_landings
 	result.no_op_traces = _resolver.no_op_traces
 	result.kills = _resolver.kills
@@ -291,11 +291,11 @@ func _finish() -> void:
 	result.live_contexts = _resolver.contexts.alive_count()
 	result.visual_occupancy_delta = _visual_occupancy() - _occupancy
 	result.frame_fps_mean = float(_frame_count) * 1000000.0 / maxf(1.0, float(_frame_usec_sum))
-	result.phase_steps = _sandbox.call(&"phase_steps")
+	result.phase_steps = _sandbox.phase_steps()
 	for phase: int in RealPipelineResult.PHASE_COUNT:
-		result.phase_usec_sum[phase] = _sandbox.call(&"phase_sum_usec", phase)
-		result.phase_usec_max[phase] = _sandbox.call(&"phase_max_usec", phase)
-		result.phase_usec_p99[phase] = _sandbox.call(&"phase_percentile_usec", phase, 990)
+		result.phase_usec_sum[phase] = _sandbox.phase_sum_usec(phase)
+		result.phase_usec_max[phase] = _sandbox.phase_max_usec(phase)
+		result.phase_usec_p99[phase] = _sandbox.phase_percentile_usec(phase, 990)
 	get_tree().paused = true
 	var failures: PackedStringArray = result.failures()
 	print("REAL_PIPELINE allocations: objects=%+d nodes=%+d resources=%+d orphans=%+d memory_static=%+d B" % [

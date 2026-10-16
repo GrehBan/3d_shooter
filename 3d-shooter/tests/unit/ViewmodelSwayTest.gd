@@ -6,7 +6,7 @@ const VALIDATOR_SHIFT: int = 24
 const VALIDATOR_MASK: int = (1 << 39) - 1
 const EPSILON: float = 0.0001
 
-var _scene: Node3D
+var _scene: Sandbox
 
 
 func after_test() -> void:
@@ -115,7 +115,7 @@ func test_zero_intensity_disables_bob_and_sway() -> void:
 
 
 func _sandbox() -> ViewmodelSway:
-	_scene = SANDBOX.instantiate() as Node3D
+	_scene = SANDBOX.instantiate() as Sandbox
 	(_scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
 	(_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
 	add_child(_scene)
