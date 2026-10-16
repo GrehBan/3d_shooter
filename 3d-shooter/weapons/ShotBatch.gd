@@ -144,6 +144,25 @@ func add_candidate(ticket: int, trace: int, handle: int) -> bool:
 	return true
 
 
+## Bulk form of add_candidate for the physics adapter: copies up to `count` handles of
+## `source` starting at `from` into the trace, as many as fit. Returns how many were written,
+## or INVALID if the ticket is not an open reservation or the trace is out of range. One
+## lookup for the whole copy; `source` is only read.
+func add_candidates(ticket: int, trace: int, source: PackedInt64Array, from: int, count: int) -> int:
+	var slot: int = _find(ticket)
+	if slot < 0 or _state[slot] != 1 or trace < 0 or trace >= _count[slot] or from < 0 \
+			or count < 0 or from + count > source.size():
+		return INVALID
+	var offset: int = slot * _stride + trace
+	var used: int = _candidate_count[offset]
+	var written: int = mini(count, _candidate_capacity - used)
+	var base: int = offset * _candidate_capacity + used
+	for index: int in written:
+		_candidates[base + index] = source[from + index]
+	_candidate_count[offset] = used + written
+	return written
+
+
 ## Free candidate slots of an open reservation's trace; -1 if the ticket is not an open
 ## reservation or the trace is out of range.
 func candidate_space(ticket: int, trace: int) -> int:

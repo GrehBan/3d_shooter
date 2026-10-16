@@ -114,14 +114,23 @@ func test_candidates_are_written_only_before_publish() -> void:
 	assert_bool(batch.add_candidate(ticket, 0, 5)).is_true()
 	assert_bool(batch.add_candidate(ticket, 0, 6)).is_true()
 	assert_bool(batch.add_candidate(ticket, 0, 7)).is_false()  # full
+	var source := PackedInt64Array([9, 10, 11])
+	assert_int(batch.add_candidates(ticket, 1, source, 1, 2)).is_equal(2)  # bulk: 10, 11
+	assert_int(batch.add_candidates(ticket, 1, source, 0, 3)).is_equal(0)  # full
+	assert_int(batch.add_candidates(ticket, 1, source, 2, 2)).is_equal(-1)  # past the source
+	assert_int(batch.add_candidates(ticket, 2, source, 0, 1)).is_equal(-1)  # trace out of range
 	batch.write_trace(ticket, 0, 1)
 	batch.write_trace(ticket, 1, 1)
 	batch.publish(ticket)
 	assert_bool(batch.add_candidate(ticket, 1, 8)).is_false()  # published: physics is done
+	assert_int(batch.add_candidates(ticket, 1, source, 0, 1)).is_equal(-1)
 	assert_int(batch.candidate_space(ticket, 1)).is_equal(-1)
 	assert_int(batch.prepare()).is_equal(1)
 	assert_int(batch.candidate_count_at(0, 0)).is_equal(2)
 	assert_int(batch.candidate_at(0, 0, 1)).is_equal(6)
+	assert_int(batch.candidate_count_at(0, 1)).is_equal(2)
+	assert_int(batch.candidate_at(0, 1, 0)).is_equal(10)
+	assert_int(batch.candidate_at(0, 1, 1)).is_equal(11)
 
 
 func test_new_targets_go_first_and_untracked_targets_leave_the_cache_and_layer() -> void:

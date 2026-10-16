@@ -48,6 +48,8 @@ var _cache_count: PackedInt32Array = PackedInt32Array()
 var _since: PackedInt64Array = PackedInt64Array()
 var _fresh: PackedByteArray = PackedByteArray()
 var _step: int = 0
+# Indices picked by the current refresh step, oldest first (Q entries).
+var _pick: PackedInt32Array = PackedInt32Array()
 var _bound: bool = false
 var _warned: bool = false
 var _reported: bool = false
@@ -73,6 +75,7 @@ func initialize(batch: ShotBatch, radius_mm: int, slots: int, queries_per_tick: 
 	_cache_count.resize(slots)
 	_since.resize(slots)
 	_fresh.resize(slots)
+	_pick.resize(queries_per_tick)
 	_cast = ShapeCast3D.new()
 	var sphere := SphereShape3D.new()
 	sphere.radius = float(radius_mm) / 1000.0
@@ -147,20 +150,34 @@ func untrack(target: int) -> void:
 	_tracked = last
 
 
-## Physics tick: refreshes the queries_per_tick targets with the oldest cache. Q linear
-## passes over the tracked targets; a refreshed target becomes the youngest, so no target is
-## refreshed twice in one step.
+## Physics tick: refreshes the queries_per_tick targets with the oldest cache. One pass over
+## the tracked targets keeps the Q oldest in a preallocated list (never refreshed first, then
+## the oldest refresh, ties to the lower index); each is refreshed once.
 func refresh_step() -> void:
 	if not _bound or not active or _tracked == 0:
 		return
 	_step += 1
-	for query: int in mini(_queries_per_tick, _tracked):
-		var oldest: int = 0
-		for index: int in _tracked:
-			if _fresh[index] > _fresh[oldest] \
-					or (_fresh[index] == _fresh[oldest] and _since[index] < _since[oldest]):
-				oldest = index
-		_refresh(oldest)
+	var want: int = mini(_queries_per_tick, _tracked)
+	var picked: int = 0
+	for index: int in _tracked:
+		var fresh: int = _fresh[index]
+		var since: int = _since[index]
+		if picked == want:
+			var youngest: int = _pick[want - 1]
+			if fresh < _fresh[youngest] or (fresh == _fresh[youngest] and since >= _since[youngest]):
+				continue
+		var at: int = picked if picked < want else want - 1
+		while at > 0:
+			var before: int = _pick[at - 1]
+			if fresh < _fresh[before] or (fresh == _fresh[before] and since >= _since[before]):
+				break
+			_pick[at] = before
+			at -= 1
+		_pick[at] = index
+		if picked < want:
+			picked += 1
+	for query: int in want:
+		_refresh(_pick[query])
 
 
 ## Physics tick, before publish: copies the cached neighbours of `target` into the trace.
@@ -168,16 +185,12 @@ func refresh_step() -> void:
 func copy_to(ticket: int, trace: int, target: int) -> int:
 	if not _bound:
 		return 0
-	var space: int = _batch.candidate_space(ticket, trace)
-	if space < 0:
+	var index: int = _tracked_index(target)
+	var written: int = _batch.add_candidates(ticket, trace, _cache,
+			0 if index < 0 else index * _capacity, 0 if index < 0 else _cache_count[index])
+	if written < 0:
 		_refuse()
 		return 0
-	var index: int = _tracked_index(target)
-	if index < 0:
-		return 0
-	var written: int = mini(_cache_count[index], space)
-	for candidate: int in written:
-		_batch.add_candidate(ticket, trace, _cache[index * _capacity + candidate])
 	return written
 
 
