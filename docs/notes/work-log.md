@@ -33,15 +33,14 @@
   восемь событий выстрела обрабатываются в одном тике: действия 2160 → 2040, отказы по
   кулдауну 720 → 840, отложенные тики 120 → 0, счётчики `[960, 1920, 0, 720]` →
   `[960, 1920, 0, 360]`; golden `EffectRunner` 3633298175 не меняется.
-* Профиль 40 + 1 (`StatusPipelineBenchmark`), headless `--fixed-fps 60`: logic avg 461.7 /
-  max 1089 µs; фазы avg / p99 / max — statuses 119.2 / 310 / 389, resolver 264.9 / 440 / 858,
-  effects 70.1 / 160 / 440, mobility 4.2 / 10 / 95 µs; аллокации 0, static +80 B. Снимок
-  на том же профиле давал avg 4512 / max 8355 µs (FAIL). Native, три прогона, RTX 4050
-  Laptop, Forward+/D3D12, viewport 1152×648, vsync: logic avg 599.1 / 580.1 / 590.3, max
-  955 / 1100 / 1101 µs; максимумы фаз statuses 470 / 503 / 426, resolver 619 / 513 / 524,
-  effects 177 / 192 / 201, mobility 28 / 38 / 40 µs; p99 statuses ≤ 360 / 350 / 350,
-  resolver ≤ 480 / 470 / 450, effects ≤ 160 / 160 / 170, mobility ≤ 20 µs; средний FPS 143.997.
-  Доли §II.1 пересчитаны как native-максимум ×3: 1509 / 1857 / 603 / 120 µs.
+* Профиль 40 + 1 (`StatusPipelineBenchmark`), headless `--fixed-fps 60` в логе
+  `run_checks all` пакета: HEADLESS_NUMBERS. Снимок на том же профиле давал avg 4512 /
+  max 8355 µs (FAIL). Native, три прогона одного лога пакета, RTX 4050 Laptop,
+  Forward+/D3D12, viewport 1152×648, vsync: logic avg 578.6 / 590.4 / 579.5, max
+  949 / 1036 / 964 µs; максимумы фаз statuses 415 / 490 / 487, resolver 536 / 547 / 533,
+  effects 197 / 192 / 177, mobility 41 / 53 / 65 µs; p99 statuses ≤ 350 / 360 / 360,
+  resolver ≤ 460 / 450 / 460, effects ≤ 150 / 160 / 150, mobility ≤ 20 µs; средний FPS 143.997.
+  Доли §II.1 пересчитаны как native-максимум ×3: 1470 / 1641 / 591 / 195 µs.
 * Закрыты пункты follow-ups: доли на 40 + 1, `RoomCombat.reset_room()` с тестом аллокаций,
   маска `StatBlock`; перекраска от пульсов проведена, от реакций — в M2.3b.
 * Ревью координатора (блокер B1): новые тесты и бенчмарк обращались к Sandbox и runtime

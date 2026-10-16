@@ -79,10 +79,10 @@ Godot 4.7 рассматривается **исключительно** как �
 
   Пофазные доли логического тика выведены на профиле статусов 40 целей + 1 источник
   ([контракт §10](docs/contracts.md#10-m23a-профиль-статусов-40--1)): native-максимумы фаз за
-  три прогона — statuses 503 µs, resolver 619 µs, effects 201 µs, mobility 40 µs (p99 ≤ 360 /
-  480 / 170 / 20 µs; RTX 4050 Laptop, Forward+/D3D12). Доля фазы — её native-максимум ×3:
-  statuses ≤ 1509 µs, resolver ≤ 1857 µs, effects ≤ 603 µs, mobility ≤ 120 µs, вместе
-  4089 µs из 7000 µs.
+  три прогона — statuses 490 µs, resolver 547 µs, effects 197 µs, mobility 65 µs (p99 ≤ 360 /
+  460 / 160 / 20 µs; RTX 4050 Laptop, Forward+/D3D12). Доля фазы — её native-максимум ×3:
+  statuses ≤ 1470 µs, resolver ≤ 1641 µs, effects ≤ 591 µs, mobility ≤ 195 µs, вместе
+  3897 µs из 7000 µs.
   Это ориентиры для профилирования, а не пороги CI: жёсткий порог CI остаётся только на весь
   тик (7000 µs). Доли сравниваются только с native real-time прогоном на эталонном железе —
   с p99 и максимумом фазы из строк `STATUS_PIPELINE phases` и `REAL_PIPELINE phases`. Разовый пик в headless-прогоне
