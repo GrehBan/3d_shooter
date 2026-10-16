@@ -332,3 +332,44 @@ func test_status_runtime_step_contacts_and_pulses() -> void:
 	assert_int(statuses.active_count()).is_equal(40)
 	assert_int(statuses.configuration_errors).is_equal(0)
 	assert_int(pipeline.configuration_errors).is_equal(0)
+
+
+func test_reactions_through_the_resolver() -> void:
+	var stats := StatBlock.new(48)
+	var statuses := StatusRuntime.new(stats)
+	var reactions := ReactionRuntime.new(stats, statuses)
+	var handles := PackedInt64Array()
+	for index: int in 41:
+		handles.append(stats.allocate())
+		stats.set_stat(handles[index], StatBlock.Stat.HP, 2_000_000_000)
+		statuses.register_target(handles[index])
+		reactions.register_target(handles[index], 1 if index == 0 else 2)
+	var batch := ShotBatch.new(4, 8, 48, 8)
+	var resolver := ShotResolver.new(stats, batch, 128, statuses, reactions)
+	resolver.on_secondary_hit.connect(_count_hit)
+	# ACID, then ELECTRIC (conducting), FIRE (explosion), ELECTRIC (arcs): every reaction kind.
+	var elements := PackedInt32Array([DamagePayload.Element.ACID, DamagePayload.Element.ELECTRIC,
+			DamagePayload.Element.ACID, DamagePayload.Element.FIRE, DamagePayload.Element.ELECTRIC])
+	for tick: int in range(1, WARMUP + MEASURED + 1):
+		if tick == WARMUP + 1:
+			_hits = 0
+			_begin()
+		statuses.logic_step(tick)
+		var group: int = tick % 5
+		var ticket: int = batch.reserve(handles[0], 8, 1000, elements[(tick / 5) % 5] as DamagePayload.Element)
+		for pellet: int in 8:
+			batch.write_trace(ticket, pellet, handles[1 + group * 8 + pellet])
+			for candidate: int in 8:
+				batch.add_candidate(ticket, pellet, handles[1 + group * 8 + candidate])
+		batch.publish(ticket)
+		resolver.logic_step(tick)
+	var deltas: PackedInt64Array = _deltas()
+	_assert_no_growth(deltas)
+	assert_int(_hits).is_greater(10000)  # secondary hits really ran in the window
+	assert_int(reactions.explosions).is_greater(0)
+	assert_int(reactions.conducting).is_greater(0)
+	assert_int(reactions.arcs).is_greater(0)
+	assert_int(reactions.configuration_errors).is_equal(0)
+	assert_int(resolver.damage_configuration_errors()).is_equal(0)
+	assert_int(resolver.reaction_refusals).is_equal(0)
+	assert_int(resolver.contexts.alive_count()).is_equal(0)
