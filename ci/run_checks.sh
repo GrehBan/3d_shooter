@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Полный прогон проверок проекта: импорт, проверка скриптов, тесты gdUnit4, бенчмарк regress.gd.
+# Полный прогон проверок проекта: импорт, проверка скриптов, тесты gdUnit4, бенчмарки
+# regress.gd, real_pipeline и status_pipeline.
 # Используется в CI и локально. Запуск из корня репозитория:
 #   GODOT=/путь/к/godot ci/run_checks.sh
 # Код выхода ненулевой, если упал любой шаг или в выводе Godot есть ошибка скрипта.
@@ -85,6 +86,36 @@ run_real_pipeline() {
 	echo "real_pipeline_unknown_option: OK"
 }
 
+# M2.3a profile 40 targets + 1 source: whole logic tick <= 7000 us, no allocations, exact
+# deterministic status workload; the injected leak run must be rejected.
+STATUS_ACTIVITY='activity: hits=14400 pulses=4800 statuses_applied=11520 pulse_damage=960000 effect_events=19200 effect_actions=21000 active=40 kills=0'
+run_status_pipeline() {
+	run_step status_pipeline --fixed-fps 60 res://tests/perf/StatusPipelineBenchmark.tscn
+	if ! grep -q "$STATUS_ACTIVITY" "$LOG_DIR/status_pipeline.log"; then
+		echo "::error::status_pipeline: status workload differs from the expected activity (see $LOG_DIR/status_pipeline.log)"
+		exit 1
+	fi
+	local log="$LOG_DIR/status_pipeline_leak.log"
+	echo "::group::status_pipeline_leak"
+	set +e
+	timeout "$STEP_TIMEOUT" "$GODOT" --headless --path "$PROJECT_DIR" --fixed-fps 60 \
+		res://tests/perf/StatusPipelineBenchmark.tscn -- --inject-leak < /dev/null 2>&1 | tee "$log"
+	local code=${PIPESTATUS[0]}
+	set -e
+	echo "::endgroup::"
+	check_script_errors status_pipeline_leak "$log"
+	if [[ $code -ne 1 ]] \
+		|| ! grep -q 'allocations: objects=+1 nodes=+0 resources=+0 orphans=+1' "$log" \
+		|| ! grep -q "$STATUS_ACTIVITY" "$log" \
+		|| ! grep -q 'leak_cleanup: objects=+0 orphans=+0' "$log" \
+		|| ! grep -q '^STATUS_PIPELINE FAIL: object/node/resource/orphan growth$' "$log" \
+		|| [[ $(grep -c '^STATUS_PIPELINE FAIL:' "$log") -ne 1 ]]; then
+		echo "::error::status_pipeline_leak: expected one detected and cleaned orphan, exit 1 (see $log)"
+		exit 1
+	fi
+	echo "status_pipeline_leak: OK (expected rejection and cleanup)"
+}
+
 # gdUnit4 rotates old reports itself, but on this Windows/OneDrive checkout it fails to
 # remove the emptied report directories and floods the log with "Delete ... failed". Start
 # from an empty report directory instead; reports are build output and ignored by git.
@@ -109,15 +140,19 @@ case "${1:-all}" in
 	real_pipeline)
 		run_real_pipeline
 		;;
+	status_pipeline)
+		run_status_pipeline
+		;;
 	all)
 		run_step import --import
 		run_step scripts -s res://tests/check_scripts.gd
 		run_tests
 		run_step regress --fixed-fps 60 -s res://tests/perf/regress.gd
 		run_real_pipeline
+		run_status_pipeline
 		;;
 	*)
-		echo "Использование: GODOT=... ci/run_checks.sh [import|scripts|tests|regress|real_pipeline|all]" >&2
+		echo "Использование: GODOT=... ci/run_checks.sh [import|scripts|tests|regress|real_pipeline|status_pipeline|all]" >&2
 		exit 2
 		;;
 esac
