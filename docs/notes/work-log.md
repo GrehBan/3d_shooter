@@ -34,7 +34,9 @@
   кулдауну 720 → 840, отложенные тики 120 → 0, счётчики `[960, 1920, 0, 720]` →
   `[960, 1920, 0, 360]`; golden `EffectRunner` 3633298175 не меняется.
 * Профиль 40 + 1 (`StatusPipelineBenchmark`), headless `--fixed-fps 60` в логе
-  `run_checks all` пакета: HEADLESS_NUMBERS. Снимок на том же профиле давал avg 4512 /
+  `run_checks all` пакета: logic avg 468.9 / max 1635 µs; фазы avg / p99 / max — statuses
+  121.7 / 340 / 754, resolver 267.1 / 440 / 797, effects 72.1 / 180 / 312, mobility
+  4.1 / 10 / 16 µs; аллокации 0, static +80 B. Снимок на том же профиле давал avg 4512 /
   max 8355 µs (FAIL). Native, три прогона одного лога пакета, RTX 4050 Laptop,
   Forward+/D3D12, viewport 1152×648, vsync: logic avg 578.6 / 590.4 / 579.5, max
   949 / 1036 / 964 µs; максимумы фаз statuses 415 / 490 / 487, resolver 536 / 547 / 533,
