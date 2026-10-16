@@ -3,7 +3,6 @@
 Состояние реализации на 2026-10-15: M1 закрыта, в M2 слиты физический `DamagePipeline`
 (M2.1) и `EffectRunner` со счётчиками (M2.2).
 Вехи — в [roadmap](roadmap.md), история слияний — в [журнале интеграции PR](docs/notes/pr-integration-log.md).
-Сюжет и его связь с механиками — в [docs/story.md](docs/story.md) (спойлеры ко всей истории).
 
 **Проект:** Rogue Calibre
 **Движок:** Godot 4.7
