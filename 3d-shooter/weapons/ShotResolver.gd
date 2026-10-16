@@ -1,6 +1,6 @@
 class_name ShotResolver
 extends RefCounted
-## Sequential physical damage and local PostHit signals; caller owns attack trees.
+## Sequential pellet damage and local PostHit signals; caller owns attack trees.
 
 signal on_fire(source: int, epoch: int, sequence: int, root: int)
 signal on_hit(source: int, target: int, epoch: int, sequence: int, trace: int, child: int, hp_damage: int)
@@ -30,10 +30,11 @@ var _owned_head: PackedInt32Array = PackedInt32Array()
 var _owned_next: PackedInt32Array = PackedInt32Array()
 
 
-func _init(stats: StatBlock, batch: ShotBatch, capacity: int) -> void:
+## statuses, when given, enables elemental pellets; it must use the same StatBlock.
+func _init(stats: StatBlock, batch: ShotBatch, capacity: int, statuses: StatusRuntime = null) -> void:
 	_stats = stats
 	_batch = batch
-	damage_pipeline = DamagePipeline.new(stats)
+	damage_pipeline = DamagePipeline.new(stats, statuses)
 	_payloads = DamagePayloadBuffer.new(1)
 	contexts = AttackContextPool.new(capacity)
 	_root.resize(capacity)
@@ -85,12 +86,13 @@ func _resolve(shot: int) -> void:
 			continue
 		if contexts.try_register_hit(child, target):
 			var before: int = _stats.get_stat(target, StatBlock.Stat.HP)
-			var payload: int = _payloads.push(source, target, _batch.damage_at(shot), DamagePayload.Element.NONE,
+			var payload: int = _payloads.push(source, target, _batch.damage_at(shot), _batch.element_at(shot),
 					0, 0, child)
 			if payload == DamagePayloadBuffer.INVALID_SLOT:
 				close_context(child)
 				continue
-			var damage: int = damage_pipeline.resolve_front(_payloads)
+			var damage: int = damage_pipeline.resolve_front(_payloads, source, _epoch[slot],
+					_sequence[slot], trace)
 			if damage == DamagePipeline.INVALID_RESULT:
 				_payloads.pop_front()
 				close_context(child)

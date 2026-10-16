@@ -1,6 +1,7 @@
 extends GdUnitTestSuite
 ## Hot-path allocation checks for the classes earlier covered only by integration runs:
-## ShotBatch, WeaponState, ShotResolver, LandingEventQueue and ShotVisualPool.
+## ShotBatch, WeaponState, ShotResolver, LandingEventQueue, ShotVisualPool and the M2.3
+## StatusRuntime with its elemental DamagePipeline contacts and burn pulses.
 ## Each case warms up, then measures MEASURED iterations without gdUnit calls inside the
 ## window. Deltas are captured before the first assert_*:
 ## * OBJECT_COUNT and OBJECT_NODE_COUNT catch retained objects and nodes;
@@ -289,3 +290,45 @@ func test_shot_visual_pool_through_real_shot_signal() -> void:
 	assert_int(pool.reused_count - reused_before).is_equal(MEASURED / 30 * 17)
 	assert_int(pool.active_count(ShotVisualPool.Kind.MARK)).is_greater(0)  # rays hit the wall
 	assert_int(batch.configuration_errors).is_equal(0)
+
+
+func _count_pulse(_source: int, _target: int, _credit: int, _generation: int, _ordinal: int,
+		_damage: int, _epoch: int, _sequence: int, _trace: int, _tags: int) -> void:
+	_hits += 1
+
+
+func test_status_runtime_step_contacts_and_pulses() -> void:
+	var stats := StatBlock.new(48)
+	var statuses := StatusRuntime.new(stats)
+	var pipeline := DamagePipeline.new(stats, statuses)
+	var payloads := DamagePayloadBuffer.new(1)
+	var handles := PackedInt64Array()
+	for index: int in 41:
+		handles.append(stats.allocate())
+		stats.set_stat(handles[index], StatBlock.Stat.HP, 2_000_000_000)
+		stats.set_stat(handles[index], StatBlock.Stat.ARMOR, 30_000)
+		statuses.register_target(handles[index])
+	statuses.on_pulse_hit.connect(_count_pulse)
+	var elements := PackedInt32Array([DamagePayload.Element.FIRE, DamagePayload.Element.ICE,
+			DamagePayload.Element.ACID, DamagePayload.Element.ELECTRIC, DamagePayload.Element.NONE])
+	var pulses_before: int = 0
+	for tick: int in range(1, WARMUP + MEASURED + 1):
+		if tick == WARMUP + 1:
+			_hits = 0
+			pulses_before = statuses.processed_pulses
+			_begin()
+		statuses.logic_step(tick)
+		# One 8-pellet shot per tick, rotating over five groups of eight targets and the elements.
+		for pellet: int in 8:
+			var target: int = handles[1 + (tick % 5) * 8 + pellet]
+			payloads.push(handles[0], target, 1000, elements[(tick / 5) % 5] as DamagePayload.Element,
+					0, 0, -1)
+			pipeline.resolve_front(payloads, handles[0], 1, tick, pellet)
+			payloads.pop_front()
+	var deltas: PackedInt64Array = _deltas()
+	_assert_no_growth(deltas)
+	assert_int(statuses.processed_pulses - pulses_before).is_equal(_hits)
+	assert_int(_hits).is_greater(1000)  # burns are refreshed and pulse throughout the window
+	assert_int(statuses.active_count()).is_equal(40)
+	assert_int(statuses.configuration_errors).is_equal(0)
+	assert_int(pipeline.configuration_errors).is_equal(0)

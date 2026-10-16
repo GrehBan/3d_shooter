@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="RoomConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://combat/RoomConfig.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+host_capacity = 16
+shot_capacity = 4
+trace_cap = 8
+shot_packed_bytes = 131072
+context_capacity = 64
+deferred_reserve = 16
+landing_capacity = 256
+effect_entries = 64
+effect_max_subscriptions = 8
+effect_packed_bytes = 32768
+visual_nodes = 128
+visual_packed_bytes = 16384
+visual_texture_bytes = 32768

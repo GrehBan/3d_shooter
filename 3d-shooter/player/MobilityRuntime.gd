@@ -5,6 +5,7 @@ extends RefCounted
 
 const ENERGY_REGEN: int = 50  # raw per 30 Hz logic tick, 1500 raw/second
 const CONFIGURATION_ERROR: String = "MobilityRuntime: the room StatBlock is required"
+const STATUS_ERROR: String = "MobilityRuntime: StatusRuntime must use the room StatBlock"
 
 var stats: StatBlock
 var abilities: MovementAbilities
@@ -13,14 +14,22 @@ var logic_steps: int = 0
 var resolved_landings: int = 0
 var stale_landings: int = 0
 var _last_tick: int = -1
+var _statuses: StatusRuntime
 
 
 ## `room_stats` belongs to the room (`RoomCombat`); this runtime only keeps a reference.
 ## A null StatBlock is a configuration error: the runtime stays uninitialized and inert.
-func _init(room_stats: StatBlock, landing_capacity: int = LandingEventQueue.DEFAULT_CAPACITY) -> void:
+## `statuses` (the room StatusRuntime) makes landing damage use corrosion-reduced armor;
+## one built on another StatBlock is a configuration error as well.
+func _init(room_stats: StatBlock, landing_capacity: int = LandingEventQueue.DEFAULT_CAPACITY,
+		statuses: StatusRuntime = null) -> void:
 	if room_stats == null:
 		push_error(CONFIGURATION_ERROR)
 		return
+	if statuses != null and not statuses.uses_stats(room_stats):
+		push_error(STATUS_ERROR)
+		return
+	_statuses = statuses
 	stats = room_stats
 	abilities = MovementAbilities.new(room_stats.capacity(), ENERGY_REGEN)
 	landings = LandingEventQueue.new(landing_capacity)
@@ -28,6 +37,11 @@ func _init(room_stats: StatBlock, landing_capacity: int = LandingEventQueue.DEFA
 
 func is_initialized() -> bool:
 	return stats != null
+
+
+## Read-only: true if landing damage uses this status store's effective armor.
+func uses_statuses(statuses: StatusRuntime) -> bool:
+	return statuses != null and _statuses == statuses
 
 
 ## Cold initialization only. Validate the complete M1 preset before ANY grant.
@@ -72,7 +86,11 @@ func logic_step(tick: int) -> void:
 			continue
 		resolved_landings += 1
 		if landings.get_cancel_flags(i) == 0:
-			DamageApply.apply(stats, entity, fall_damage(landings.get_height_mm(i)))
+			var damage: int = fall_damage(landings.get_height_mm(i))
+			if _statuses == null:
+				DamageApply.apply(stats, entity, damage)
+			else:
+				DamageApply.apply_with_armor(stats, entity, damage, _statuses.effective_armor(entity))
 	landings.clear()
 	abilities.regen_energy(stats)
 	logic_steps += 1
