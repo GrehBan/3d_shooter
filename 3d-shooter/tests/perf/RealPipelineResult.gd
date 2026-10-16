@@ -15,7 +15,7 @@ const MEMORY_LIMIT: int = 1024 * 1024
 const LOGIC_LIMIT_USEC: int = 7000
 const EXPECTED: PackedInt64Array = [120, 960, 960, 120, 5760000, 5760000,
 	30, 15, 15, 15, 15, 1800, 1800, 15, 120, 960, 960, 2040, 2040,
-	960, 960, 3840, 2160, 960, 720, 120, 960, 1920, 0, 720]
+	960, 960, 3840, 2040, 960, 840, 0, 960, 1920, 0, 360]
 
 var counters: PackedInt64Array = PackedInt64Array()
 var warmup_ticks: int = 0
@@ -29,7 +29,7 @@ var logic_samples: int = 0
 var logic_usec_sum: int = 0
 var logic_usec_max: int = 0
 var phase_steps: int = 0
-const PHASE_COUNT: int = 3  # resolver, effects, mobility; mirrors Sandbox.PHASE_COUNT
+const PHASE_COUNT: int = 4  # statuses, resolver, effects, mobility; mirrors Sandbox.PHASE_COUNT
 var phase_usec_sum: PackedInt64Array = PackedInt64Array()
 var phase_usec_max: PackedInt64Array = PackedInt64Array()
 var phase_usec_p99: PackedInt64Array = PackedInt64Array()

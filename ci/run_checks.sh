@@ -63,7 +63,7 @@ run_real_pipeline() {
 	if [[ $code -ne 1 ]] \
 		|| ! grep -q 'allocations: objects=+1 nodes=+0 resources=+0 orphans=+1' "$log" \
 		|| ! grep -q 'actions: shots=120 traces=960 hits=960 resolved=120 damage=5760000 signal_damage=5760000' "$log" \
-		|| ! grep -q 'effects: accepted=960 processed=960 inspected=3840 actions=2160 condition=960 cooldown=720 deferred=120 counters=960,1920,0,720 pending=0' "$log" \
+		|| ! grep -q 'effects: accepted=960 processed=960 inspected=3840 actions=2040 condition=960 cooldown=840 deferred=0 counters=960,1920,0,360 pending=0' "$log" \
 		|| ! grep -q 'leak_cleanup: objects=+0 orphans=+0' "$log" \
 		|| ! grep -q '^REAL_PIPELINE FAIL: object/node/resource/orphan growth$' "$log" \
 		|| [[ $(grep -c '^REAL_PIPELINE FAIL:' "$log") -ne 1 ]]; then

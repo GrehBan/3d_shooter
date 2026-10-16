@@ -275,7 +275,8 @@ func _finish() -> void:
 	for index: int in _baseline.size():
 		result.counters[index] = _counter(index) - _baseline[index]
 	result.configuration_errors = _batch.configuration_errors + _visuals.configuration_errors + _frame_overflows \
-			+ _resolver.damage_configuration_errors() + _effects.configuration_errors
+			+ _resolver.damage_configuration_errors() + _effects.configuration_errors \
+			+ (_sandbox.get(&"combat") as RoomCombat).statuses.configuration_errors
 	result.dropped = _mobility.landings.dropped_count() + _visuals.dropped_count + _effects.dropped_events
 	result.refusals = _resolver.contexts.capacity_refusals + _resolver.contexts.hit_set_overflows \
 			+ _resolver.contexts.budget_refusals + _resolver.contexts.depth_refusals \
@@ -308,12 +309,13 @@ func _finish() -> void:
 	print("REAL_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=7000 us scope=M2.2_counter_fixture" % [
 		result.logic_samples, float(result.logic_usec_sum) / maxf(1.0, float(result.logic_samples)), result.logic_usec_max])
 	var steps: float = maxf(1.0, float(result.phase_steps))
-	print("REAL_PIPELINE phases: steps=%d resolver avg=%.1f p99<=%d max=%d effects avg=%.1f p99<=%d max=%d mobility avg=%.1f p99<=%d max=%d us" % [
+	print("REAL_PIPELINE phases: steps=%d statuses avg=%.1f p99<=%d max=%d resolver avg=%.1f p99<=%d max=%d effects avg=%.1f p99<=%d max=%d mobility avg=%.1f p99<=%d max=%d us" % [
 		result.phase_steps,
 		float(result.phase_usec_sum[0]) / steps, result.phase_usec_p99[0], result.phase_usec_max[0],
 		float(result.phase_usec_sum[1]) / steps, result.phase_usec_p99[1], result.phase_usec_max[1],
-		float(result.phase_usec_sum[2]) / steps, result.phase_usec_p99[2], result.phase_usec_max[2]])
-	print("REAL_PIPELINE timer: pairs=%d pair_ns=%.1f (four reads per logic tick)" % [
+		float(result.phase_usec_sum[2]) / steps, result.phase_usec_p99[2], result.phase_usec_max[2],
+		float(result.phase_usec_sum[3]) / steps, result.phase_usec_p99[3], result.phase_usec_max[3]])
+	print("REAL_PIPELINE timer: pairs=%d pair_ns=%.1f (five reads per logic tick)" % [
 		TIMER_PAIRS, _timer_pair_ns()])
 	print("REAL_PIPELINE effects: accepted=%d processed=%d inspected=%d actions=%d condition=%d cooldown=%d deferred=%d counters=%d,%d,%d,%d pending=%d" % [
 		result.counters[19], result.counters[20], result.counters[21], result.counters[22],

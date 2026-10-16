@@ -195,7 +195,7 @@ func test_phase_metrics_count_logic_ticks_and_reset_with_the_room() -> void:
 		_scene.call(&"_on_logic_tick", first + tick)
 	var steps: int = _scene.call(&"phase_steps")
 	var consistent: bool = true
-	for phase: int in 3:
+	for phase: int in 4:  # statuses, resolver, effects, mobility
 		var last: int = _scene.call(&"phase_last_usec", phase)
 		var maximum: int = _scene.call(&"phase_max_usec", phase)
 		var total: int = _scene.call(&"phase_sum_usec", phase)
