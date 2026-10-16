@@ -32,7 +32,7 @@ const MAX_EFFECT_QUOTA: int = 512
 ## More bodies in the area is normal (a crowd): extras are dropped and counted.
 @export var reaction_candidates: int = 8
 ## Neighbour-cache refreshes per physics tick (round-robin over tracked targets).
-@export var candidate_queries_per_tick: int = 3
+@export var candidate_queries_per_tick: int = 2
 
 
 ## Empty string if every field is in range, otherwise the error naming the first bad field.

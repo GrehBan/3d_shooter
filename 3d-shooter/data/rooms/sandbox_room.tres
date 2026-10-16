@@ -18,4 +18,4 @@ visual_nodes = 128
 visual_packed_bytes = 16384
 visual_texture_bytes = 32768
 reaction_candidates = 8
-candidate_queries_per_tick = 3
+candidate_queries_per_tick = 2

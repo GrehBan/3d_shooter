@@ -7,9 +7,11 @@ extends Node
 ## one 8-pellet record per logic tick into ShotBatch (15x the shotgun's cadence): one grid
 ## row per record, each pellet on a different target, the element changing every five
 ## records (FIRE, ICE, ACID, ELECTRIC, NONE; the last row gets ELECTRIC instead of ACID, so it
-## never corrodes and arcs). For FIRE and ELECTRIC records the driver runs
-## the real ReactionCandidates query for each of the 8 distinct targets (the worst case per
-## shot frame) and times it. Raycasts are not part of this profile: real_pipeline measures them.
+## never corrodes and arcs). The weapon's ReactionCandidates neighbour cache tracks all forty
+## targets; the driver runs its refresh step (candidate_queries_per_tick queries) in every
+## physics tick and times it, and FIRE and ELECTRIC records copy each target's cache into the
+## record. With --saturated the grid shrinks to 1 m so every query fills K and overflows.
+## Raycasts are not part of this profile: real_pipeline measures them.
 
 const SANDBOX: PackedScene = preload("res://world/sandbox/Sandbox.tscn")
 const ROOM: RoomConfig = preload("res://tests/fixtures/rooms/status_load_40.tres")
@@ -29,16 +31,16 @@ const PHASE_NAMES: PackedStringArray = ["statuses", "resolver", "effects", "mobi
 const GRID_COLUMNS: int = 8
 const GRID_DX: float = 3.0
 const GRID_DZ: float = 2.0
-## --saturated: a 1 m grid, so every one of the 8 queries of a record finds more than K
-## hitboxes (overflow expected) and returns the full K + 2 results: the costliest query.
+## --saturated: a 1 m grid, so every query finds more than K hitboxes (overflow expected)
+## and returns the full K + 2 results: the costliest query.
 const SATURATED_DX: float = 1.0
 const SATURATED_DZ: float = 1.0
-## Candidate cost per shot frame: histogram of 10 us buckets over 0..10 ms (last bucket open).
+## Neighbour-cache refresh cost per physics tick: 10 us buckets over 0..10 ms (last open).
 const CANDIDATE_BUCKET_USEC: int = 10
 const CANDIDATE_BUCKETS: int = 1000
 ## Deterministic activity of the measured window, in _activity() order (contracts §10).
 const EXPECTED_ACTIVITY: PackedInt64Array = [14400, 4800, 10944, 718080, 19200, 21000,
-		5760, 1152, 2304, 2304, 20448, 9468000, 6336]
+		5760, 1152, 2304, 2304, 20448, 9468000, 7200]
 
 var _sandbox: Sandbox
 var _combat: RoomCombat
@@ -54,6 +56,9 @@ var _candidates: ReactionCandidates
 var _candidate_histogram: PackedInt32Array = PackedInt32Array()
 var _candidate_frames: int = 0
 var _candidate_max: int = 0
+var _copy_max: int = 0
+var _queries_base: int = 0
+var _overflows_base: int = 0
 var _driver: Driver
 var _published: int = 0
 var _inject_leak: bool = false
@@ -134,6 +139,9 @@ func _ready() -> void:
 		return
 	_player = _sandbox.player_handle
 	_candidates = _sandbox.weapon.reaction_candidates
+	if _candidates != null:
+		_candidates.set_physics_process(false)  # the driver runs and times its refresh step
+		_candidates.active = true  # the driver's records are elemental; the scene's shotgun is not
 	_candidate_histogram.resize(CANDIDATE_BUCKETS)
 	for body: Node in _sandbox.get_node(^"Targets").get_children():
 		_bodies.append(body as Node3D)
@@ -166,6 +174,14 @@ func _ready() -> void:
 ## Driver callback, once per physics tick before GameLoop: one record every second tick
 ## and, with --inject-leak, one deliberate orphan right after the baseline.
 func on_driver_tick(ticks: int) -> void:
+	if not _done:
+		var start: int = Time.get_ticks_usec()
+		_candidates.refresh_step()
+		if _measuring:
+			var usec: int = Time.get_ticks_usec() - start
+			_candidate_frames += 1
+			_candidate_max = maxi(_candidate_max, usec)
+			_candidate_histogram[clampi(usec / CANDIDATE_BUCKET_USEC, 0, CANDIDATE_BUCKETS - 1)] += 1
 	if ticks % 2 == 0:
 		_publish_shot()
 	if _inject_leak and ticks == WARMUP_TICKS + 1:
@@ -204,17 +220,14 @@ func _publish_shot() -> void:
 		var target: int = group * GROUP + pellet
 		_batch.write_trace(ticket, pellet, _targets[target])
 		if gather:
-			_candidates.collect(ticket, pellet, _bodies[target], _targets[target])
+			_candidates.copy_to(ticket, pellet, _targets[target])
 	if gather and _measuring:
-		var usec: int = Time.get_ticks_usec() - start
-		_candidate_frames += 1
-		_candidate_max = maxi(_candidate_max, usec)
-		_candidate_histogram[clampi(usec / CANDIDATE_BUCKET_USEC, 0, CANDIDATE_BUCKETS - 1)] += 1
+		_copy_max = maxi(_copy_max, Time.get_ticks_usec() - start)
 	_batch.publish(ticket)
 	_published += 1
 
 
-## Upper bound of the bucket holding the 99th percentile of candidate cost per shot frame.
+## Upper bound of the bucket holding the 99th percentile of the refresh cost per physics tick.
 func _candidate_p99() -> int:
 	var rank: int = (_candidate_frames * 990 + 999) / 1000
 	var seen: int = 0
@@ -272,6 +285,8 @@ func _capture_baseline() -> void:
 	_monitors[3] = _monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
 	_monitors[4] = _monitor(Performance.MEMORY_STATIC)
 	_baseline = _activity()
+	_queries_base = _candidates.queries
+	_overflows_base = _candidates.overflows
 	_last_logic_tick = GameLoop.get_logic_tick()
 	_sandbox.reset_phase_metrics()
 	_measuring = true
@@ -311,8 +326,12 @@ func _finish() -> void:
 		failures.append("status or reaction workload inactive")
 	if not _saturated and activity != EXPECTED_ACTIVITY:
 		failures.append("activity differs from the deterministic expectation")
-	if _saturated and _candidates.overflows != _candidate_frames * GROUP:
+	var window_queries: int = _candidates.queries - _queries_base
+	var window_overflows: int = _candidates.overflows - _overflows_base
+	if _saturated and (window_queries <= 0 or window_overflows != window_queries):
 		failures.append("saturated layout: not every measured query filled K")
+	if _candidates.ignored_results != 0 or _candidates.configuration_errors != 0:
+		failures.append("candidate adapter ignored results or refused calls")
 	if not _saturated and _candidates.overflows != 0:
 		failures.append("candidate overflow in a layout that fits K")
 	if _combat.statuses.active_count() != TARGETS:
@@ -329,8 +348,8 @@ func _finish() -> void:
 	print("STATUS_PIPELINE reactions: reactions=%d arcs=%d conducting=%d explosions=%d secondary_hits=%d secondary_damage=%d queries=%d overflows=%d" % [
 		activity[6], activity[7], activity[8], activity[9], activity[10], activity[11], activity[12],
 		_candidates.overflows])
-	print("STATUS_PIPELINE candidates: shot_frames=%d p99<=%d max=%d us (8 distinct targets per frame)" % [
-		_candidate_frames, _candidate_p99(), _candidate_max])
+	print("STATUS_PIPELINE candidates: physics_ticks=%d refresh p99<=%d max=%d us queries=%d overflows=%d shot_copy_max=%d us saturated=%s" % [
+		_candidate_frames, _candidate_p99(), _candidate_max, window_queries, window_overflows, _copy_max, _saturated])
 	print("STATUS_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=%d us" % [
 		_logic_samples, float(_logic_sum) / maxf(1.0, float(_logic_samples)), _logic_max, LOGIC_LIMIT_USEC])
 	var line: String = "STATUS_PIPELINE phases: steps=%d" % steps

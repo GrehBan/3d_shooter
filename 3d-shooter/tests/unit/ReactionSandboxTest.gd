@@ -113,7 +113,7 @@ func test_electric_shot_reaches_neighbours_through_rays_cache_and_logic() -> voi
 	var candidates: ReactionCandidates = _scene.weapon.reaction_candidates
 	assert_bool(candidates.active).is_true()
 	assert_int(candidates.tracked_count()).is_equal(3)
-	for frame: int in 3:  # three refreshes per tick: every target has its cache
+	for frame: int in 3:  # two refreshes per tick: after two ticks every target has its cache
 		await get_tree().physics_frame
 	var center: int = _scene.target_handles[1]
 	assert_int(candidates.cached_count(center)).is_equal(2)
