@@ -111,7 +111,8 @@ func test_candidate_released_or_reused_between_physics_and_logic_is_skipped() ->
 	_resolver.logic_step(_tick)
 	assert_array(_secondary).is_empty()  # neither the replacement nor a free slot is hit
 	assert_int(_stats.get_stat(reused, StatBlock.Stat.HP)).is_equal(1_000_000)
-	assert_int(_reactions.arcs).is_equal(1)
+	assert_int(_reactions.arcs).is_equal(0)  # no eligible candidate: not admitted
+	assert_int(_reactions.empty_reactions).is_equal(1)
 
 
 func test_room_reset_is_refused_during_a_reaction_and_resets_nothing() -> void:
@@ -162,14 +163,32 @@ func test_no_reaction_without_hp_damage_team_or_reactive_element() -> void:
 	assert_int(_reactions.configuration_errors).is_equal(0)
 
 
-func test_explosion_consumes_corrosion_even_without_targets() -> void:
+func test_explosion_without_eligible_targets_keeps_corrosion() -> void:
+	_reactions.register_target(3, 1)  # an ally of the source
 	_shoot(DamagePayload.Element.ACID, 1000, 1, [])
 	assert_int(_statuses.acid_stacks(1)).is_equal(1)
 	_shoot(DamagePayload.Element.FIRE, 10000, 1, [])
+	_shoot(DamagePayload.Element.FIRE, 10000, 1, [3, 0])  # only the ally and the source
+	assert_int(_reactions.explosions).is_equal(0)
+	assert_int(_reactions.empty_reactions).is_equal(2)
+	assert_int(_reactions.admitted_reactions).is_equal(0)
+	assert_int(_statuses.acid_stacks(1)).is_equal(1)
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
+	_shoot(DamagePayload.Element.FIRE, 10000, 1, [2])
 	assert_int(_reactions.explosions).is_equal(1)
 	assert_int(_statuses.acid_stacks(1)).is_equal(0)
+	assert_array(_secondary).is_equal(PackedInt64Array([2, 7500]))
 	_shoot(DamagePayload.Element.FIRE, 10000, 1, [2])  # no corrosion left: no second explosion
 	assert_int(_reactions.explosions).is_equal(1)
+	assert_int(_reactions.configuration_errors).is_equal(0)
+
+
+func test_arcs_without_eligible_targets_are_not_admitted() -> void:
+	_stats.set_stat(2, StatBlock.Stat.HP, 0)
+	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [2])
+	assert_int(_reactions.arcs).is_equal(0)
+	assert_int(_reactions.empty_reactions).is_equal(1)
+	assert_int(_resolver.reaction_refusals).is_equal(0)
 	assert_array(_secondary).is_empty()
 
 
@@ -196,11 +215,12 @@ func test_refused_reaction_child_keeps_corrosion() -> void:
 func test_lethal_primary_still_reacts_after_its_callbacks() -> void:
 	_stats.set_stat(1, StatBlock.Stat.HP, 500)
 	_kill_on_hit = 2  # the primary's OnHit listener kills a selected target first
-	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [2, 3])
+	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [2, 3, 4])
 	assert_int(_stats.get_stat(1, StatBlock.Stat.HP)).is_equal(0)
-	# Selection runs after the primary callbacks, so the dead target is simply not chosen.
+	# Selection runs at admission, before the primary callbacks: the target they kill is a
+	# stale skip and is not replaced by 4.
 	assert_array(_secondary).is_equal(PackedInt64Array([3, 5000]))
-	assert_int(_reactions.stale_skips).is_equal(0)
+	assert_int(_reactions.stale_skips).is_equal(1)
 	assert_int(_reactions.arcs).is_equal(1)
 
 
@@ -277,7 +297,7 @@ func test_invalid_configuration_and_calls_are_refused() -> void:
 		assert_bool(ReactionRuntime.new(_stats, _statuses, rules).is_initialized()).is_false()
 	).is_push_error(ReactionRuntime.CONFIGURATION_ERROR)
 	await assert_error(func() -> void:
-		assert_bool(_reactions.admit(1000)).is_false()  # nothing planned
+		assert_bool(_reactions.admit(1000, ShotBatch.new(1, 1, 16, 8), 0, 0)).is_false()  # nothing planned
 	).is_push_error(ReactionRuntime.CONFIGURATION_ERROR)
 	_reactions.reset_diagnostics()
 	await assert_error(func() -> void:

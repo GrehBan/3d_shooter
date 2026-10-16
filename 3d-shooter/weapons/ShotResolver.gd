@@ -127,14 +127,14 @@ func _resolve(shot: int) -> void:
 			var killed: bool = before > 0 and _stats.get_stat(target, StatBlock.Stat.HP) == 0
 			var reaction_child: int = AttackContextPool.INVALID_HANDLE
 			if planned and damage > 0:
-				reaction_child = _open_reaction(child, damage)
+				reaction_child = _open_reaction(child, damage, shot, trace)
 			registered_hits += 1
 			on_hit.emit(source, target, _epoch[slot], _sequence[slot], trace, child, damage)
 			if killed:
 				kills += 1
 				on_kill.emit(source, target, _epoch[slot], _sequence[slot], trace)
 			if reaction_child != AttackContextPool.INVALID_HANDLE:
-				_reactions.execute(_batch, shot, trace, contexts, reaction_child, _epoch[slot], _sequence[slot])
+				_reactions.execute(trace, contexts, reaction_child, _epoch[slot], _sequence[slot])
 				close_context(reaction_child)
 			_finish_reaction()
 			_payloads.pop_front()
@@ -143,9 +143,10 @@ func _resolve(shot: int) -> void:
 
 
 ## Opens the reaction child before the primary callbacks and admits the planned reaction
-## on it (an explosion consumes corrosion here). A full context pool or a hit budget
-## smaller than the reaction's targets is a configuration error: no acid is consumed.
-func _open_reaction(child: int, damage: int) -> int:
+## on it (target selection; an admitted explosion consumes corrosion here). A full context
+## pool or a hit budget smaller than the reaction's targets is a configuration error, and a
+## reaction without eligible candidates is not admitted: no acid is consumed either way.
+func _open_reaction(child: int, damage: int, shot: int, trace: int) -> int:
 	if contexts.budget_left(child) < _reactions.planned_limit():
 		reaction_refusals += 1
 		return AttackContextPool.INVALID_HANDLE
@@ -153,7 +154,7 @@ func _open_reaction(child: int, damage: int) -> int:
 	if reaction_child == AttackContextPool.INVALID_HANDLE:
 		reaction_refusals += 1
 		return reaction_child
-	if not _reactions.admit(damage):
+	if not _reactions.admit(damage, _batch, shot, trace):
 		close_context(reaction_child)
 		return AttackContextPool.INVALID_HANDLE
 	return reaction_child
@@ -171,6 +172,12 @@ func _on_reaction_hit(source: int, target: int, epoch: int, sequence: int, trace
 
 func _on_reaction_kill(source: int, target: int, epoch: int, sequence: int, trace: int) -> void:
 	on_secondary_kill.emit(source, target, epoch, sequence, trace)
+
+
+## The resolver's one-record payload scratch, for fault-injection tests of its overflow
+## path. Gameplay never writes it.
+func scratch_payloads() -> DamagePayloadBuffer:
+	return _payloads
 
 
 func damage_configuration_errors() -> int:

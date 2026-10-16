@@ -1,20 +1,27 @@
 class_name ReactionCandidates
 extends Node3D
-## Physics adapter of M2.3b reactions: a round-robin neighbour cache (contracts §2,
-## ReactionRuntime). Each physics tick it re-queries up to `queries_per_tick` tracked targets
-## with one preallocated ShapeCast3D sphere and keeps up to K neighbouring hitbox handles per
-## target. A shot only copies the cache of each hit target into its ShotBatch trace before
-## publish, so the shot frame runs no queries. No result arrays at the GDScript level (the
-## ShapeCast3D keeps its results inside the engine). Which bodies overlap, and how old a
-## cache entry is (up to ceil(tracked / queries_per_tick) physics ticks), is physics and stays
-## outside the deterministic contour: the logic validates every handle by full handle and HP
-## and sorts what it receives. A newly tracked target is refreshed first; an untracked one
-## leaves the rotation and its cache is dropped.
+## Physics adapter of M2.3b reactions: a least-recently-refreshed neighbour cache (contracts
+## §2, ReactionRuntime). Each physics tick it re-queries the `queries_per_tick` tracked
+## targets whose cache is oldest (never refreshed first, ties to the lower index) with one
+## preallocated ShapeCast3D sphere and keeps up to K neighbouring hitbox handles per target.
+## A shot only copies the cache of each hit target into its ShotBatch trace before publish,
+## so the shot frame runs no queries. No result arrays at the GDScript level (the ShapeCast3D
+## keeps its results inside the engine).
+##
+## Cache age bound: a target is refreshed at most ceil((N0 + S) / Q) physics ticks after its
+## previous refresh (or its track), where N0 is the number of tracked targets at that moment
+## and S the number of targets tracked since; with no spawns that is ceil(N / Q). Which
+## bodies overlap and how old a cache is are physics and stay outside the deterministic
+## contour: the logic validates every handle by full handle and HP and sorts what it gets.
+##
+## Physics priority 0: after the Sandbox death marks (-1), before HitscanWeapon (10), so a
+## shot copies caches refreshed in the same tick.
 
 ## Hitboxes (layer 7, "hitbox") are the only bodies that can be reaction candidates.
-## Invariant: one hitbox per handle; a detached or dead hitbox leaves layer 7 or is counted
-## in ignored_results.
+## Invariant: one hitbox per handle. untrack() takes a dead target's hitbox off layer 7 and
+## track() puts it back, so a dead target is never a candidate after its death is applied.
 const CANDIDATE_MASK: int = 64
+const HITBOX_LAYER: int = 7
 const OVERFLOW_WARNING: String = "ReactionCandidates: more hitboxes in the area than the candidate capacity; extra candidates dropped"
 const CONFIGURATION_ERROR: String = "ReactionCandidates: invalid configuration, tracking or ticket"
 
@@ -31,16 +38,16 @@ var _cast: ShapeCast3D
 var _batch: ShotBatch
 var _capacity: int = 0
 var _queries_per_tick: int = 0
-var _bodies: Array[Node3D] = []
+var _bodies: Array[CollisionObject3D] = []
 var _handles: PackedInt64Array = PackedInt64Array()
 var _tracked: int = 0
 var _index_by_slot: PackedInt32Array = PackedInt32Array()
 var _cache: PackedInt64Array = PackedInt64Array()
 var _cache_count: PackedInt32Array = PackedInt32Array()
-var _cursor: int = 0
-# Targets tracked since their last refresh, refreshed before the rotation (full handles).
-var _pending: PackedInt64Array = PackedInt64Array()
-var _pending_count: int = 0
+# Refresh step of the last refresh (or of the track); 1 in _fresh until the first refresh.
+var _since: PackedInt64Array = PackedInt64Array()
+var _fresh: PackedByteArray = PackedByteArray()
+var _step: int = 0
 var _bound: bool = false
 var _warned: bool = false
 var _reported: bool = false
@@ -64,7 +71,8 @@ func initialize(batch: ShotBatch, radius_mm: int, slots: int, queries_per_tick: 
 	_index_by_slot.fill(-1)
 	_cache.resize(slots * _capacity)
 	_cache_count.resize(slots)
-	_pending.resize(slots)
+	_since.resize(slots)
+	_fresh.resize(slots)
 	_cast = ShapeCast3D.new()
 	var sphere := SphereShape3D.new()
 	sphere.radius = float(radius_mm) / 1000.0
@@ -76,6 +84,7 @@ func initialize(batch: ShotBatch, radius_mm: int, slots: int, queries_per_tick: 
 	if excluded_body != null:
 		_cast.add_exception(excluded_body)
 	add_child(_cast)
+	process_physics_priority = 0
 	_bound = true
 	return true
 
@@ -88,10 +97,10 @@ func tracked_count() -> int:
 	return _tracked
 
 
-## Spawn or respawn: follows `body` as the hitbox of the full handle `target`. A new handle in
-## a tracked slot replaces the old one and empties its cache. The target is refreshed before
-## the rotation continues, so it is not left without candidates for a whole sweep.
-func track(body: Node3D, target: int) -> bool:
+## Spawn or respawn: follows `body` as the hitbox of the full handle `target` and puts it on
+## the hitbox layer. A new handle in a tracked slot replaces the old one and empties its
+## cache. A never-refreshed target sorts before every refreshed one.
+func track(body: CollisionObject3D, target: int) -> bool:
 	if not _bound or body == null or target < 0:
 		return _refuse()
 	var slot: int = target % HandlePool.INDEX_SPAN
@@ -105,54 +114,53 @@ func track(body: Node3D, target: int) -> bool:
 	_bodies[index] = body
 	_handles[index] = target
 	_cache_count[index] = 0
-	if _pending_count < _pending.size():
-		_pending[_pending_count] = target
-		_pending_count += 1
+	_since[index] = _step
+	_fresh[index] = 1
+	body.set_collision_layer_value(HITBOX_LAYER, true)
 	return true
 
 
-## Death or release: the target leaves the rotation and its cache is dropped. Its handle may
-## remain in other targets' caches until their next refresh; the logic rejects it there.
-## An untracked or stale handle is a no-op.
+## Applied death or release: the target leaves the cache and its hitbox leaves layer 7, so
+## other targets stop finding it from their next refresh on. Its handle may remain in other
+## caches until then; the logic rejects it there by HP. An untracked or stale handle is a
+## no-op.
 func untrack(target: int) -> void:
-	if not _bound or target < 0:
+	var index: int = _tracked_index(target)
+	if index < 0:
 		return
-	var slot: int = target % HandlePool.INDEX_SPAN
-	if slot >= _index_by_slot.size() or _index_by_slot[slot] < 0 \
-			or _handles[_index_by_slot[slot]] != target:
-		return
-	var index: int = _index_by_slot[slot]
+	var body: CollisionObject3D = _bodies[index]
+	if is_instance_valid(body):
+		body.set_collision_layer_value(HITBOX_LAYER, false)
 	var last: int = _tracked - 1
 	if index != last:
 		_bodies[index] = _bodies[last]
 		_handles[index] = _handles[last]
 		_cache_count[index] = _cache_count[last]
+		_since[index] = _since[last]
+		_fresh[index] = _fresh[last]
 		for candidate: int in _cache_count[last]:
 			_cache[index * _capacity + candidate] = _cache[last * _capacity + candidate]
 		_index_by_slot[_handles[index] % HandlePool.INDEX_SPAN] = index
 	_bodies[last] = null
 	_cache_count[last] = 0
-	_index_by_slot[slot] = -1
+	_index_by_slot[target % HandlePool.INDEX_SPAN] = -1
 	_tracked = last
-	if _cursor >= _tracked:
-		_cursor = 0
 
 
-## Physics tick: refreshes newly tracked targets first, then the next targets of the
-## rotation, queries_per_tick queries in total.
+## Physics tick: refreshes the queries_per_tick targets with the oldest cache. Q linear
+## passes over the tracked targets; a refreshed target becomes the youngest, so no target is
+## refreshed twice in one step.
 func refresh_step() -> void:
 	if not _bound or not active or _tracked == 0:
 		return
-	var budget: int = mini(_queries_per_tick, _tracked)
-	while budget > 0 and _pending_count > 0:
-		_pending_count -= 1
-		var index: int = _tracked_index(_pending[_pending_count])
-		if index >= 0:
-			_refresh(index)
-			budget -= 1
-	for step: int in budget:
-		_refresh(_cursor)
-		_cursor = (_cursor + 1) % _tracked
+	_step += 1
+	for query: int in mini(_queries_per_tick, _tracked):
+		var oldest: int = 0
+		for index: int in _tracked:
+			if _fresh[index] > _fresh[oldest] \
+					or (_fresh[index] == _fresh[oldest] and _since[index] < _since[oldest]):
+				oldest = index
+		_refresh(oldest)
 
 
 ## Physics tick, before publish: copies the cached neighbours of `target` into the trace.
@@ -178,6 +186,13 @@ func cached_count(target: int) -> int:
 	return 0 if index < 0 else _cache_count[index]
 
 
+## Read-only: refresh steps since the target's cache was last refreshed (or since it was
+## tracked, if never); -1 for an untracked target.
+func cache_age(target: int) -> int:
+	var index: int = _tracked_index(target)
+	return -1 if index < 0 else _step - _since[index]
+
+
 func reset_diagnostics() -> void:
 	queries = 0
 	overflows = 0
@@ -192,7 +207,9 @@ func _physics_process(_delta: float) -> void:
 
 
 func _refresh(index: int) -> void:
-	var body: Node3D = _bodies[index]
+	_since[index] = _step
+	_fresh[index] = 0
+	var body: CollisionObject3D = _bodies[index]
 	if not is_instance_valid(body) or not body.is_inside_tree():
 		_cache_count[index] = 0
 		return
@@ -225,7 +242,7 @@ func _refresh(index: int) -> void:
 
 
 func _tracked_index(target: int) -> int:
-	if target < 0:
+	if not _bound or target < 0:
 		return -1
 	var slot: int = target % HandlePool.INDEX_SPAN
 	if slot >= _index_by_slot.size() or _index_by_slot[slot] < 0 or _handles[_index_by_slot[slot]] != target:

@@ -56,7 +56,10 @@ var _candidates: ReactionCandidates
 var _candidate_histogram: PackedInt32Array = PackedInt32Array()
 var _candidate_frames: int = 0
 var _candidate_max: int = 0
-var _copy_max: int = 0
+# Shot ticks that copy caches: the refresh and the record write with its copies, together.
+var _shot_histogram: PackedInt32Array = PackedInt32Array()
+var _shot_frames: int = 0
+var _shot_max: int = 0
 var _queries_base: int = 0
 var _overflows_base: int = 0
 var _driver: Driver
@@ -143,6 +146,7 @@ func _ready() -> void:
 		_candidates.set_physics_process(false)  # the driver runs and times its refresh step
 		_candidates.active = true  # the driver's records are elemental; the scene's shotgun is not
 	_candidate_histogram.resize(CANDIDATE_BUCKETS)
+	_shot_histogram.resize(CANDIDATE_BUCKETS)
 	for body: Node in _sandbox.get_node(^"Targets").get_children():
 		_bodies.append(body as Node3D)
 	var host: EffectHost = _sandbox.effect_host
@@ -177,15 +181,22 @@ func on_driver_tick(ticks: int) -> void:
 	if not _done:
 		var start: int = Time.get_ticks_usec()
 		_candidates.refresh_step()
+		var refreshed: int = Time.get_ticks_usec()
+		var copied: bool = ticks % 2 == 0 and _publish_shot()
 		if _measuring:
-			var usec: int = Time.get_ticks_usec() - start
 			_candidate_frames += 1
-			_candidate_max = maxi(_candidate_max, usec)
-			_candidate_histogram[clampi(usec / CANDIDATE_BUCKET_USEC, 0, CANDIDATE_BUCKETS - 1)] += 1
-	if ticks % 2 == 0:
-		_publish_shot()
+			_candidate_max = _record(_candidate_histogram, _candidate_max, refreshed - start)
+			if copied:
+				_shot_frames += 1
+				_shot_max = _record(_shot_histogram, _shot_max, Time.get_ticks_usec() - start)
 	if _inject_leak and ticks == WARMUP_TICKS + 1:
 		_leaked = Node.new()  # Deliberate negative probe, cleaned after capture.
+
+
+## Adds one sample to a preallocated histogram; returns the new maximum.
+static func _record(histogram: PackedInt32Array, maximum: int, usec: int) -> int:
+	histogram[clampi(usec / CANDIDATE_BUCKET_USEC, 0, CANDIDATE_BUCKETS - 1)] += 1
+	return maxi(maximum, usec)
 
 
 ## Cold, before the Sandbox enters the tree: the scene's three targets plus copies of the
@@ -202,9 +213,10 @@ static func _layout_targets(targets: Node, dx: float, dz: float) -> void:
 				-6.0 - dz * float(index / GRID_COLUMNS))
 
 
-func _publish_shot() -> void:
+## Publishes the tick's record; true if its pellets copied neighbour caches.
+func _publish_shot() -> bool:
 	if _done:
-		return
+		return false
 	var group: int = _published % (TARGETS / GROUP)
 	var element: DamagePayload.Element = ELEMENTS[(_published / (TARGETS / GROUP)) % ELEMENTS.size()] \
 			as DamagePayload.Element
@@ -213,29 +225,27 @@ func _publish_shot() -> void:
 		element = DamagePayload.Element.ELECTRIC
 	var ticket: int = _batch.reserve(_player, GROUP, RAW_DAMAGE, element)
 	if ticket == ShotBatch.INVALID:
-		return
+		return false
 	var gather: bool = _combat.reactions.needs_candidates(element)
-	var start: int = Time.get_ticks_usec()
 	for pellet: int in GROUP:
 		var target: int = group * GROUP + pellet
 		_batch.write_trace(ticket, pellet, _targets[target])
 		if gather:
 			_candidates.copy_to(ticket, pellet, _targets[target])
-	if gather and _measuring:
-		_copy_max = maxi(_copy_max, Time.get_ticks_usec() - start)
 	_batch.publish(ticket)
 	_published += 1
+	return gather
 
 
-## Upper bound of the bucket holding the 99th percentile of the refresh cost per physics tick.
-func _candidate_p99() -> int:
-	var rank: int = (_candidate_frames * 990 + 999) / 1000
+## Upper bound of the bucket holding the 99th percentile of a preallocated histogram.
+static func _p99(histogram: PackedInt32Array, samples: int, maximum: int) -> int:
+	var rank: int = (samples * 990 + 999) / 1000
 	var seen: int = 0
 	for bucket: int in CANDIDATE_BUCKETS:
-		seen += _candidate_histogram[bucket]
+		seen += histogram[bucket]
 		if seen >= rank and rank > 0:
-			return _candidate_max if bucket == CANDIDATE_BUCKETS - 1 else (bucket + 1) * CANDIDATE_BUCKET_USEC
-	return _candidate_max
+			return maximum if bucket == CANDIDATE_BUCKETS - 1 else (bucket + 1) * CANDIDATE_BUCKET_USEC
+	return maximum
 
 
 func _physics_process(_delta: float) -> void:
@@ -348,8 +358,10 @@ func _finish() -> void:
 	print("STATUS_PIPELINE reactions: reactions=%d arcs=%d conducting=%d explosions=%d secondary_hits=%d secondary_damage=%d queries=%d overflows=%d" % [
 		activity[6], activity[7], activity[8], activity[9], activity[10], activity[11], activity[12],
 		_candidates.overflows])
-	print("STATUS_PIPELINE candidates: physics_ticks=%d refresh p99<=%d max=%d us queries=%d overflows=%d shot_copy_max=%d us saturated=%s" % [
-		_candidate_frames, _candidate_p99(), _candidate_max, window_queries, window_overflows, _copy_max, _saturated])
+	print("STATUS_PIPELINE candidates: physics_ticks=%d refresh p99<=%d max=%d us shot_ticks=%d refresh+copy p99<=%d max=%d us queries=%d overflows=%d saturated=%s" % [
+		_candidate_frames, _p99(_candidate_histogram, _candidate_frames, _candidate_max), _candidate_max,
+		_shot_frames, _p99(_shot_histogram, _shot_frames, _shot_max), _shot_max, window_queries,
+		window_overflows, _saturated])
 	print("STATUS_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=%d us" % [
 		_logic_samples, float(_logic_sum) / maxf(1.0, float(_logic_samples)), _logic_max, LOGIC_LIMIT_USEC])
 	var line: String = "STATUS_PIPELINE phases: steps=%d" % steps

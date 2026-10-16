@@ -46,12 +46,12 @@ func percent_for(kind: Kind) -> int:
 
 
 ## True if some reaction of this element hits other targets, so the physics adapter must
-## supply area candidates for its pellets. Derived from reaction_kind() only.
+## supply area candidates for its pellets. Derived from reaction_kind() only; cold (callers
+## cache it per element, as ReactionRuntime does).
 func needs_candidates(element: DamagePayload.Element) -> bool:
-	for corroded: bool in [false, true]:
-		for wet: bool in [false, true]:
-			if targets_for(reaction_kind(element, corroded, wet)) > 0:
-				return true
+	for inputs: int in 4:  # bit 0 corroded, bit 1 WET
+		if targets_for(reaction_kind(element, (inputs & 1) != 0, (inputs & 2) != 0)) > 0:
+			return true
 	return false
 
 

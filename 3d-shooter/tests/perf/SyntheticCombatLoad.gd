@@ -12,7 +12,7 @@ extends RefCounted
 const ENEMY_COUNT: int = 40
 const ENEMY_MAX_HP: int = 100_000  # 100.0 HP ×1000
 const ON_HIT_EFFECTS: int = 4  # подписки атакующего, обходятся на каждое попадание
-const FixtureData: Script = preload("res://tests/fixtures/registry/RegistryFixtureData.gd")
+const FixtureData := preload("res://tests/fixtures/registry/RegistryFixtureData.gd")
 const ITEMS_DIR: String = "res://tests/fixtures/registry/items"
 
 ## Самопроверка бенчмарка: при true каждый тик создаёт и удерживает Node.
@@ -78,8 +78,8 @@ func on_logic_tick(tick: int) -> void:
 	# «Физика»: попадания за тик.
 	var item_count: int = _registry.count(_items)
 	for e: int in ENEMY_COUNT:
-		var data: Resource = _registry.get_resource(_items, _rng.range_int(0, item_count - 1))
-		var damage: int = _rng.range_int(1_000, 5_000) + int(data.get(&"value")) * 100
+		var data: FixtureData = _registry.get_resource(_items, _rng.range_int(0, item_count - 1)) as FixtureData
+		var damage: int = _rng.range_int(1_000, 5_000) + data.value * 100
 		if _rng.chance_permille(150):
 			damage *= 2
 		damage += _rng.weighted_index(_weights) * 250

@@ -29,6 +29,10 @@ var _dead_material: StandardMaterial3D
 # Kill events mark targets here; the frame applies the defeated look.
 var _dead_pending: PackedByteArray = PackedByteArray()
 var _dead_dirty: bool = false
+# The same kill events mark targets here; the next physics tick takes them out of the
+# reaction neighbour cache and off the hitbox layer, so the logic tick never touches nodes.
+var _retire_pending: PackedByteArray = PackedByteArray()
+var _retire_dirty: bool = false
 # Set only by a complete load; logic_step refuses before it, after an abort and for
 # a tick that is not newer than the last one it ran.
 var _loaded: bool = false
@@ -49,6 +53,8 @@ var _phase_histogram: PackedInt32Array = _zeroes(PHASE_COUNT * PHASE_BUCKETS)
 
 
 func _ready() -> void:
+	# Death marks retire before the reaction cache refresh (0) and the weapon (10).
+	process_physics_priority = -1
 	var registry := Registry.new()
 	var category: int = registry.add_category(&"movement", preload("res://player/MovementAbilityData.gd"))
 	if registry.load_directory(category, movement_data_directory) != 3:
@@ -129,10 +135,11 @@ func _ready() -> void:
 		combat.stats.set_stat(target, StatBlock.Stat.MAX_HP, 100_000)
 		combat.stats.set_stat(target, StatBlock.Stat.HP, 100_000)
 		Damageable.attach(body, target)
-		weapon.reaction_candidates.track(body as Node3D, target)
+		weapon.reaction_candidates.track(body as CollisionObject3D, target)
 		target_handles.append(target)
 		_target_meshes.append(body.get_child(1) as MeshInstance3D)
 	_dead_pending.resize(target_handles.size())
+	_retire_pending.resize(target_handles.size())
 	(weapon.get_node(^"Viewmodel") as ViewmodelSway).bind(get_node(^"Player") as FPSController,
 			get_node(^"Player/Camera3D") as Camera3D)
 	_dead_material = StandardMaterial3D.new()
@@ -242,8 +249,24 @@ func _process(_delta: float) -> void:
 	apply_dead_marks()
 
 
+func _physics_process(_delta: float) -> void:
+	apply_retire_marks()
+
+
+## Physics-side half of the kill path: the targets marked by kill events since the last
+## physics tick leave the reaction neighbour cache and the hitbox layer (contracts §7).
+func apply_retire_marks() -> void:
+	if not _retire_dirty:
+		return
+	_retire_dirty = false
+	for index: int in _retire_pending.size():
+		if _retire_pending[index] != 0:
+			_retire_pending[index] = 0
+			weapon.reaction_candidates.untrack(target_handles[index])
+
+
 ## Frame-side half of the kill path: greys the targets marked by kill events since the last
-## frame. Visible defeated targets keep an inspectable collider and full handle.
+## frame. Defeated targets stay visible; their hitbox has left layer 7 in the physics tick.
 func apply_dead_marks() -> void:
 	if not _dead_dirty:
 		return
@@ -263,13 +286,14 @@ func _on_pulse_kill(_source: int, target: int, _credit: int, _generation: int, _
 	_mark_dead(target)
 
 
-## A kill also takes the target out of the reaction neighbour cache (contracts §2).
+## Logic tick: only marks. The frame repaints, the next physics tick retires the hitbox.
 func _mark_dead(target: int) -> void:
-	weapon.reaction_candidates.untrack(target)
 	for index: int in target_handles.size():
 		if target_handles[index] == target:
 			_dead_pending[index] = 1
 			_dead_dirty = true
+			_retire_pending[index] = 1
+			_retire_dirty = true
 
 
 func _on_hit(source: int, _target: int, _epoch: int, _sequence: int,

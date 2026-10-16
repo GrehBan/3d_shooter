@@ -1,6 +1,7 @@
 extends GdUnitTestSuite
-## M2.3b in the composition root: secondary hits reach the resolver's secondary signals and
-## the kill repaint, never EffectRunner; Sandbox.logic_step guards (P3).
+## M2.3b in the composition root: secondary hits reach the resolver's secondary signals, the
+## kill repaint and the physics-side retirement of the hitbox, never EffectRunner;
+## Sandbox.logic_step guards (P3).
 
 const SANDBOX: PackedScene = preload("res://world/sandbox/Sandbox.tscn")
 
@@ -68,7 +69,7 @@ func test_secondary_hits_reach_observers_but_never_effect_runner() -> void:
 	assert_int(_scene.combat.stats.get_stat(targets[0], StatBlock.Stat.HP)).is_equal(95_000)
 
 
-func test_secondary_kill_greys_target_in_the_next_frame() -> void:
+func test_secondary_kill_greys_in_the_frame_and_retires_in_the_physics_tick() -> void:
 	_load()
 	var targets: PackedInt64Array = _scene.target_handles
 	var mesh: MeshInstance3D = _scene.get_node(^"Targets").get_child(2).get_child(1) as MeshInstance3D
@@ -76,10 +77,21 @@ func test_secondary_kill_greys_target_in_the_next_frame() -> void:
 	_fire(targets[1], PackedInt64Array([targets[2]]), 10000, DamagePayload.Element.ELECTRIC)
 	_scene.logic_step(GameLoop.get_logic_tick() + 1)
 	var after_logic: Material = mesh.material_override
+	var body: CollisionObject3D = _scene.get_node(^"Targets").get_child(2) as CollisionObject3D
+	var candidates: ReactionCandidates = _scene.weapon.reaction_candidates
+	# The logic tick only marks: the hitbox and the cache are untouched until physics.
+	var tracked_after_logic: int = candidates.tracked_count()
+	var layer_after_logic: bool = body.get_collision_layer_value(ReactionCandidates.HITBOX_LAYER)
+	_scene.apply_retire_marks()
 	_scene.apply_dead_marks()
 	assert_int(_scene.combat.reactions.secondary_kills).is_equal(1)
 	assert_object(after_logic).is_null()
 	assert_object(mesh.material_override).is_not_null()
+	assert_int(tracked_after_logic).is_equal(3)
+	assert_bool(layer_after_logic).is_true()
+	assert_int(candidates.tracked_count()).is_equal(2)
+	assert_int(candidates.cache_age(targets[2])).is_equal(-1)
+	assert_bool(body.get_collision_layer_value(ReactionCandidates.HITBOX_LAYER)).is_false()
 
 
 func test_logic_step_is_guarded_before_load_after_abort_and_for_old_ticks() -> void:

@@ -1,6 +1,7 @@
 extends GdUnitTestSuite
-## Physics adapter of M2.3b reactions: the round-robin neighbour cache, its counters and
-## lifecycle, and the copy into ShotBatch on the shot path of HitscanWeapon.
+## Physics adapter of M2.3b reactions: the least-recently-refreshed neighbour cache, its age
+## bound, counters and lifecycle, and the copy into ShotBatch on the shot path of
+## HitscanWeapon.
 
 var _root: Node3D
 
@@ -123,7 +124,7 @@ func test_candidates_are_written_only_before_publish() -> void:
 	assert_int(batch.candidate_at(0, 0, 1)).is_equal(6)
 
 
-func test_new_targets_go_first_and_untracked_targets_leave_the_rotation() -> void:
+func test_new_targets_go_first_and_untracked_targets_leave_the_cache_and_layer() -> void:
 	var a: StaticBody3D = _body(Vector3.ZERO, ReactionCandidates.CANDIDATE_MASK, 1)
 	var b: StaticBody3D = _body(Vector3(2, 0, 0), ReactionCandidates.CANDIDATE_MASK, 2)
 	var c: StaticBody3D = _body(Vector3(-2, 0, 0), ReactionCandidates.CANDIDATE_MASK, 3)
@@ -136,25 +137,165 @@ func test_new_targets_go_first_and_untracked_targets_leave_the_rotation() -> voi
 	adapter.refresh_step()
 	assert_int(adapter.cached_count(1)).is_equal(2)  # b and the not yet tracked c both stand nearby
 	assert_int(adapter.cached_count(2)).is_equal(1)  # c is 4 m from b
-	adapter.track(c, 3)  # a spawn mid-rotation is refreshed on the very next step
+	adapter.track(c, 3)  # a spawn sorts first: refreshed on the very next step
 	var before_spawn: int = adapter.queries
 	assert_int(adapter.cached_count(3)).is_equal(0)
 	adapter.refresh_step()
 	assert_int(adapter.queries - before_spawn).is_equal(1)
 	assert_int(adapter.cached_count(3)).is_greater(0)
-	adapter.untrack(2)  # death: out of the rotation, cache dropped
+	adapter.untrack(2)  # applied death: out of the cache, hitbox off layer 7
 	assert_int(adapter.tracked_count()).is_equal(2)
+	assert_bool(b.get_collision_layer_value(ReactionCandidates.HITBOX_LAYER)).is_false()
 	assert_int(adapter.cached_count(2)).is_equal(0)
 	assert_array(_copied(batch, adapter, 2)).is_empty()
 	adapter.untrack(2)  # already gone: a no-op
 	adapter.untrack(65538)  # stale handle of slot 2: a no-op
 	var queries: int = adapter.queries
-	for step: int in 4:
+	await get_tree().physics_frame  # the layer change reaches the physics space
+	for step: int in 2:
 		adapter.refresh_step()
-	assert_int(adapter.queries - queries).is_equal(4)
-	# b's hitbox still stands, so a still sees it; the logic rejects a dead handle by HP.
-	assert_int(adapter.cached_count(1)).is_equal(2)
+	assert_int(adapter.queries - queries).is_equal(2)
+	# b's hitbox left layer 7, so a only finds c now.
+	assert_array(_copied(batch, adapter, 1)).is_equal([3])
+	# Respawn of slot 2 with a new generation: back on layer 7, refreshed first.
+	Damageable.attach(b, 65538)
+	assert_bool(adapter.track(b, 65538)).is_true()
+	assert_bool(b.get_collision_layer_value(ReactionCandidates.HITBOX_LAYER)).is_true()
+	assert_int(adapter.tracked_count()).is_equal(3)
+	assert_int(adapter.cache_age(2)).is_equal(-1)  # the old generation is gone
+	assert_int(adapter.cache_age(65538)).is_equal(0)
+	await get_tree().physics_frame
+	adapter.refresh_step()
+	assert_array(_copied(batch, adapter, 65538)).is_equal([1])
+	assert_int(adapter.cache_age(65538)).is_equal(0)
 	assert_int(adapter.configuration_errors).is_equal(0)
+
+
+## A new generation tracked over a slot that was never untracked replaces the stale handle
+## in place: no second entry, the old handle has no cache.
+func test_retracking_a_slot_with_a_new_generation_replaces_it() -> void:
+	var a: StaticBody3D = _body(Vector3.ZERO, ReactionCandidates.CANDIDATE_MASK, 5)
+	_body(Vector3(1, 0, 0), ReactionCandidates.CANDIDATE_MASK, 6)
+	var batch := ShotBatch.new(1, 1, 64, 8)
+	var adapter: ReactionCandidates = _adapter(batch, 1)
+	adapter.track(a, 5)
+	await get_tree().physics_frame
+	adapter.refresh_step()
+	assert_int(adapter.cached_count(5)).is_equal(1)
+	Damageable.attach(a, 5 + HandlePool.INDEX_SPAN)
+	assert_bool(adapter.track(a, 5 + HandlePool.INDEX_SPAN)).is_true()
+	assert_int(adapter.tracked_count()).is_equal(1)
+	assert_int(adapter.cached_count(5)).is_equal(0)
+	assert_int(adapter.cached_count(5 + HandlePool.INDEX_SPAN)).is_equal(0)  # emptied
+	adapter.untrack(5)  # the stale generation is a no-op
+	assert_int(adapter.tracked_count()).is_equal(1)
+	adapter.refresh_step()
+	assert_int(adapter.cached_count(5 + HandlePool.INDEX_SPAN)).is_equal(1)
+
+
+## Contracts §2: a target is refreshed at most ceil((N0 + S) / Q) refresh steps after its
+## previous refresh or its track (N0 tracked targets at that moment, S tracked since).
+## Off-tree bodies: the bound is about the selection, not the queries.
+func test_cache_age_bound_holds_under_seeded_death_and_respawn_churn() -> void:
+	var violations: int = 0
+	var checks: int = 0
+	for queries_per_tick: int in [1, 2, 3]:
+		for population: int in [5, 20, 40]:
+			var result: PackedInt32Array = _churn(queries_per_tick, population, 97 * population + queries_per_tick)
+			violations += result[0]
+			checks += result[1]
+	assert_int(checks).is_greater(10000)
+	assert_int(violations).is_equal(0)
+
+
+## No spawns: every target is refreshed exactly every ceil(N / Q) steps.
+func test_cache_age_without_spawns_is_ceil_n_over_q() -> void:
+	for queries_per_tick: int in [1, 2, 3]:
+		for population: int in [5, 20, 40]:
+			var batch := ShotBatch.new(1, 1, 64, 8)
+			var adapter: ReactionCandidates = _adapter(batch, queries_per_tick)
+			var bodies: Array[StaticBody3D] = []
+			for target: int in population:
+				bodies.append(StaticBody3D.new())
+				adapter.track(bodies[target], target)
+			var worst: int = 0
+			for step: int in 4 * population:
+				adapter.refresh_step()
+				for target: int in population:
+					worst = maxi(worst, adapter.cache_age(target))
+			for body: StaticBody3D in bodies:
+				body.free()
+			adapter.free()
+			# Ages are read after each step, so the longest interval is worst + 1.
+			assert_int(worst + 1).is_equal(ceili(float(population) / float(queries_per_tick)))
+
+
+## Returns [violations, checks] of one seeded churn run.
+func _churn(queries_per_tick: int, population: int, seed_value: int) -> PackedInt32Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var batch := ShotBatch.new(1, 1, 64, 8)
+	var adapter: ReactionCandidates = _adapter(batch, queries_per_tick)
+	var bodies: Array[StaticBody3D] = []
+	var handle: PackedInt64Array = PackedInt64Array()
+	var alive: PackedByteArray = PackedByteArray()
+	var n0: PackedInt32Array = PackedInt32Array()
+	var spawned_since: PackedInt32Array = PackedInt32Array()
+	for slot: int in population:
+		bodies.append(StaticBody3D.new())
+		handle.append(slot)
+		alive.append(0)
+		n0.append(0)
+		spawned_since.append(0)
+	var live: int = 0
+	var out := PackedInt32Array([0, 0])
+	for step: int in 300 + population * 10:
+		if step == 0:
+			for slot: int in population:
+				_churn_track(adapter, bodies, handle, alive, n0, spawned_since, slot)
+			live = population
+		else:
+			if live > 0 and rng.randf() < 0.3:
+				var victim: int = rng.randi_range(0, population - 1)
+				while alive[victim] == 0:
+					victim = (victim + 1) % population
+				adapter.untrack(handle[victim])
+				alive[victim] = 0
+				live -= 1
+			if live < population and rng.randf() < 0.3:
+				var slot: int = rng.randi_range(0, population - 1)
+				while alive[slot] != 0:
+					slot = (slot + 1) % population
+				handle[slot] += HandlePool.INDEX_SPAN  # respawn: next generation of the slot
+				_churn_track(adapter, bodies, handle, alive, n0, spawned_since, slot)
+				live += 1
+		adapter.refresh_step()
+		for slot: int in population:
+			if alive[slot] == 0:
+				continue
+			var age: int = adapter.cache_age(handle[slot])
+			var bound: int = ceili(float(n0[slot] + spawned_since[slot]) / float(queries_per_tick))
+			out[1] += 1
+			if age < 0 or age + 1 > bound:
+				out[0] += 1
+			if age == 0:
+				n0[slot] = adapter.tracked_count()
+				spawned_since[slot] = 0
+	for body: StaticBody3D in bodies:
+		body.free()
+	adapter.free()
+	return out
+
+
+func _churn_track(adapter: ReactionCandidates, bodies: Array[StaticBody3D], handle: PackedInt64Array,
+		alive: PackedByteArray, n0: PackedInt32Array, spawned_since: PackedInt32Array, slot: int) -> void:
+	for other: int in alive.size():
+		if alive[other] != 0:
+			spawned_since[other] += 1
+	adapter.track(bodies[slot], handle[slot])
+	alive[slot] = 1
+	n0[slot] = adapter.tracked_count()
+	spawned_since[slot] = 0
 
 
 func _weapon(element: DamagePayload.Element) -> Array:

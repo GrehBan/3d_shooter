@@ -24,6 +24,8 @@ var secondary_hp_damage: int = 0
 var secondary_kills: int = 0
 ## Selected targets that died or were released before their secondary hit.
 var stale_skips: int = 0
+## Planned reactions with no eligible candidate: not admitted, an explosion keeps the acid.
+var empty_reactions: int = 0
 ## Secondary hits refused by the attack context (hit budget or branch hit-set).
 var hit_refusals: int = 0
 var _stats: StatBlock
@@ -38,6 +40,8 @@ var _rules: ReactionRules
 var _target: PackedInt64Array = PackedInt64Array()
 var _team: PackedInt32Array = PackedInt32Array()
 var _wet: PackedByteArray = PackedByteArray()
+# needs_candidates by element, derived once from the rules.
+var _needs: PackedByteArray = PackedByteArray()
 var _selected: PackedInt64Array = PackedInt64Array()
 var _selected_count: int = 0
 var _planned: bool = false
@@ -68,6 +72,9 @@ func _init(stats: StatBlock, statuses: StatusRuntime,
 	_team.resize(_capacity)
 	_wet.resize(_capacity)
 	_selected.resize(_max_targets)
+	_needs.resize(DamagePayload.Element.size())
+	for element: int in _needs.size():
+		_needs[element] = 1 if _rules.needs_candidates(element as DamagePayload.Element) else 0
 	_payloads = DamagePayloadBuffer.new(1)
 	_pipeline = DamagePipeline.new(stats, statuses)
 	_initialized = true
@@ -102,7 +109,7 @@ func radius_mm() -> int:
 
 ## True if a pellet of this element needs area candidates from the physics adapter.
 func needs_candidates(element: DamagePayload.Element) -> bool:
-	return _initialized and _rules.needs_candidates(element)
+	return _initialized and element >= 0 and element < _needs.size() and _needs[element] != 0
 
 
 func is_executing() -> bool:
@@ -166,13 +173,19 @@ func planned_limit() -> int:
 
 
 ## After the direct contact, before its callbacks: admits the planned reaction if the
-## captured HP damage is positive (lethal hits included). An explosion consumes the
-## primary's corrosion here, even if it later finds no targets.
-func admit(hp_damage: int) -> bool:
-	if not _planned or _admitted or _executing:
+## captured HP damage is positive (lethal hits included) and selects up to the planned
+## number of eligible candidates of this shot's trace, smallest full handle first. No
+## eligible candidate: not admitted (empty_reactions), an explosion keeps the corrosion.
+## An admitted explosion consumes the primary's corrosion here.
+func admit(hp_damage: int, batch: ShotBatch, shot: int, trace: int) -> bool:
+	if not _planned or _admitted or _executing or batch == null:
 		_refuse()
 		return false
 	if _kind == ReactionRules.Kind.NONE or hp_damage <= 0:
+		return false
+	_select(batch, shot, trace)
+	if _selected_count == 0:
+		empty_reactions += 1
 		return false
 	if _kind == ReactionRules.Kind.EXPLOSION and not _statuses.consume_corrosion(_primary):
 		return _refuse()
@@ -185,15 +198,13 @@ func admit(hp_damage: int) -> bool:
 	return true
 
 
-## After the primary callbacks: selects up to the planned number of eligible candidates of
-## this shot's trace, smallest full handle first, and resolves each secondary hit on the
-## reaction child. Candidates that died or were released are skipped, never retargeted.
-func execute(batch: ShotBatch, shot: int, trace: int, contexts: AttackContextPool, child: int,
-		epoch: int, sequence: int) -> void:
+## After the primary callbacks: resolves each secondary hit of the admitted selection on the
+## reaction child. Selected targets that died or were released meanwhile are skipped, never
+## retargeted.
+func execute(trace: int, contexts: AttackContextPool, child: int, epoch: int, sequence: int) -> void:
 	if not _admitted or _executing:
 		_refuse()
 		return
-	_select(batch, shot, trace)
 	_executing = true
 	var element: DamagePayload.Element = DamagePayload.Element.FIRE if _kind == ReactionRules.Kind.EXPLOSION \
 			else DamagePayload.Element.ELECTRIC
@@ -252,6 +263,7 @@ func reset_room() -> bool:
 	secondary_hp_damage = 0
 	secondary_kills = 0
 	stale_skips = 0
+	empty_reactions = 0
 	hit_refusals = 0
 	_payloads.clear()
 	_payloads.reset_dropped_count()

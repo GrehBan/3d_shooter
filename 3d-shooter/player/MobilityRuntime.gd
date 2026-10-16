@@ -39,6 +39,11 @@ func is_initialized() -> bool:
 	return stats != null
 
 
+## Read-only: the last logic tick this runtime stepped, -1 before the first or after reset.
+func last_tick() -> int:
+	return _last_tick
+
+
 ## Read-only: true if landing damage uses this status store's effective armor.
 func uses_statuses(statuses: StatusRuntime) -> bool:
 	return statuses != null and _statuses == statuses

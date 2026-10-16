@@ -377,7 +377,7 @@ func test_reactions_through_the_resolver() -> void:
 
 ## m5: an ELECTRIC weapon on the real shot path: neighbour-cache refresh every physics tick
 ## and the cache copy into ShotBatch on each shot, without allocations.
-func test_electric_weapon_candidate_cache_refresh_and_copy() -> void:
+func test_electric_weapon_candidate_cache_refresh_copy_death_and_respawn() -> void:
 	_root = Node3D.new()
 	add_child(_root)
 	var stats := StatBlock.new(16)
@@ -397,6 +397,8 @@ func test_electric_weapon_candidate_cache_refresh_and_copy() -> void:
 	weapon.reaction_candidates.set_physics_process(false)
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(1.2, 2.0, 0.5)
+	var bodies: Array[StaticBody3D] = []
+	var handles: PackedInt64Array = PackedInt64Array()
 	for index: int in 14:  # a crowd 0.5 m apart: every refresh in the middle fills K and overflows
 		var body := StaticBody3D.new()
 		var collision := CollisionShape3D.new()
@@ -408,10 +410,18 @@ func test_electric_weapon_candidate_cache_refresh_and_copy() -> void:
 		var handle: int = stats.allocate()
 		Damageable.attach(body, handle)
 		weapon.reaction_candidates.track(body, handle)
+		bodies.append(body)
+		handles.append(handle)
 	await get_tree().physics_frame
 	for i: int in WARMUP + MEASURED:
 		if i == WARMUP:
 			_begin()
+		if i % 7 == 3:  # applied death (untrack, off layer 7) and respawn with a new generation
+			var k: int = (i / 7) % bodies.size()
+			weapon.reaction_candidates.untrack(handles[k])
+			handles[k] += HandlePool.INDEX_SPAN
+			Damageable.attach(bodies[k], handles[k])
+			weapon.reaction_candidates.track(bodies[k], handles[k])
 		weapon.reaction_candidates.refresh_step()
 		if i % 30 == 0:
 			weapon.set_fire_pressed(true)
