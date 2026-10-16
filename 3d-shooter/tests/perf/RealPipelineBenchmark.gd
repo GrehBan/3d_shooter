@@ -276,7 +276,7 @@ func _finish() -> void:
 		result.counters[index] = _counter(index) - _baseline[index]
 	result.configuration_errors = _batch.configuration_errors + _visuals.configuration_errors + _frame_overflows \
 			+ _resolver.damage_configuration_errors() + _effects.configuration_errors \
-			+ (_sandbox.get(&"combat") as RoomCombat).statuses.configuration_errors
+			+ (_sandbox as Sandbox).combat.statuses.configuration_errors
 	result.dropped = _mobility.landings.dropped_count() + _visuals.dropped_count + _effects.dropped_events
 	result.refusals = _resolver.contexts.capacity_refusals + _resolver.contexts.hit_set_overflows \
 			+ _resolver.contexts.budget_refusals + _resolver.contexts.depth_refusals \

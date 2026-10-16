@@ -23,7 +23,7 @@ const ELEMENTS: PackedInt32Array = [DamagePayload.Element.FIRE, DamagePayload.El
 		DamagePayload.Element.ACID, DamagePayload.Element.ELECTRIC, DamagePayload.Element.NONE]
 const PHASE_NAMES: PackedStringArray = ["statuses", "resolver", "effects", "mobility"]
 
-var _sandbox: Node3D
+var _sandbox: Sandbox
 var _combat: RoomCombat
 var _batch: ShotBatch
 var _resolver: ShotResolver
@@ -60,10 +60,7 @@ class Driver extends Node:
 
 	func _physics_process(_delta: float) -> void:
 		ticks += 1
-		if ticks % 2 == 0:
-			benchmark._publish_shot()
-		if benchmark._inject_leak and ticks == WARMUP_TICKS + 1:
-			benchmark._leaked = Node.new()  # Deliberate negative probe, cleaned after capture.
+		benchmark.on_driver_tick(ticks)
 
 
 func _ready() -> void:
@@ -87,33 +84,33 @@ func _ready() -> void:
 				return
 	_frame_usec.resize(FRAME_CAPACITY)
 	_monitors.resize(5)
-	_sandbox = SANDBOX.instantiate() as Node3D
-	_sandbox.set(&"room_config", ROOM)
+	_sandbox = SANDBOX.instantiate() as Sandbox
+	_sandbox.room_config = ROOM
 	var definitions: Array[EffectRuleData] = [
 		preload("res://tests/fixtures/effects/count_hit.tres"),
 		preload("res://tests/fixtures/effects/min_damage.tres"),
 		preload("res://tests/fixtures/effects/refuse_damage.tres"),
 		preload("res://tests/fixtures/effects/cooldown_hit.tres")]
-	_sandbox.set(&"effect_definitions", definitions)
+	_sandbox.effect_definitions = definitions
 	var player_node: FPSController = _sandbox.get_node(^"Player") as FPSController
 	player_node.hardware_input_enabled = false
 	(player_node.get_node(^"Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
 	add_child(_sandbox)
-	_combat = _sandbox.get(&"combat") as RoomCombat
-	_batch = _sandbox.get(&"shots") as ShotBatch
-	_resolver = _sandbox.get(&"resolver") as ShotResolver
-	_effects = _sandbox.get(&"effects") as EffectRunner
-	_visuals = _sandbox.get(&"visuals") as ShotVisualPool
-	_mobility = _sandbox.get(&"mobility") as MobilityRuntime
+	_combat = _sandbox.combat
+	_batch = _sandbox.shots
+	_resolver = _sandbox.resolver
+	_effects = _sandbox.effects
+	_visuals = _sandbox.visuals
+	_mobility = _sandbox.mobility
 	if _combat == null or _resolver == null or _effects == null:
 		_abort("Sandbox initialization failed")
 		return
-	_player = _sandbox.get(&"player_handle")
-	var host: EffectHost = _sandbox.get(&"effect_host") as EffectHost
+	_player = _sandbox.player_handle
+	var host: EffectHost = _sandbox.effect_host
 	for index: int in definitions.size():
 		host.add_effect(_player, EffectTrigger.Trigger.ON_HIT, EffectTrigger.Phase.MAIN, index, index, index, index)
 	# The scene's targets plus extra entities make forty status targets; all cold.
-	_targets = (_sandbox.get(&"target_handles") as PackedInt64Array).duplicate()
+	_targets = _sandbox.target_handles.duplicate()
 	while _targets.size() < TARGETS:
 		var entity: int = _combat.stats.allocate()
 		if entity == StatBlock.INVALID_HANDLE or not _combat.statuses.register_target(entity):
@@ -136,6 +133,15 @@ func _ready() -> void:
 		DisplayServer.get_name(), RenderingServer.get_current_rendering_method(),
 		RenderingServer.get_current_rendering_driver_name(), RenderingServer.get_video_adapter_name(),
 		get_viewport().get_visible_rect().size, DisplayServer.window_get_vsync_mode(), _graphical])
+
+
+## Driver callback, once per physics tick before GameLoop: one record every second tick
+## and, with --inject-leak, one deliberate orphan right after the baseline.
+func on_driver_tick(ticks: int) -> void:
+	if ticks % 2 == 0:
+		_publish_shot()
+	if _inject_leak and ticks == WARMUP_TICKS + 1:
+		_leaked = Node.new()  # Deliberate negative probe, cleaned after capture.
 
 
 func _publish_shot() -> void:
@@ -196,7 +202,7 @@ func _capture_baseline() -> void:
 	_monitors[4] = _monitor(Performance.MEMORY_STATIC)
 	_baseline = _activity()
 	_last_logic_tick = GameLoop.get_logic_tick()
-	_sandbox.call(&"reset_phase_metrics")
+	_sandbox.reset_phase_metrics()
 	_measuring = true
 
 
@@ -216,8 +222,8 @@ func _finish() -> void:
 	var dropped: int = _effects.dropped_events + _mobility.landings.dropped_count() + _visuals.dropped_count
 	var refusals: int = _resolver.contexts.capacity_refusals + _resolver.contexts.hit_set_overflows \
 			+ _resolver.contexts.budget_refusals + _resolver.contexts.depth_refusals \
-			+ (_sandbox.get(&"effect_host") as EffectHost).capacity_refusals
-	var steps: int = _sandbox.call(&"phase_steps")
+			+ _sandbox.effect_host.capacity_refusals
+	var steps: int = _sandbox.phase_steps()
 	get_tree().paused = true
 	var failures := PackedStringArray()
 	if objects != 0 or nodes != 0 or resources != 0 or orphans != 0:
@@ -244,10 +250,11 @@ func _finish() -> void:
 	print("STATUS_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=%d us" % [
 		_logic_samples, float(_logic_sum) / maxf(1.0, float(_logic_samples)), _logic_max, LOGIC_LIMIT_USEC])
 	var line: String = "STATUS_PIPELINE phases: steps=%d" % steps
-	for phase: int in PHASE_NAMES.size():
-		line += " %s avg=%.1f p99<=%d max=%d" % [PHASE_NAMES[phase],
-			float(int(_sandbox.call(&"phase_sum_usec", phase))) / maxf(1.0, float(steps)),
-			int(_sandbox.call(&"phase_percentile_usec", phase, 990)), int(_sandbox.call(&"phase_max_usec", phase))]
+	for index: int in PHASE_NAMES.size():
+		var phase: Sandbox.Phase = index as Sandbox.Phase
+		line += " %s avg=%.1f p99<=%d max=%d" % [PHASE_NAMES[index],
+			float(_sandbox.phase_sum_usec(phase)) / maxf(1.0, float(steps)),
+			_sandbox.phase_percentile_usec(phase, 990), _sandbox.phase_max_usec(phase)]
 	print(line + " us")
 	print("STATUS_PIPELINE diagnostics: configuration=%d dropped=%d refusals=%d pending_effects=%d deferred=%d contexts=%d" % [
 		errors, dropped, refusals, _effects.pending_count(), _effects.deferred_steps, _resolver.contexts.alive_count()])

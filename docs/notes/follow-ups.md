@@ -27,6 +27,25 @@
   (сейчас его запускают `ShotResolver.on_kill` и `StatusRuntime.on_pulse_kill`), а
   `ReactionRuntime` — в `RoomCombat.reset_room()` с тестом отсутствия аллокаций.
 
+### Ревью M2.3a (переносятся в пакет M2.3b)
+
+* **M2.3b:** контакт до первого `StatusRuntime.logic_step()` получает логическое время 0
+  (`current_tick()`), так что его сроки истекают на первом шаге. Сейчас таких контактов в
+  Sandbox нет; до появления новых источников контактов в M2.3b — отказ до первого шага с
+  тестом либо явное правило в контрактах.
+* **M2.3b:** точную активность профиля 40 + 1 (`hits=14400 pulses=4800 …`) сверяет только
+  `grep` в `ci/run_checks.sh`; перенести ожидаемые числа в сам бенчмарк, чтобы прогон вне
+  `run_checks` тоже проваливался при расхождении.
+* **M2.3b:** у новых `.tres` и `.tscn` M2.3a (`data/rooms/sandbox_room.tres`,
+  `data/status/default_status_rules.tres`, `tests/fixtures/rooms/status_load_40.tres`,
+  `tests/perf/StatusPipelineBenchmark.tscn`) нет `uid` в заголовке; строка контрактов §8
+  длиннее остальных.
+* **M2.3b:** доступ к Sandbox через отражение в тестовой обвязке, которую M2.3a не менял:
+  `_scene.get/call(&"…")` в `ShotgunSandboxTest`, `EffectSandboxTest`, `ViewmodelSwayTest`,
+  тесте Sandbox в `RoomCombatTest` и `_sandbox.get/set/call` в `RealPipelineBenchmark`.
+  С `class_name Sandbox` их можно перевести на типизированный доступ и публичные
+  `logic_step()` / `apply_dead_marks()`.
+
 ## Ограничения доказательств
 
 Это не долги, а границы того, что подтверждают текущие проверки. Пакет 5 M1 не

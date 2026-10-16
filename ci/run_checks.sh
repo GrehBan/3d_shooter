@@ -114,6 +114,18 @@ run_status_pipeline() {
 		exit 1
 	fi
 	echo "status_pipeline_leak: OK (expected rejection and cleanup)"
+	log="$LOG_DIR/status_pipeline_unknown_option.log"
+	set +e
+	timeout "$STEP_TIMEOUT" "$GODOT" --headless --path "$PROJECT_DIR" \
+		res://tests/perf/StatusPipelineBenchmark.tscn -- --unknown-option < /dev/null > "$log" 2>&1
+	code=$?
+	set -e
+	check_script_errors status_pipeline_unknown_option "$log"
+	if [[ $code -ne 2 ]] || ! grep -q '^STATUS_PIPELINE SETUP ERROR: unknown option: --unknown-option$' "$log"; then
+		echo "::error::status_pipeline_unknown_option: expected setup rejection, exit 2 (see $log)"
+		exit 1
+	fi
+	echo "status_pipeline_unknown_option: OK"
 }
 
 # gdUnit4 rotates old reports itself, but on this Windows/OneDrive checkout it fails to

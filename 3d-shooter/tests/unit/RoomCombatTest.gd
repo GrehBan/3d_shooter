@@ -78,18 +78,35 @@ func test_sandbox_room_owns_the_single_stat_block_and_reset_keeps_it() -> void:
 
 ## Each field outside its range refuses the room with a push_error naming that field.
 func test_every_invalid_room_config_field_refuses_the_room() -> void:
+	var over: int = HandlePool.MAX_CAPACITY + 1
+	# [field named by the error, edit of a fresh default config]
 	var cases: Array = [
-		["host_capacity", 0], ["host_capacity", StatBlock.MAX_CAPACITY + 1],
-		["shot_capacity", 0], ["trace_cap", 0], ["trace_cap", AttackContextPool.HITS_PER_CONTEXT + 1],
-		["shot_packed_bytes", 0], ["context_capacity", 0], ["deferred_reserve", -1],
-		["deferred_reserve", 64], ["landing_capacity", 0], ["effect_entries", 0],
-		["effect_max_subscriptions", 0], ["effect_max_subscriptions", EffectRunner.MAX_SUBSCRIPTIONS + 1],
-		["effect_packed_bytes", 0], ["visual_nodes", 0], ["visual_packed_bytes", 0],
-		["visual_texture_bytes", 0],
+		["host_capacity", func(c: RoomConfig) -> void: c.host_capacity = 0],
+		["host_capacity", func(c: RoomConfig) -> void: c.host_capacity = StatBlock.MAX_CAPACITY + 1],
+		["shot_capacity", func(c: RoomConfig) -> void: c.shot_capacity = 0],
+		["shot_capacity", func(c: RoomConfig) -> void: c.shot_capacity = over],
+		["trace_cap", func(c: RoomConfig) -> void: c.trace_cap = 0],
+		["trace_cap", func(c: RoomConfig) -> void: c.trace_cap = AttackContextPool.HITS_PER_CONTEXT + 1],
+		["shot_packed_bytes", func(c: RoomConfig) -> void: c.shot_packed_bytes = 0],
+		["context_capacity", func(c: RoomConfig) -> void: c.context_capacity = 0],
+		["context_capacity", func(c: RoomConfig) -> void: c.context_capacity = over],
+		["deferred_reserve", func(c: RoomConfig) -> void: c.deferred_reserve = -1],
+		["deferred_reserve", func(c: RoomConfig) -> void: c.deferred_reserve = 64],
+		["landing_capacity", func(c: RoomConfig) -> void: c.landing_capacity = 0],
+		["landing_capacity", func(c: RoomConfig) -> void: c.landing_capacity = LandingEventQueue.MAX_CAPACITY + 1],
+		["effect_entries", func(c: RoomConfig) -> void: c.effect_entries = 0],
+		["effect_entries", func(c: RoomConfig) -> void: c.effect_entries = over],
+		["effect_max_subscriptions", func(c: RoomConfig) -> void: c.effect_max_subscriptions = 0],
+		["effect_max_subscriptions",
+				func(c: RoomConfig) -> void: c.effect_max_subscriptions = EffectRunner.MAX_SUBSCRIPTIONS + 1],
+		["effect_packed_bytes", func(c: RoomConfig) -> void: c.effect_packed_bytes = 0],
+		["visual_nodes", func(c: RoomConfig) -> void: c.visual_nodes = 0],
+		["visual_packed_bytes", func(c: RoomConfig) -> void: c.visual_packed_bytes = 0],
+		["visual_texture_bytes", func(c: RoomConfig) -> void: c.visual_texture_bytes = 0],
 	]
 	for entry: Array in cases:
 		var config := RoomConfig.new()
-		config.set(entry[0], entry[1])
+		(entry[1] as Callable).call(config)
 		_made_combat = null
 		await assert_error(func() -> void: _made_combat = RoomCombat.new(config)).is_push_error(
 				RoomConfig.ERROR_PREFIX + entry[0])
@@ -118,6 +135,11 @@ func test_default_and_sandbox_configs_are_valid_and_the_copy_is_cold() -> void:
 	assert_int(combat.config.host_capacity).is_equal(8)
 	assert_int(combat.stats.capacity()).is_equal(8)
 	assert_object(combat.config).is_not_same(source)
+	combat.config.host_capacity = 3  # the getter hands out copies: the room copy stays intact
+	assert_int(combat.config.host_capacity).is_equal(8)
+	await assert_error(func() -> void: combat.config = RoomConfig.new()).is_push_error(
+			RoomCombat.READ_ONLY_ERROR)
+	assert_int(combat.config.host_capacity).is_equal(8)
 	assert_bool(combat.statuses.uses_stats(combat.stats)).is_true()
 	assert_bool(RoomCombat.new().is_initialized()).is_true()
 
@@ -139,6 +161,8 @@ func test_reset_room_clears_statuses_without_allocating() -> void:
 	var memory: int = 0
 	var validator: int = 0
 	var resets: int = 0
+	var active_before_min: int = 1 << 30
+	var active_after_max: int = 0
 	for cycle: int in 360:
 		if cycle == 60:
 			objects = int(Performance.get_monitor(Performance.OBJECT_COUNT))
@@ -152,8 +176,10 @@ func test_reset_room_clears_statuses_without_allocating() -> void:
 						0, 0, -1)
 				pipeline.resolve_front(payloads)
 				payloads.pop_front()
+		active_before_min = mini(active_before_min, statuses.active_count())
 		if combat.reset_room():
 			resets += 1
+		active_after_max = maxi(active_after_max, statuses.active_count())
 	var created: int = ((RefCounted.new().get_instance_id() >> 24) & ((1 << 39) - 1)) - validator - 1
 	var object_delta: int = int(Performance.get_monitor(Performance.OBJECT_COUNT)) - objects
 	var memory_delta: int = int(Performance.get_monitor(Performance.MEMORY_STATIC)) - memory
@@ -161,6 +187,8 @@ func test_reset_room_clears_statuses_without_allocating() -> void:
 	assert_int(created).is_equal(0)
 	assert_int(memory_delta).is_less_equal(4096)
 	assert_int(resets).is_equal(300)
+	assert_int(active_before_min).is_equal(16)  # every cycle really had statuses to clear
+	assert_int(active_after_max).is_equal(0)
 	assert_int(statuses.active_count()).is_equal(0)
 	assert_int(statuses.current_tick()).is_equal(0)
 	assert_int(statuses.profile_of(handles[3])).is_equal(StatusRuntime.Profile.ORDINARY)

@@ -1,3 +1,4 @@
+class_name Sandbox
 extends Node3D
 ## Composition root. Content and stores allocate only while loading the sandbox.
 
@@ -124,8 +125,13 @@ func _ready() -> void:
 	EventBus.room_entered.emit(room_id)
 
 
-## Single logic subscriber: statuses (expiry, burn pulses) -> resolver -> effects -> mobility.
 func _on_logic_tick(tick: int) -> void:
+	logic_step(tick)
+
+
+## The room's single logic subscriber, public so tests and benchmarks can drive a tick:
+## statuses (expiry, burn pulses) -> resolver -> effects -> mobility.
+func logic_step(tick: int) -> void:
 	var start: int = Time.get_ticks_usec()
 	if not combat.statuses.logic_step(tick):
 		_abort_initialization("Sandbox: status tick failed")
@@ -211,8 +217,13 @@ func reset_phase_metrics() -> void:
 	_phase_steps = 0
 
 
-# Visible defeated targets preserve an inspectable collider and full handle.
 func _process(_delta: float) -> void:
+	apply_dead_marks()
+
+
+## Frame-side half of the kill path: greys the targets marked by kill events since the last
+## frame. Visible defeated targets keep an inspectable collider and full handle.
+func apply_dead_marks() -> void:
 	if not _dead_dirty:
 		return
 	_dead_dirty = false

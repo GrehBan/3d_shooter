@@ -39,6 +39,11 @@ func is_initialized() -> bool:
 	return stats != null
 
 
+## Read-only: true if landing damage uses this status store's effective armor.
+func uses_statuses(statuses: StatusRuntime) -> bool:
+	return statuses != null and _statuses == statuses
+
+
 ## Cold initialization only. Validate the complete M1 preset before ANY grant.
 ## false is a caller configuration error: do not start this room with invalid content.
 func grant_content(entity: int, registry: Registry, category: int) -> bool:

@@ -5,12 +5,20 @@ extends RefCounted
 ## Room reset clears room state (statuses) but keeps entities and stats: entity lifecycle
 ## is separate (contracts §6, §7).
 
-## The room's validated copy of its RoomConfig. Read it, never write it.
-var config: RoomConfig
+const READ_ONLY_ERROR: String = "RoomCombat: config is read-only"
+
+## The room's validated RoomConfig. Read-only: every read returns a fresh copy, so neither
+## assignment nor field writes reach the room. Cold path only (load, tests, reports).
+var config: RoomConfig:
+	get:
+		return null if _config == null else _config.duplicate() as RoomConfig
+	set(_value):
+		push_error(READ_ONLY_ERROR)
 ## The single StatBlock of the room. Never reassign it: runtimes hold this exact reference.
 var stats: StatBlock
 ## The single status authority of the room, built on `stats`.
 var statuses: StatusRuntime
+var _config: RoomConfig
 
 
 ## An invalid config is a configuration error: push_error names the first bad field and
@@ -21,8 +29,8 @@ func _init(room_config: RoomConfig = null) -> void:
 	if not error.is_empty():
 		push_error(error)
 		return
-	config = source.duplicate() as RoomConfig
-	stats = StatBlock.new(config.host_capacity)
+	_config = source.duplicate() as RoomConfig
+	stats = StatBlock.new(_config.host_capacity)
 	statuses = StatusRuntime.new(stats)
 
 

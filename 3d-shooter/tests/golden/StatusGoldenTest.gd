@@ -175,8 +175,6 @@ func test_status_timeline_pulses_full_handles_and_active_restore_golden() -> voi
 	assert_int(_payloads.dropped_count()).is_equal(0)
 
 
-
-
 func _record_targets(count: int) -> void:
 	_record(PackedInt64Array([300, _statuses.current_tick()]))
 	for handle: int in range(1, count):
@@ -235,3 +233,45 @@ func test_skipped_repeated_and_past_ticks_golden() -> void:
 	assert_int(visits[5]).is_equal(visits[3])
 	assert_int(_statuses.configuration_errors).is_equal(0)
 	assert_int(_pipeline.configuration_errors).is_equal(0)
+
+
+## Same oracle, revive_reference(): death clears statuses and both cooldowns, so a healed
+## target is shocked and frozen again at once, and a new burn gets the next generation.
+func test_revived_target_starts_clean_golden() -> void:
+	_hash = 2166136261
+	_words = 0
+	_contacts = 0
+	_pulses = 0
+	_pulse_kills = 0
+	_fresh(3, {})
+	_connect_pulses()
+	var ice := DamagePayload.Element.ICE
+	assert_bool(_statuses.logic_step(1)).is_true()
+	_tick = 1
+	for contact: Array in [[1, 1000, DamagePayload.Element.ELECTRIC], [1, 1000, ice], [1, 1000, ice],
+			[1, 1000, ice], [2, 10000, DamagePayload.Element.FIRE]]:
+		_contact(contact[0], contact[1], contact[2])
+	_record_targets(3)
+	_statuses.logic_step(2)
+	_stats.set_stat(1, StatBlock.Stat.HP, 0)
+	_stats.set_stat(2, StatBlock.Stat.HP, 0)
+	_statuses.logic_step(3)
+	_tick = 3
+	_stats.set_stat(1, StatBlock.Stat.HP, 1000000)
+	_stats.set_stat(2, StatBlock.Stat.HP, 1000000)
+	for contact: Array in [[1, 1000, DamagePayload.Element.ELECTRIC], [1, 1000, ice], [1, 1000, ice],
+			[1, 1000, ice], [2, 5000, DamagePayload.Element.FIRE]]:
+		_contact(contact[0], contact[1], contact[2])
+	_record_targets(3)
+	var frozen_again: bool = _statuses.is_frozen(1)
+	var generation: int = _statuses.burn_field(2, StatusRuntime.Field64.BURN_GENERATION)
+	for tick: int in range(4, 21):
+		_statuses.logic_step(tick)
+		_record_targets(3)
+	assert_int(_hash).is_equal(2613431295)
+	assert_int(_words).is_equal(434)
+	assert_int(_contacts).is_equal(10)
+	assert_int(_pulses).is_equal(1)
+	assert_bool(frozen_again).is_true()
+	assert_int(generation).is_equal(2)
+	assert_int(_statuses.configuration_errors).is_equal(0)

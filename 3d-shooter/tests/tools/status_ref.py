@@ -44,7 +44,9 @@ class Entity:
     burn: dict = field(default_factory=dict)
 
     def clear(self):
-        self.shock = self.chill = self.chill_end = self.freeze = 0
+        # Death clears every status and both cooldowns; burn generation is kept.
+        self.shock = self.shock_ready = self.chill = self.chill_end = 0
+        self.freeze = self.freeze_ready = 0
         self.acid = self.acid_end = 0
         self.burn.clear()
 
@@ -247,6 +249,31 @@ def skip_reference():
     return digest(m.words), len(m.words), m.contacts, m.pulses, m.kills
 
 
+def revive_reference():
+    """Death clears statuses and cooldowns: a healed target is shocked and frozen again."""
+    m = StatusModel(3, {})
+    m.step(1)
+    for args in ((1, 1000, ELECTRIC), (1, 1000, ICE), (1, 1000, ICE), (1, 1000, ICE),
+                 (2, 10000, FIRE)):
+        m.contact(*args)
+    m.record()
+    m.step(2)
+    m.entities[1].hp = 0
+    m.entities[2].hp = 0
+    m.step(3)
+    m.entities[1].hp = 1000000
+    m.entities[2].hp = 1000000
+    for args in ((1, 1000, ELECTRIC), (1, 1000, ICE), (1, 1000, ICE), (1, 1000, ICE),
+                 (2, 5000, FIRE)):
+        m.contact(*args)
+    m.record()
+    for tick in range(4, 21):
+        m.step(tick)
+        m.record()
+    return digest(m.words), len(m.words), m.contacts, m.pulses, m.kills
+
+
 if __name__ == '__main__':
     print('status hash/words/contacts/pulses/kills', *status_reference())
     print('skip hash/words/contacts/pulses/kills', *skip_reference())
+    print('revive hash/words/contacts/pulses/kills', *revive_reference())

@@ -30,6 +30,9 @@
   `EffectRunner.logic_step(tick)` → `MobilityRuntime.logic_step(tick)` (landing damage → regen).
   Его порядок и coordinated reset описаны в §7; legacy-конвейер/синтетика сохраняются.
 * **Кадр** (`_process`): только визуал. В логику не пишет.
+* `Sandbox` (`class_name Sandbox`) подписывает на `GameLoop.logic_tick` один обработчик,
+  который вызывает публичный `logic_step(tick)`; кадровая половина пути убийства —
+  публичный `apply_dead_marks()` из `_process`. Тесты и бенчмарки вызывают их напрямую.
 * Логическое время — номер логического тика из `GameLoop.get_logic_tick()`. Кулдауны
   считаются в логических тиках, а не в секундах или кадрах.
 
@@ -145,8 +148,10 @@
 
 Владелец боевых хранилищ комнаты. `RoomCombat.new(room_config)` создаётся холодно при
 загрузке комнаты (`null` — `RoomConfig` по умолчанию), проверяет конфигурацию и создаёт
-единственные `StatBlock` (ёмкость `host_capacity`) и `StatusRuntime` комнаты. Поля `config`
-(холодная копия конфигурации), `stats` и `statuses` не переназначаются и не пишутся.
+единственные `StatBlock` (ёмкость `host_capacity`) и `StatusRuntime` комнаты. `config` —
+свойство только для чтения: каждое чтение отдаёт новую копию проверенной конфигурации
+(холодный путь), присваивание пишет `push_error(READ_ONLY_ERROR)` и ничего не меняет. Поля
+`stats` и `statuses` не переназначаются.
 Остальные runtime комнаты получают ссылки и своих хранилищ не создают:
 `MobilityRuntime.new(combat.stats, landing_capacity, combat.statuses)`,
 `ShotResolver.new(combat.stats, batch, contexts, combat.statuses)`, `EffectRunner` и
@@ -159,7 +164,8 @@
 неинициализированный `MobilityRuntime` ничего не делает в `logic_step` и `reset_clock`
 (оба `void`), а `grant_content` возвращает `false`. Sandbox в этом случае прерывает загрузку
 комнаты. Со `StatusRuntime` урон от падения использует эффективную броню
-(`StatusRuntime.effective_armor()`), базовый `ARMOR` не пишется.
+(`StatusRuntime.effective_armor()`), базовый `ARMOR` не пишется. Только для чтения:
+`MobilityRuntime.uses_statuses(statuses)` и `DamagePipeline.uses_statuses(statuses)`.
 
 `reset_room() -> bool` сбрасывает состояние комнаты — статусы (`StatusRuntime.reset_room()`).
 `StatBlock` не сбрасывается: сущности, их статы, handle и регистрации профилей переживают
@@ -227,11 +233,12 @@ Sandbox. `RoomCombat` хранит копию (`duplicate()`): правка ис
   Пустая очередь не диагностируется. Reset не меняет очередь/stats.
 * Допустимый stale/dead (`HP <= 0`) target завершает запись в `POST_HIT`, возвращает
   0 без HP/shield writes и ошибок конфигурации; текущий occupant stale slot не меняется.
-* Base/Add/Multiply/Element/Crit — identity над precomputed physical raw amount.
-  Mitigation не мутирует stats; `DamageApply.apply()` остаётся единственным shield/
-  armor authority и вызывается один раз на Apply. Терминальная фаза `POST_HIT`.
-  Нулевой amount сохраняет существующую zero-damage политику `DamageApply`.
-  Это синхронная граница фаз без hooks, RNG, modifiers, статусов и полного M2 engine.
+* Без `StatusRuntime` Base/Add/Multiply/Element/Crit — identity над precomputed physical
+  raw amount (с ним Element даёт раскол, см. M2.3 ниже). Mitigation не мутирует stats;
+  `DamageApply` остаётся единственным shield/armor authority и вызывается один раз на Apply
+  (`apply()`, со статусами — `apply_with_armor()` с эффективной бронёй). Терминальная фаза
+  `POST_HIT`. Нулевой amount сохраняет существующую zero-damage политику `DamageApply`.
+  Это синхронная граница фаз без hooks, RNG, modifiers и полного M2 engine.
 * ShotResolver cold-выделяет pipeline и scratch ёмкости 1, сохраняет full-target/HP
   guard до child/budget и выполняет каждую дробину целиком: push → resolve → capture
   kill → OnHit → OnKill → pop → close child. Kill snapshot предшествует callbacks.
@@ -346,7 +353,8 @@ compatible_tick`, совпадение свидетеля, привязку hand
 
 **Проверки.** `StatusRuntimeTest`, `StatusSandboxTest`, `StatusGoldenTest` (модель
 `tests/tools/status_ref.py`: хеш 4200031361 на тиках 1..125 с переиспользованием handle и
-восстановлением, 2162921167 при старте с тика 500 с пропуском, повтором и прошлым тиком),
+восстановлением, 2162921167 при старте с тика 500 с пропуском, повтором и прошлым тиком,
+2613431295 для цели, которую убили и вылечили: смерть снимает статусы и оба кулдауна),
 `HotPathAllocationTest`, `RoomCombatTest` и [профиль 40 + 1](#10-m23a-профиль-статусов-40--1).
 
 ### Damageable (`combat/Damageable.gd`)

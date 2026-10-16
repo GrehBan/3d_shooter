@@ -24,6 +24,11 @@ func _init(stats: StatBlock, statuses: StatusRuntime = null) -> void:
 		_reject()
 
 
+## Read-only: true if this pipeline routes contacts through the given status store.
+func uses_statuses(statuses: StatusRuntime) -> bool:
+	return statuses != null and _statuses == statuses
+
+
 ## Resolves only the front BASE direct contact; rejection preserves payload and stats.
 ## credit/epoch/sequence/trace are opaque provenance copied into a burn this contact starts.
 func resolve_front(payloads: DamagePayloadBuffer, credit: int = 0, epoch: int = 0,
