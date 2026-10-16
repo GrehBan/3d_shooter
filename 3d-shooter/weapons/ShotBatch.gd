@@ -144,20 +144,13 @@ func add_candidate(ticket: int, trace: int, handle: int) -> bool:
 	return true
 
 
-## Physics tick, before publish: gives to_trace the candidates already gathered for
-## from_trace (pellets that hit the same target share one query).
-func copy_candidates(ticket: int, from_trace: int, to_trace: int) -> bool:
+## Free candidate slots of an open reservation's trace; -1 if the ticket is not an open
+## reservation or the trace is out of range.
+func candidate_space(ticket: int, trace: int) -> int:
 	var slot: int = _find(ticket)
-	if slot < 0 or _state[slot] != 1 or from_trace < 0 or from_trace >= _count[slot] \
-			or to_trace < 0 or to_trace >= _count[slot]:
-		return false
-	var source: int = slot * _stride + from_trace
-	var target: int = slot * _stride + to_trace
-	var used: int = _candidate_count[source]
-	for index: int in used:
-		_candidates[target * _candidate_capacity + index] = _candidates[source * _candidate_capacity + index]
-	_candidate_count[target] = used
-	return true
+	if slot < 0 or _state[slot] != 1 or trace < 0 or trace >= _count[slot]:
+		return INVALID
+	return _candidate_capacity - _candidate_count[slot * _stride + trace]
 
 
 func publish(ticket: int) -> bool:

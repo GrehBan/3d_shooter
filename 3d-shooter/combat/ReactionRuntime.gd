@@ -9,8 +9,6 @@ extends RefCounted
 signal on_hit(source: int, target: int, epoch: int, sequence: int, trace: int, child: int, hp_damage: int)
 signal on_kill(source: int, target: int, epoch: int, sequence: int, trace: int)
 
-enum Kind { NONE, ARC, CONDUCTING, EXPLOSION }
-
 const CONFIGURATION_ERROR: String = "ReactionRuntime: invalid configuration, state or call"
 const NO_TARGET: int = -1
 const MAX_TEAM: int = 0x7FFFFFFF
@@ -35,11 +33,6 @@ var _payloads: DamagePayloadBuffer
 var _initialized: bool = false
 var _reported: bool = false
 var _capacity: int = 0
-var _arc_limit: int = 0
-var _aoe_limit: int = 0
-var _explosion_limit: int = 0
-var _electric_percent: int = 0
-var _explosion_percent: int = 0
 var _max_targets: int = 0
 var _rules: ReactionRules
 var _target: PackedInt64Array = PackedInt64Array()
@@ -50,7 +43,7 @@ var _selected_count: int = 0
 var _planned: bool = false
 var _admitted: bool = false
 var _executing: bool = false
-var _kind: Kind = Kind.NONE
+var _kind: ReactionRules.Kind = ReactionRules.Kind.NONE
 var _source: int = NO_TARGET
 var _primary: int = NO_TARGET
 var _source_team: int = 0
@@ -69,11 +62,6 @@ func _init(stats: StatBlock, statuses: StatusRuntime,
 	_statuses = statuses
 	_rules = rules.duplicate() as ReactionRules
 	_capacity = stats.capacity()
-	_arc_limit = rules.arc_targets
-	_aoe_limit = rules.conducting_targets
-	_explosion_limit = rules.explosion_targets
-	_electric_percent = rules.electric_percent
-	_explosion_percent = rules.explosion_percent
 	_max_targets = rules.max_targets()
 	_target.resize(_capacity)
 	_target.fill(NO_TARGET)
@@ -147,38 +135,34 @@ func is_wet(target: int) -> bool:
 
 ## Before the direct contact: captures source team, the primary's pre-contact corrosion and
 ## WET and the raw amount. Returns true if a reaction is planned. finish() must follow.
+## A neutral source and a primary that is neutral or on the source's team never react.
 func plan(source: int, primary: int, raw: int, element: DamagePayload.Element) -> bool:
 	if not _initialized or _planned or _executing:
 		_refuse()
 		return false
 	_planned = true
-	_kind = Kind.NONE
+	_kind = ReactionRules.Kind.NONE
 	_source = source
 	_primary = primary
 	_damage = 0
 	_limit = 0
 	var source_index: int = _index(source)
 	var primary_index: int = _index(primary)
-	if source_index < 0 or primary_index < 0 or _team[source_index] == 0 or raw <= 0:
+	if source_index < 0 or primary_index < 0 or raw <= 0 or _team[source_index] == 0 \
+			or _team[primary_index] == 0 or _team[primary_index] == _team[source_index]:
 		return false
 	_source_team = _team[source_index]
-	var corroded: bool = _statuses.acid_stacks(primary) > 0
-	if element == DamagePayload.Element.ELECTRIC:
-		_kind = Kind.CONDUCTING if corroded or _wet[primary_index] != 0 else Kind.ARC
-		_limit = _aoe_limit if _kind == Kind.CONDUCTING else _arc_limit
-		_damage = _fraction(raw, _electric_percent)
-	elif element == DamagePayload.Element.FIRE and corroded:
-		_kind = Kind.EXPLOSION
-		_limit = _explosion_limit
-		_damage = _fraction(raw, _explosion_percent)
-	if _damage <= 0 or _limit <= 0:
-		_kind = Kind.NONE
-	return _kind != Kind.NONE
+	var kind: ReactionRules.Kind = _rules.reaction_kind(element, _statuses.acid_stacks(primary) > 0,
+			_wet[primary_index] != 0)
+	_limit = _rules.targets_for(kind)
+	_damage = _fraction(raw, _rules.percent_for(kind))
+	_kind = kind if _damage > 0 and _limit > 0 else ReactionRules.Kind.NONE
+	return _kind != ReactionRules.Kind.NONE
 
 
 ## Targets the planned reaction may hit; the caller checks the hit budget against it.
 func planned_limit() -> int:
-	return _limit if _planned and _kind != Kind.NONE else 0
+	return _limit if _planned and _kind != ReactionRules.Kind.NONE else 0
 
 
 ## After the direct contact, before its callbacks: admits the planned reaction if the
@@ -188,16 +172,16 @@ func admit(hp_damage: int) -> bool:
 	if not _planned or _admitted or _executing:
 		_refuse()
 		return false
-	if _kind == Kind.NONE or hp_damage <= 0:
+	if _kind == ReactionRules.Kind.NONE or hp_damage <= 0:
 		return false
-	if _kind == Kind.EXPLOSION and not _statuses.consume_corrosion(_primary):
+	if _kind == ReactionRules.Kind.EXPLOSION and not _statuses.consume_corrosion(_primary):
 		return _refuse()
 	_admitted = true
 	admitted_reactions += 1
 	match _kind:
-		Kind.ARC: arcs += 1
-		Kind.CONDUCTING: conducting += 1
-		Kind.EXPLOSION: explosions += 1
+		ReactionRules.Kind.ARC: arcs += 1
+		ReactionRules.Kind.CONDUCTING: conducting += 1
+		ReactionRules.Kind.EXPLOSION: explosions += 1
 	return true
 
 
@@ -211,7 +195,7 @@ func execute(batch: ShotBatch, shot: int, trace: int, contexts: AttackContextPoo
 		return
 	_select(batch, shot, trace)
 	_executing = true
-	var element: DamagePayload.Element = DamagePayload.Element.FIRE if _kind == Kind.EXPLOSION \
+	var element: DamagePayload.Element = DamagePayload.Element.FIRE if _kind == ReactionRules.Kind.EXPLOSION \
 			else DamagePayload.Element.ELECTRIC
 	for index: int in _selected_count:
 		var target: int = _selected[index]
@@ -232,6 +216,8 @@ func execute(batch: ShotBatch, shot: int, trace: int, contexts: AttackContextPoo
 			_refuse()
 			continue
 		var killed: bool = _stats.get_stat(target, StatBlock.Stat.HP) == 0
+		if killed:
+			_statuses.clear_dead_target(target)  # like every other kill: statuses go at once
 		secondary_hits += 1
 		secondary_hp_damage += damage
 		on_hit.emit(_source, target, epoch, sequence, trace, child, damage)
@@ -242,11 +228,14 @@ func execute(batch: ShotBatch, shot: int, trace: int, contexts: AttackContextPoo
 	_executing = false
 
 
-## Ends the pellet's reaction cycle, planned or not.
+## Ends the pellet's reaction cycle, planned or not. Refused during execute().
 func finish() -> void:
+	if _executing:
+		_refuse()
+		return
 	_planned = false
 	_admitted = false
-	_kind = Kind.NONE
+	_kind = ReactionRules.Kind.NONE
 	_selected_count = 0
 
 

@@ -12,6 +12,7 @@ signal on_secondary_hit(source: int, target: int, epoch: int, sequence: int, tra
 signal on_secondary_kill(source: int, target: int, epoch: int, sequence: int, trace: int)
 
 const NO_SLOT: int = -1
+const REACTIONS_ERROR: String = "ShotResolver: reactions must be initialized on the resolver's StatusRuntime"
 
 var contexts: AttackContextPool
 var damage_pipeline: DamagePipeline
@@ -21,6 +22,8 @@ var kills: int = 0
 var no_op_traces: int = 0
 var logic_steps: int = 0
 var reaction_refusals: int = 0
+## Construction errors: reactions that are not initialized or use another StatusRuntime.
+var configuration_errors: int = 0
 var _stats: StatBlock
 var _batch: ShotBatch
 var _payloads: DamagePayloadBuffer
@@ -45,11 +48,15 @@ func _init(stats: StatBlock, batch: ShotBatch, capacity: int, statuses: StatusRu
 	_stats = stats
 	_batch = batch
 	damage_pipeline = DamagePipeline.new(stats, statuses)
-	if reactions != null and statuses != null and reactions.uses_statuses(statuses):
-		_reactions = reactions
-		_hit_budget_per_trace = 1 + reactions.max_targets()
-		reactions.on_hit.connect(_on_reaction_hit)
-		reactions.on_kill.connect(_on_reaction_kill)
+	if reactions != null:
+		if statuses == null or not reactions.uses_statuses(statuses):
+			configuration_errors += 1
+			push_error(REACTIONS_ERROR)
+		else:
+			_reactions = reactions
+			_hit_budget_per_trace = 1 + reactions.max_targets()
+			reactions.on_hit.connect(_on_reaction_hit)
+			reactions.on_kill.connect(_on_reaction_kill)
 	_payloads = DamagePayloadBuffer.new(1)
 	contexts = AttackContextPool.new(capacity)
 	_root.resize(capacity)
@@ -168,7 +175,12 @@ func _on_reaction_kill(source: int, target: int, epoch: int, sequence: int, trac
 
 func damage_configuration_errors() -> int:
 	var reaction_errors: int = 0 if _reactions == null else _reactions.damage_configuration_errors()
-	return _payloads.dropped_count() + damage_pipeline.configuration_errors + reaction_errors
+	return _payloads.dropped_count() + damage_pipeline.configuration_errors + reaction_errors \
+			+ configuration_errors
+
+
+func uses_stats(stats: StatBlock) -> bool:
+	return _stats == stats
 
 
 ## Read-only inspection: owned slots listed at this root's slot. A released root's list is

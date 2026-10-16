@@ -1,9 +1,6 @@
 extends GdUnitTestSuite
-## Physics adapter of M2.3b reactions: ShapeCast3D candidates written into ShotBatch in the
-## physics tick, overflow accounting, per-shot dedup and element gating in HitscanWeapon.
-
-const VALIDATOR_SHIFT: int = 24
-const VALIDATOR_MASK: int = (1 << 39) - 1
+## Physics adapter of M2.3b reactions: the round-robin neighbour cache, its counters and
+## lifecycle, and the copy into ShotBatch on the shot path of HitscanWeapon.
 
 var _root: Node3D
 
@@ -34,53 +31,79 @@ func _body(position: Vector3, layer: int, handle: int) -> StaticBody3D:
 	return body
 
 
-func _candidates(batch: ShotBatch, trace: int) -> Array[int]:
-	var out: Array[int] = []
+func _adapter(batch: ShotBatch, queries_per_tick: int = 4) -> ReactionCandidates:
+	var adapter := ReactionCandidates.new()
+	assert_bool(adapter.initialize(batch, 3000, 64, queries_per_tick)).is_true()
+	_root.add_child(adapter)
+	adapter.set_physics_process(false)  # the tests drive refresh_step() themselves
+	adapter.active = true
+	return adapter
+
+
+func _copied(batch: ShotBatch, adapter: ReactionCandidates, target: int) -> Array[int]:
+	var ticket: int = batch.reserve(0, 1, 1000)
+	batch.write_trace(ticket, 0, target)
+	adapter.copy_to(ticket, 0, target)
+	batch.publish(ticket)
 	batch.prepare()
-	for index: int in batch.candidate_count_at(0, trace):
-		out.append(batch.candidate_at(0, trace, index))
+	var out: Array[int] = []
+	for index: int in batch.candidate_count_at(0, 0):
+		out.append(batch.candidate_at(0, 0, index))
+	batch.consume_prepared()
 	out.sort()
 	return out
 
 
-func test_collect_writes_hitboxes_in_the_sphere_except_the_primary() -> void:
+func test_refresh_caches_hitboxes_in_the_sphere_and_copy_writes_them() -> void:
 	var primary: StaticBody3D = _body(Vector3.ZERO, ReactionCandidates.CANDIDATE_MASK, 10)
 	_body(Vector3(2, 0, 0), ReactionCandidates.CANDIDATE_MASK, 11)
 	_body(Vector3(0, 0, -2), ReactionCandidates.CANDIDATE_MASK, 12)
 	_body(Vector3(5, 0, 0), ReactionCandidates.CANDIDATE_MASK, 13)  # outside 3 m
 	_body(Vector3(-1, 0, 0), 1, 14)  # world layer: never a candidate
-	_body(Vector3(0, 0, 1.5), ReactionCandidates.CANDIDATE_MASK, -1)  # no handle
-	var batch := ShotBatch.new(1, 2, 16, 8)
-	var adapter := ReactionCandidates.new()
-	assert_bool(adapter.initialize(batch, 3000)).is_true()
-	_root.add_child(adapter)
+	_body(Vector3(0, 0, 1.5), ReactionCandidates.CANDIDATE_MASK, -1)  # hitbox without a handle
+	var batch := ShotBatch.new(1, 1, 64, 8)
+	var adapter: ReactionCandidates = _adapter(batch)
+	assert_bool(adapter.track(primary, 10)).is_true()
 	await get_tree().physics_frame
-	var ticket: int = batch.reserve(0, 1, 1000)
-	batch.write_trace(ticket, 0, 10)
-	assert_int(adapter.collect(ticket, 0, primary, 10)).is_equal(2)
-	batch.publish(ticket)
-	assert_array(_candidates(batch, 0)).is_equal([11, 12])
+	adapter.refresh_step()
 	assert_int(adapter.queries).is_equal(1)
+	assert_int(adapter.cached_count(10)).is_equal(2)
+	assert_int(adapter.ignored_results).is_equal(1)
 	assert_int(adapter.overflows).is_equal(0)
+	assert_array(_copied(batch, adapter, 10)).is_equal([11, 12])
+	assert_array(_copied(batch, adapter, 11)).is_empty()  # untracked target: no candidates
+	assert_int(adapter.queries).is_equal(1)  # copying never queries
 
 
 func test_crowd_over_capacity_counts_an_overflow_and_keeps_k() -> void:
 	var primary: StaticBody3D = _body(Vector3.ZERO, ReactionCandidates.CANDIDATE_MASK, 10)
 	for index: int in 3:
 		_body(Vector3(1.5 * (index + 1) - 2.5, 0, 1.5), ReactionCandidates.CANDIDATE_MASK, 20 + index)
-	var batch := ShotBatch.new(1, 1, 32, 2)
-	var adapter := ReactionCandidates.new()
-	adapter.initialize(batch, 3000)
-	_root.add_child(adapter)
+	var batch := ShotBatch.new(1, 1, 64, 2)
+	var adapter: ReactionCandidates = _adapter(batch)
+	adapter.track(primary, 10)
 	await get_tree().physics_frame
-	var ticket: int = batch.reserve(0, 1, 1000)
-	batch.write_trace(ticket, 0, 10)
-	var overflow := func() -> void: assert_int(adapter.collect(ticket, 0, primary, 10)).is_equal(2)
-	await assert_error(overflow).is_push_warning(ReactionCandidates.OVERFLOW_WARNING)
-	batch.publish(ticket)
+	var refresh := func() -> void: adapter.refresh_step()
+	await assert_error(refresh).is_push_warning(ReactionCandidates.OVERFLOW_WARNING)
 	assert_int(adapter.overflows).is_equal(1)
-	assert_int(_candidates(batch, 0).size()).is_equal(2)
-	assert_int(batch.configuration_errors).is_equal(0)  # a crowd is not a configuration error
+	assert_int(adapter.cached_count(10)).is_equal(2)
+	assert_int(adapter.configuration_errors).is_equal(0)  # a crowd is not a configuration error
+	assert_int(batch.configuration_errors).is_equal(0)
+
+
+func test_invalid_ticket_or_trace_is_a_configuration_error() -> void:
+	var batch := ShotBatch.new(1, 1, 64, 2)
+	var adapter: ReactionCandidates = _adapter(batch)
+	await assert_error(func() -> void: assert_int(adapter.copy_to(12345, 0, 10)).is_equal(0)) \
+			.is_push_error(ReactionCandidates.CONFIGURATION_ERROR)
+	var ticket: int = batch.reserve(0, 1, 1000)
+	assert_int(batch.candidate_space(ticket, 0)).is_equal(2)
+	assert_int(batch.candidate_space(ticket, 1)).is_equal(-1)
+	assert_int(adapter.copy_to(ticket, 1, 10)).is_equal(0)
+	assert_int(adapter.configuration_errors).is_equal(2)
+	adapter.reset_diagnostics()
+	await assert_error(func() -> void: assert_bool(adapter.track(null, 1)).is_false()) \
+			.is_push_error(ReactionCandidates.CONFIGURATION_ERROR)
 
 
 func test_candidates_are_written_only_before_publish() -> void:
@@ -90,14 +113,48 @@ func test_candidates_are_written_only_before_publish() -> void:
 	assert_bool(batch.add_candidate(ticket, 0, 5)).is_true()
 	assert_bool(batch.add_candidate(ticket, 0, 6)).is_true()
 	assert_bool(batch.add_candidate(ticket, 0, 7)).is_false()  # full
-	assert_bool(batch.copy_candidates(ticket, 0, 1)).is_true()
 	batch.write_trace(ticket, 0, 1)
 	batch.write_trace(ticket, 1, 1)
 	batch.publish(ticket)
 	assert_bool(batch.add_candidate(ticket, 1, 8)).is_false()  # published: physics is done
+	assert_int(batch.candidate_space(ticket, 1)).is_equal(-1)
 	assert_int(batch.prepare()).is_equal(1)
-	assert_int(batch.candidate_count_at(0, 1)).is_equal(2)
-	assert_int(batch.candidate_at(0, 1, 1)).is_equal(6)
+	assert_int(batch.candidate_count_at(0, 0)).is_equal(2)
+	assert_int(batch.candidate_at(0, 0, 1)).is_equal(6)
+
+
+func test_new_targets_go_first_and_untracked_targets_leave_the_rotation() -> void:
+	var a: StaticBody3D = _body(Vector3.ZERO, ReactionCandidates.CANDIDATE_MASK, 1)
+	var b: StaticBody3D = _body(Vector3(2, 0, 0), ReactionCandidates.CANDIDATE_MASK, 2)
+	var c: StaticBody3D = _body(Vector3(-2, 0, 0), ReactionCandidates.CANDIDATE_MASK, 3)
+	var batch := ShotBatch.new(1, 1, 64, 8)
+	var adapter: ReactionCandidates = _adapter(batch, 1)
+	adapter.track(a, 1)
+	adapter.track(b, 2)
+	await get_tree().physics_frame
+	adapter.refresh_step()
+	adapter.refresh_step()
+	assert_int(adapter.cached_count(1)).is_equal(2)  # b and the not yet tracked c both stand nearby
+	assert_int(adapter.cached_count(2)).is_equal(1)  # c is 4 m from b
+	adapter.track(c, 3)  # a spawn mid-rotation is refreshed on the very next step
+	var before_spawn: int = adapter.queries
+	assert_int(adapter.cached_count(3)).is_equal(0)
+	adapter.refresh_step()
+	assert_int(adapter.queries - before_spawn).is_equal(1)
+	assert_int(adapter.cached_count(3)).is_greater(0)
+	adapter.untrack(2)  # death: out of the rotation, cache dropped
+	assert_int(adapter.tracked_count()).is_equal(2)
+	assert_int(adapter.cached_count(2)).is_equal(0)
+	assert_array(_copied(batch, adapter, 2)).is_empty()
+	adapter.untrack(2)  # already gone: a no-op
+	adapter.untrack(65538)  # stale handle of slot 2: a no-op
+	var queries: int = adapter.queries
+	for step: int in 4:
+		adapter.refresh_step()
+	assert_int(adapter.queries - queries).is_equal(4)
+	# b's hitbox still stands, so a still sees it; the logic rejects a dead handle by HP.
+	assert_int(adapter.cached_count(1)).is_equal(2)
+	assert_int(adapter.configuration_errors).is_equal(0)
 
 
 func _weapon(element: DamagePayload.Element) -> Array:
@@ -114,22 +171,27 @@ func _weapon(element: DamagePayload.Element) -> Array:
 	data.element = element
 	assert_bool(weapon.initialize(data, stats, batch, source)).is_true()
 	weapon.set_physics_process(false)
-	assert_bool(weapon.bind_reactions(reactions)).is_true()
-	assert_bool(weapon.bind_reactions(reactions)).is_false()  # bound once
+	assert_bool(weapon.bind_reactions(reactions, 16, 2)).is_true()
+	assert_bool(weapon.bind_reactions(reactions, 16, 2)).is_false()  # bound once
+	weapon.reaction_candidates.set_physics_process(false)
 	return [weapon, batch]
 
 
-func test_weapon_queries_once_per_distinct_target_for_reactive_elements() -> void:
+func test_weapon_copies_the_cache_without_queries_on_the_shot() -> void:
 	var wall: StaticBody3D = _body(Vector3(0, 0, -6), ReactionCandidates.CANDIDATE_MASK, 3)
 	((wall.get_child(0) as CollisionShape3D).shape as BoxShape3D).size = Vector3(4, 4, 0.5)  # every pellet
-	_body(Vector3(2.5, 0, -6), ReactionCandidates.CANDIDATE_MASK, 4)
+	var side: StaticBody3D = _body(Vector3(2.5, 0, -6), ReactionCandidates.CANDIDATE_MASK, 4)
 	var parts: Array = _weapon(DamagePayload.Element.ELECTRIC)
 	var weapon: HitscanWeapon = parts[0]
 	var batch: ShotBatch = parts[1]
+	weapon.reaction_candidates.track(wall, 3)
+	weapon.reaction_candidates.track(side, 4)
 	await get_tree().physics_frame
+	weapon.reaction_candidates.refresh_step()
+	var queries: int = weapon.reaction_candidates.queries
 	weapon.set_fire_pressed(true)
 	weapon._physics_process(1.0 / 60.0)
-	assert_int(weapon.reaction_candidates.queries).is_equal(1)
+	assert_int(weapon.reaction_candidates.queries).is_equal(queries)
 	assert_int(batch.prepare()).is_equal(1)
 	for trace: int in batch.trace_count_at(0):
 		assert_int(batch.target_at(0, trace)).is_equal(3)
@@ -137,44 +199,15 @@ func test_weapon_queries_once_per_distinct_target_for_reactive_elements() -> voi
 		assert_int(batch.candidate_at(0, trace, 0)).is_equal(4)
 
 
-func test_weapon_without_area_reaction_never_queries() -> void:
+func test_weapon_without_area_reaction_never_refreshes() -> void:
 	var wall: StaticBody3D = _body(Vector3(0, 0, -6), ReactionCandidates.CANDIDATE_MASK, 3)
-	((wall.get_child(0) as CollisionShape3D).shape as BoxShape3D).size = Vector3(4, 4, 0.5)
-	_body(Vector3(2.5, 0, -6), ReactionCandidates.CANDIDATE_MASK, 4)
 	var parts: Array = _weapon(DamagePayload.Element.ICE)
 	var weapon: HitscanWeapon = parts[0]
+	weapon.reaction_candidates.track(wall, 3)
 	await get_tree().physics_frame
+	assert_bool(weapon.reaction_candidates.active).is_false()
+	weapon.reaction_candidates.refresh_step()
 	weapon.set_fire_pressed(true)
 	weapon._physics_process(1.0 / 60.0)
 	assert_int(weapon.reaction_candidates.queries).is_equal(0)
 	assert_int(weapon.traces_cast).is_equal(8)
-
-
-func test_collect_does_not_allocate() -> void:
-	var primary: StaticBody3D = _body(Vector3.ZERO, ReactionCandidates.CANDIDATE_MASK, 10)
-	for index: int in 6:
-		_body(Vector3(cos(index) * 2.0, 0, sin(index) * 2.0), ReactionCandidates.CANDIDATE_MASK, 20 + index)
-	var batch := ShotBatch.new(1, 1, 64, 8)
-	var adapter := ReactionCandidates.new()
-	adapter.initialize(batch, 3000)
-	_root.add_child(adapter)
-	await get_tree().physics_frame
-	for index: int in 300:
-		var ticket: int = batch.reserve(0, 1, 1000)
-		adapter.collect(ticket, 0, primary, 10)
-		batch.abort(ticket)
-	var objects: int = int(Performance.get_monitor(Performance.OBJECT_COUNT))
-	var memory: int = int(Performance.get_monitor(Performance.MEMORY_STATIC))
-	var validator: int = (RefCounted.new().get_instance_id() >> VALIDATOR_SHIFT) & VALIDATOR_MASK
-	var written: int = 0
-	for index: int in 3600:
-		var ticket: int = batch.reserve(0, 1, 1000)
-		written += adapter.collect(ticket, 0, primary, 10)
-		batch.abort(ticket)
-	var created: int = ((RefCounted.new().get_instance_id() >> VALIDATOR_SHIFT) & VALIDATOR_MASK) - validator - 1
-	var object_delta: int = int(Performance.get_monitor(Performance.OBJECT_COUNT)) - objects
-	var memory_delta: int = int(Performance.get_monitor(Performance.MEMORY_STATIC)) - memory
-	assert_int(object_delta).is_equal(0)
-	assert_int(created).is_equal(0)
-	assert_int(memory_delta).is_less_equal(4096)
-	assert_int(written).is_equal(3600 * 6)

@@ -15,6 +15,7 @@ func after_test() -> void:
 static func _config(host_capacity: int) -> RoomConfig:
 	var config := RoomConfig.new()
 	config.host_capacity = host_capacity
+	config.candidate_queries_per_tick = mini(config.candidate_queries_per_tick, host_capacity)
 	return config
 
 
@@ -104,6 +105,9 @@ func test_every_invalid_room_config_field_refuses_the_room() -> void:
 		["visual_packed_bytes", func(c: RoomConfig) -> void: c.visual_packed_bytes = 0],
 		["visual_texture_bytes", func(c: RoomConfig) -> void: c.visual_texture_bytes = 0],
 		["reaction_candidates", func(c: RoomConfig) -> void: c.reaction_candidates = 0],
+		["candidate_queries_per_tick", func(c: RoomConfig) -> void: c.candidate_queries_per_tick = 0],
+		["candidate_queries_per_tick",
+				func(c: RoomConfig) -> void: c.candidate_queries_per_tick = c.host_capacity + 1],
 		["reaction_candidates",
 				func(c: RoomConfig) -> void: c.reaction_candidates = AttackContextPool.HITS_PER_CONTEXT + 1],
 	]

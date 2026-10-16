@@ -203,6 +203,18 @@ func acid_stacks(target: int) -> int:
 	return 0 if index < 0 else _slots_32[index * WIDTH_32 + Field32.ACID_STACKS]
 
 
+## A kill outside a contact or pulse (a reaction's secondary hit, a fall) clears the dead
+## target's statuses at once, keeping its registration and burn generation. Refused while a
+## step, contact or pulse is in progress; a living, unregistered or stale target is a no-op.
+func clear_dead_target(target: int) -> bool:
+	if not _initialized or _busy:
+		return _refuse()
+	var index: int = _index(target)
+	if index >= 0 and _stats.get_stat(target, StatBlock.Stat.HP) <= 0:
+		_clear_statuses(index)
+	return true
+
+
 ## An admitted toxic explosion consumes the primary target's corrosion (M2.3b). Refused
 ## while a step, contact or pulse is in progress; an unregistered or stale handle is a no-op.
 func consume_corrosion(target: int) -> bool:

@@ -373,3 +373,58 @@ func test_reactions_through_the_resolver() -> void:
 	assert_int(resolver.damage_configuration_errors()).is_equal(0)
 	assert_int(resolver.reaction_refusals).is_equal(0)
 	assert_int(resolver.contexts.alive_count()).is_equal(0)
+
+
+## m5: an ELECTRIC weapon on the real shot path: neighbour-cache refresh every physics tick
+## and the cache copy into ShotBatch on each shot, without allocations.
+func test_electric_weapon_candidate_cache_refresh_and_copy() -> void:
+	_root = Node3D.new()
+	add_child(_root)
+	var stats := StatBlock.new(16)
+	var source: int = stats.allocate()
+	stats.set_stat(source, StatBlock.Stat.HP, 100000)
+	var statuses := StatusRuntime.new(stats)
+	var reactions := ReactionRuntime.new(stats, statuses)
+	var batch := ShotBatch.new(4, 8, 16, 8)
+	var weapon := HitscanWeapon.new()
+	weapon.hardware_input_enabled = false
+	_root.add_child(weapon)
+	var data := WeaponData.new()
+	data.element = DamagePayload.Element.ELECTRIC
+	var initialized: bool = weapon.initialize(data, stats, batch, source)
+	var bound: bool = weapon.bind_reactions(reactions, 16, 3)
+	weapon.set_physics_process(false)
+	weapon.reaction_candidates.set_physics_process(false)
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.2, 2.0, 0.5)
+	for index: int in 14:  # a crowd 0.5 m apart: every refresh in the middle fills K and overflows
+		var body := StaticBody3D.new()
+		var collision := CollisionShape3D.new()
+		collision.shape = shape
+		body.add_child(collision)
+		body.position = Vector3(0.5 * float(index) - 3.25, 0, -6)
+		body.collision_layer = ReactionCandidates.CANDIDATE_MASK
+		_root.add_child(body)
+		var handle: int = stats.allocate()
+		Damageable.attach(body, handle)
+		weapon.reaction_candidates.track(body, handle)
+	await get_tree().physics_frame
+	for i: int in WARMUP + MEASURED:
+		if i == WARMUP:
+			_begin()
+		weapon.reaction_candidates.refresh_step()
+		if i % 30 == 0:
+			weapon.set_fire_pressed(true)
+			weapon._physics_process(1.0 / 60.0)
+			weapon.set_fire_pressed(false)
+			weapon.reset_clock(1_000_000)
+			batch.prepare()
+			batch.consume_prepared()
+	var deltas: PackedInt64Array = _deltas()
+	assert_bool(initialized).is_true()
+	assert_bool(bound).is_true()
+	_assert_no_growth(deltas)
+	assert_int(weapon.reaction_candidates.queries).is_equal((WARMUP + MEASURED) * 3)
+	assert_int(weapon.reaction_candidates.overflows).is_greater(0)
+	assert_int(weapon.reaction_candidates.configuration_errors).is_equal(0)
+	assert_int(batch.configuration_errors).is_equal(0)

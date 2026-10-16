@@ -93,6 +93,10 @@ func is_initialized() -> bool:
 
 
 ## Exact packed payload only; excludes RefCounted/Variant/packed-array wrappers.
+func uses_stats(stats: StatBlock) -> bool:
+	return _stats != null and _stats == stats
+
+
 func packed_bytes() -> int:
 	return _condition.size() * 28 + _event_capacity * (20 + 8 * _max_subscriptions) \
 			+ _scratch.size() * 8 + _state_entry.size() * 32

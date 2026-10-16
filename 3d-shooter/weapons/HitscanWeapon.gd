@@ -24,12 +24,9 @@ var _visual_sequence: int = ShotBatch.INVALID
 var _visual_cooldown: int = 0
 ## Reaction candidate adapter (M2.3b); null until bind_reactions().
 var reaction_candidates: ReactionCandidates
-## Diagnostic: microseconds spent gathering candidates for the last published shot.
-var last_candidate_usec: int = 0
 var _element: DamagePayload.Element = DamagePayload.Element.NONE
 var _gather: bool = false
 var _excluded_body: CollisionObject3D
-var _trace_handles: PackedInt64Array = PackedInt64Array()
 
 
 func _ready() -> void:
@@ -49,7 +46,6 @@ func initialize(data: WeaponData, stats: StatBlock, batch: ShotBatch, source: in
 	_pellets = data.pellet_count
 	_element = data.element
 	_excluded_body = excluded_body
-	_trace_handles.resize(batch.trace_capacity())
 	_visual_cooldown = data.cooldown_ticks
 	_rays.resize(batch.trace_capacity())
 	_endpoints.resize(batch.trace_capacity())
@@ -77,20 +73,22 @@ func initialize(data: WeaponData, stats: StatBlock, batch: ShotBatch, source: in
 	return true
 
 
-## Cold: lets this weapon's pellets carry reaction candidates when its element can trigger
-## an area reaction of `reactions` (ReactionRuntime.needs_candidates). Needs a ShotBatch
-## with candidate capacity; otherwise, or for other elements, no query ever runs.
-func bind_reactions(reactions: ReactionRuntime) -> bool:
+## Cold: creates this weapon's neighbour cache for reactions (`slots` tracked targets,
+## `queries_per_tick` cache refreshes per physics tick). It refreshes only when the weapon's
+## element can trigger an area reaction (ReactionRuntime.needs_candidates); otherwise no
+## query ever runs. Targets are tracked by the composition root.
+func bind_reactions(reactions: ReactionRuntime, slots: int, queries_per_tick: int) -> bool:
 	if not _bound or reaction_candidates != null or reactions == null or not reactions.is_initialized() \
 			or _batch.candidate_capacity() <= 0:
 		return false
 	var adapter := ReactionCandidates.new()
-	if not adapter.initialize(_batch, reactions.radius_mm(), _excluded_body):
+	if not adapter.initialize(_batch, reactions.radius_mm(), slots, queries_per_tick, _excluded_body):
 		adapter.free()
 		return false
 	add_child(adapter)
 	reaction_candidates = adapter
 	_gather = reactions.needs_candidates(_element)
+	adapter.active = _gather
 	return true
 
 
@@ -132,7 +130,6 @@ func _physics_process(_delta: float) -> void:
 		return
 	# Ray endpoints are world metres even under the controller's supported uniform scale.
 	var local_aim: Basis = global_basis.inverse() * global_basis.orthonormalized()
-	var candidate_start: int = Time.get_ticks_usec() if _gather else 0
 	for index: int in _pellets:
 		var ray: RayCast3D = _rays[index]
 		ray.target_position = local_aim * _endpoints[index]
@@ -142,11 +139,9 @@ func _physics_process(_delta: float) -> void:
 		_normals[index] = ray.get_collision_normal() if _collided[index] != 0 else Vector3.ZERO
 		var handle: int = Damageable.handle_of(ray.get_collider())
 		_batch.write_trace(ticket, index, handle)
-		if _gather:
-			_gather_candidates(ticket, index, handle, ray.get_collider() as Node3D)
+		if _gather and handle != Damageable.NO_HANDLE:
+			reaction_candidates.copy_to(ticket, index, handle)
 		traces_cast += 1
-	if _gather:
-		last_candidate_usec = Time.get_ticks_usec() - candidate_start
 	var published: bool = _batch.publish(ticket)
 	if not published:
 		_batch.abort(ticket)
@@ -164,20 +159,12 @@ func _physics_process(_delta: float) -> void:
 		_visual_sequence = ShotBatch.INVALID
 
 
-## One query per distinct target of the shot: later pellets on the same target copy it.
-func _gather_candidates(ticket: int, trace: int, handle: int, body: Node3D) -> void:
-	_trace_handles[trace] = handle
-	if handle == Damageable.NO_HANDLE:
-		return
-	for earlier: int in trace:
-		if _trace_handles[earlier] == handle:
-			_batch.copy_candidates(ticket, earlier, trace)
-			return
-	reaction_candidates.collect(ticket, trace, body, handle)
-
-
 func is_initialized() -> bool:
 	return _bound
+
+
+func uses_stats(stats: StatBlock) -> bool:
+	return _bound and _stats == stats
 
 
 func visual_burst_limit() -> int:

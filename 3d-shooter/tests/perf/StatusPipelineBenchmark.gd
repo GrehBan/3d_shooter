@@ -29,6 +29,10 @@ const PHASE_NAMES: PackedStringArray = ["statuses", "resolver", "effects", "mobi
 const GRID_COLUMNS: int = 8
 const GRID_DX: float = 3.0
 const GRID_DZ: float = 2.0
+## --saturated: a 1 m grid, so every one of the 8 queries of a record finds more than K
+## hitboxes (overflow expected) and returns the full K + 2 results: the costliest query.
+const SATURATED_DX: float = 1.0
+const SATURATED_DZ: float = 1.0
 ## Candidate cost per shot frame: histogram of 10 us buckets over 0..10 ms (last bucket open).
 const CANDIDATE_BUCKET_USEC: int = 10
 const CANDIDATE_BUCKETS: int = 1000
@@ -53,6 +57,7 @@ var _candidate_max: int = 0
 var _driver: Driver
 var _published: int = 0
 var _inject_leak: bool = false
+var _saturated: bool = false
 var _leaked: Node
 var _graphical: bool = false
 var _done: bool = false
@@ -86,6 +91,8 @@ func _ready() -> void:
 	for argument: String in OS.get_cmdline_user_args():
 		if argument == "--inject-leak":
 			_inject_leak = true
+		elif argument == "--saturated":
+			_saturated = true
 		else:
 			_abort("unknown option: " + argument)
 			return
@@ -110,7 +117,8 @@ func _ready() -> void:
 		preload("res://tests/fixtures/effects/refuse_damage.tres"),
 		preload("res://tests/fixtures/effects/cooldown_hit.tres")]
 	_sandbox.effect_definitions = definitions
-	_layout_targets(_sandbox.get_node(^"Targets"))
+	_layout_targets(_sandbox.get_node(^"Targets"), SATURATED_DX if _saturated else GRID_DX,
+			SATURATED_DZ if _saturated else GRID_DZ)
 	var player_node: FPSController = _sandbox.get_node(^"Player") as FPSController
 	player_node.hardware_input_enabled = false
 	(player_node.get_node(^"Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
@@ -166,7 +174,7 @@ func on_driver_tick(ticks: int) -> void:
 
 ## Cold, before the Sandbox enters the tree: the scene's three targets plus copies of the
 ## first one, all on the hitbox layer, moved onto the grid in child order.
-static func _layout_targets(targets: Node) -> void:
+static func _layout_targets(targets: Node, dx: float, dz: float) -> void:
 	var prototype: Node3D = targets.get_child(0) as Node3D
 	while targets.get_child_count() < TARGETS:
 		var copy: Node3D = prototype.duplicate() as Node3D
@@ -174,8 +182,8 @@ static func _layout_targets(targets: Node) -> void:
 		targets.add_child(copy)
 	for index: int in TARGETS:
 		var body: Node3D = targets.get_child(index) as Node3D
-		body.position = Vector3(-10.5 + GRID_DX * float(index % GRID_COLUMNS), 1.3,
-				-6.0 - GRID_DZ * float(index / GRID_COLUMNS))
+		body.position = Vector3(-10.5 + dx * float(index % GRID_COLUMNS), 1.3,
+				-6.0 - dz * float(index / GRID_COLUMNS))
 
 
 func _publish_shot() -> void:
@@ -301,9 +309,11 @@ func _finish() -> void:
 	if activity[0] != MEASURE_TICKS / 2 * GROUP or activity[1] <= 0 or activity[2] <= 0 or activity[4] <= 0 \
 			or activity[7] <= 0 or activity[8] <= 0 or activity[9] <= 0 or activity[10] <= 0:
 		failures.append("status or reaction workload inactive")
-	if activity != EXPECTED_ACTIVITY:
+	if not _saturated and activity != EXPECTED_ACTIVITY:
 		failures.append("activity differs from the deterministic expectation")
-	if _candidates.overflows != 0:
+	if _saturated and _candidates.overflows != _candidate_frames * GROUP:
+		failures.append("saturated layout: not every measured query filled K")
+	if not _saturated and _candidates.overflows != 0:
 		failures.append("candidate overflow in a layout that fits K")
 	if _combat.statuses.active_count() != TARGETS:
 		failures.append("not every target carries statuses")

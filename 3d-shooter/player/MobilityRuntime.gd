@@ -91,6 +91,8 @@ func logic_step(tick: int) -> void:
 				DamageApply.apply(stats, entity, damage)
 			else:
 				DamageApply.apply_with_armor(stats, entity, damage, _statuses.effective_armor(entity))
+				if stats.get_stat(entity, StatBlock.Stat.HP) <= 0:
+					_statuses.clear_dead_target(entity)
 	landings.clear()
 	abilities.regen_energy(stats)
 	logic_steps += 1

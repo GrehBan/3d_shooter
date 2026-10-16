@@ -2,6 +2,10 @@ class_name Sandbox
 extends Node3D
 ## Composition root. Content and stores allocate only while loading the sandbox.
 
+## Reaction teams: the player and the room's hostile targets (0 would be neutral).
+const TEAM_PLAYER: int = 1
+const TEAM_HOSTILE: int = 2
+
 var combat: RoomCombat
 var mobility: MobilityRuntime
 var player_handle: int = StatBlock.INVALID_HANDLE
@@ -25,9 +29,6 @@ var _dead_material: StandardMaterial3D
 # Kill events mark targets here; the frame applies the defeated look.
 var _dead_pending: PackedByteArray = PackedByteArray()
 var _dead_dirty: bool = false
-## Reaction teams: the player and the room's hostile targets (0 would be neutral).
-const TEAM_PLAYER: int = 1
-const TEAM_HOSTILE: int = 2
 # Set only by a complete load; logic_step refuses before it, after an abort and for
 # a tick that is not newer than the last one it ran.
 var _loaded: bool = false
@@ -112,7 +113,7 @@ func _ready() -> void:
 	resolver.on_secondary_kill.connect(_on_kill)
 	weapon = get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon
 	if not weapon.initialize(definitions[0], combat.stats, shots, player_handle, get_node(^"Player") as FPSController) \
-			or not weapon.bind_reactions(combat.reactions):
+			or not weapon.bind_reactions(combat.reactions, config.host_capacity, config.candidate_queries_per_tick):
 		_abort_initialization("Sandbox: weapon initialization failed")
 		return
 	visuals = get_node(^"ShotVisualPool") as ShotVisualPool
@@ -128,6 +129,7 @@ func _ready() -> void:
 		combat.stats.set_stat(target, StatBlock.Stat.MAX_HP, 100_000)
 		combat.stats.set_stat(target, StatBlock.Stat.HP, 100_000)
 		Damageable.attach(body, target)
+		weapon.reaction_candidates.track(body as Node3D, target)
 		target_handles.append(target)
 		_target_meshes.append(body.get_child(1) as MeshInstance3D)
 	_dead_pending.resize(target_handles.size())
@@ -261,7 +263,9 @@ func _on_pulse_kill(_source: int, target: int, _credit: int, _generation: int, _
 	_mark_dead(target)
 
 
+## A kill also takes the target out of the reaction neighbour cache (contracts §2).
 func _mark_dead(target: int) -> void:
+	weapon.reaction_candidates.untrack(target)
 	for index: int in target_handles.size():
 		if target_handles[index] == target:
 			_dead_pending[index] = 1

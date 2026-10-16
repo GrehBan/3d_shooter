@@ -31,6 +31,8 @@ const MAX_EFFECT_QUOTA: int = 512
 ## Reaction candidates per trace (K): hitboxes the physics adapter may hand to one reaction.
 ## More bodies in the area is normal (a crowd): extras are dropped and counted.
 @export var reaction_candidates: int = 8
+## Neighbour-cache refreshes per physics tick (round-robin over tracked targets).
+@export var candidate_queries_per_tick: int = 3
 
 
 ## Empty string if every field is in range, otherwise the error naming the first bad field.
@@ -61,8 +63,12 @@ func validation_error() -> String:
 		return ERROR_PREFIX + "visual_packed_bytes"
 	if visual_texture_bytes < 1:
 		return ERROR_PREFIX + "visual_texture_bytes"
+	# One reaction child's hit set holds HITS_PER_CONTEXT targets: more candidates per pellet
+	# could never be registered in one branch.
 	if reaction_candidates < 1 or reaction_candidates > AttackContextPool.HITS_PER_CONTEXT:
 		return ERROR_PREFIX + "reaction_candidates"
+	if candidate_queries_per_tick < 1 or candidate_queries_per_tick > host_capacity:
+		return ERROR_PREFIX + "candidate_queries_per_tick"
 	if effect_work_quota() > MAX_EFFECT_QUOTA:
 		return ERROR_PREFIX + "effect quota: (shot_capacity * trace_cap + host_capacity) * effect_max_subscriptions > 512"
 	return ""
