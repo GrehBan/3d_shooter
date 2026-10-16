@@ -53,17 +53,17 @@ func test_arcs_conduction_explosion_and_gates_golden() -> void:
 	for index: int in 12:
 		stats.allocate()
 		stats.set_stat(index, StatBlock.Stat.HP, 1000000)
-	stats.set_stat(3, StatBlock.Stat.ARMOR, 50000)
-	stats.set_stat(4, StatBlock.Stat.SHIELD, 2000)
-	stats.set_stat(6, StatBlock.Stat.HP, 3000)
+	stats.set_stat(6, StatBlock.Stat.ARMOR, 50000)
+	stats.set_stat(7, StatBlock.Stat.SHIELD, 2000)
+	stats.set_stat(8, StatBlock.Stat.HP, 3000)
 	var statuses := StatusRuntime.new(stats)
 	var reactions := ReactionRuntime.new(stats, statuses)
 	for index: int in 12:
 		statuses.register_target(index)
-		var team: int = 2
-		if index == 0 or index == 10:
+		var team: int = 2  # source 0 and ally 2 are team 1, 3 is neutral
+		if index == 0 or index == 2:
 			team = 1
-		elif index == 11:
+		elif index == 3:
 			team = 0
 		reactions.register_target(index, team, index == 9)
 	var batch := ShotBatch.new(4, 8, 12, 8)
@@ -74,16 +74,20 @@ func test_arcs_conduction_explosion_and_gates_golden() -> void:
 	resolver.on_secondary_kill.connect(_on_secondary_kill)
 	# [tick, source, element, raw, [[primary, [candidates]], ...], {handle: hp before the shot}]
 	var shots: Array = [
-		[1, 0, ELECTRIC, 10003, [[1, [5, 3, 11, 10, 2, 0, 1]]], {}],
+		# Ally 2, neutral 3 and dead 4 sort below the eligible 5, 6, 7: the filters must drop them.
+		[1, 0, ELECTRIC, 10003, [[1, [2, 3, 4, 5, 6, 7]]], {4: 0}],
 		[2, 0, ACID, 1000, [[1, []]], {}],
-		[3, 0, ELECTRIC, 2000, [[1, [8, 7, 6, 5, 4, 3]]], {}],
-		[4, 0, FIRE, 10000, [[1, [6, 7, 8, 9]]], {}],
-		[5, 0, FIRE, 10000, [[1, [7]]], {}],
-		[6, 0, ELECTRIC, 4000, [[9, [1, 2, 7, 9]]], {}],
-		[7, 0, ELECTRIC, 1000, [[4, [5]]], {}],
-		[8, 11, ELECTRIC, 3000, [[2, [3]]], {}],
-		[9, 0, ELECTRIC, 10000, [[8, [7, 5]]], {8: 500}],
-		[10, 0, ELECTRIC, 2000, [[5, [3, 7]], [5, [3, 7]]], {}],
+		[3, 0, ELECTRIC, 2000, [[1, [11, 10, 9, 8, 7, 6, 5, 2]]], {}],
+		[4, 0, FIRE, 10000, [[10, []]], {}],
+		[5, 0, ACID, 1000, [[10, []]], {}],
+		# 10 burns and is corroded; the explosion kills it and its statuses go at once.
+		[6, 0, FIRE, 10000, [[1, [10, 11, 9, 8]]], {10: 1500}],
+		[7, 0, ELECTRIC, 4000, [[9, [1, 2, 9, 11]]], {}],
+		[8, 0, ELECTRIC, 1000, [[7, [5]]], {}],
+		[9, 3, ELECTRIC, 3000, [[5, [6]]], {}],
+		[10, 0, ELECTRIC, 3000, [[2, [5]], [3, [5]]], {}],
+		[11, 0, ELECTRIC, 10000, [[9, [11, 5]]], {9: 500}],
+		[12, 0, ELECTRIC, 2000, [[5, [6, 11]], [5, [6, 11]]], {}],
 	]
 	var corroded_before_explosion: int = 0
 	for shot: Array in shots:
@@ -98,21 +102,23 @@ func test_arcs_conduction_explosion_and_gates_golden() -> void:
 			for candidate: int in pellets[trace][1]:
 				assert_bool(batch.add_candidate(ticket, trace, candidate)).is_true()
 		assert_bool(batch.publish(ticket)).is_true()
-		if _tick == 4:
+		if _tick == 6:
 			corroded_before_explosion = statuses.acid_stacks(1)
 		resolver.logic_step(_tick)
 		_record(PackedInt64Array([300, _tick]))
 		for handle: int in 12:
 			_record(PackedInt64Array([stats.get_stat(handle, StatBlock.Stat.HP),
-					stats.get_stat(handle, StatBlock.Stat.SHIELD), statuses.acid_stacks(handle)]))
-	assert_int(_hash).is_equal(2234811627)
-	assert_int(_words).is_equal(568)
-	assert_int(_secondary_hits).is_equal(19)
-	assert_int(_secondary_kills).is_equal(1)
+					stats.get_stat(handle, StatBlock.Stat.SHIELD), statuses.acid_stacks(handle),
+					statuses.burn_field(handle, StatusRuntime.Field64.BURN_UNTIL)]))
+	assert_int(_hash).is_equal(370127158)
+	assert_int(_words).is_equal(804)
+	assert_int(_secondary_hits).is_equal(18)
+	assert_int(_secondary_kills).is_equal(2)
 	assert_int(corroded_before_explosion).is_equal(1)
-	assert_int(reactions.arcs).is_equal(4)  # t1, t9 and both pellets of t10
-	assert_int(reactions.conducting).is_equal(2)  # corroded t3, WET t6
+	assert_int(reactions.arcs).is_equal(3)  # t1 and both pellets of t12
+	assert_int(reactions.conducting).is_equal(3)  # corroded t3, WET t7 and t11
 	assert_int(reactions.explosions).is_equal(1)
+	assert_int(statuses.acid_stacks(10)).is_equal(0)  # the secondary kill cleared it at once
 	assert_int(reactions.configuration_errors).is_equal(0)
 	assert_int(resolver.damage_configuration_errors()).is_equal(0)
 	assert_int(resolver.reaction_refusals).is_equal(0)

@@ -69,15 +69,82 @@ func _try_reentry(_source: int, _target: int, _epoch: int, _sequence: int, _trac
 	_reentry.append(int(_reactions.register_target(3, 2)))
 	_reentry.append(int(_reactions.plan(0, 3, 1000, DamagePayload.Element.ELECTRIC)))
 	_reentry.append(int(_reactions.reset_room()))
+	_reactions.finish()  # refused while executing: the reaction keeps going
 
 
-func test_arcs_pick_the_smallest_eligible_handles() -> void:
-	_reactions.register_target(6, 1)  # an ally of the source
-	_reactions.register_target(7, 0)  # neutral
-	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [5, 7, 6, 4, 0, 1, 3])
-	assert_array(_secondary).is_equal(PackedInt64Array([3, 5000, 4, 5000]))
+func test_arcs_skip_ally_neutral_and_dead_candidates_with_smaller_handles() -> void:
+	# The ineligible 2, 3 and 4 sort first: without the filters they would take both arcs.
+	_reactions.register_target(2, 1)  # an ally of the source
+	_reactions.register_target(3, 0)  # neutral
+	_stats.set_stat(4, StatBlock.Stat.HP, 0)  # dead
+	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [7, 6, 5, 4, 3, 2, 0, 1])
+	assert_array(_secondary).is_equal(PackedInt64Array([5, 5000, 6, 5000]))
 	assert_int(_reactions.arcs).is_equal(1)
-	assert_int(_reactions.inspected_candidates).is_equal(7)
+	assert_int(_reactions.inspected_candidates).is_equal(8)
+	assert_int(_reactions.stale_skips).is_equal(0)
+
+
+func test_primary_that_is_neutral_or_on_the_source_team_never_reacts() -> void:
+	_reactions.register_target(1, 0)  # neutral primary
+	_reactions.register_target(2, 1)  # primary on the source's team
+	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [3, 4])
+	_shoot(DamagePayload.Element.ELECTRIC, 10000, 2, [3, 4])
+	assert_array(_secondary).is_empty()
+	assert_int(_reactions.admitted_reactions).is_equal(0)
+	assert_int(_primary_hits).is_equal(2)  # the hits themselves still land
+
+
+func test_candidate_released_or_reused_between_physics_and_logic_is_skipped() -> void:
+	_tick += 1
+	_statuses.logic_step(_tick)
+	var ticket: int = _batch.reserve(0, 1, 10000, DamagePayload.Element.ELECTRIC)
+	_batch.write_trace(ticket, 0, 1)
+	_batch.add_candidate(ticket, 0, 2)  # physics saw 2 and 3
+	_batch.add_candidate(ticket, 0, 3)
+	_batch.publish(ticket)
+	_stats.release(2)  # 2 dies and its slot is reused before the logic tick
+	var reused: int = _stats.allocate()
+	_stats.set_stat(reused, StatBlock.Stat.HP, 1_000_000)
+	_statuses.register_target(reused)
+	_reactions.register_target(reused, 2)
+	_stats.release(3)  # 3 is released and its slot stays free
+	_resolver.logic_step(_tick)
+	assert_array(_secondary).is_empty()  # neither the replacement nor a free slot is hit
+	assert_int(_stats.get_stat(reused, StatBlock.Stat.HP)).is_equal(1_000_000)
+	assert_int(_reactions.arcs).is_equal(1)
+
+
+func test_room_reset_is_refused_during_a_reaction_and_resets_nothing() -> void:
+	var combat := RoomCombat.new()
+	var stats: StatBlock = combat.stats
+	for index: int in 4:
+		stats.allocate()
+		stats.set_stat(index, StatBlock.Stat.HP, 1_000_000)
+		combat.statuses.register_target(index)
+		combat.reactions.register_target(index, 1 if index == 0 else 2)
+	var batch := ShotBatch.new(4, 8, 16, 8)
+	var resolver := ShotResolver.new(stats, batch, 128, combat.statuses, combat.reactions)
+	var results := PackedInt64Array()
+	resolver.on_secondary_hit.connect(func(_s: int, _t: int, _e: int, _q: int, _r: int, _c: int, _d: int) -> void:
+		results.append(int(combat.reset_room())))
+	combat.statuses.logic_step(1)
+	var acid := batch.reserve(0, 1, 1000, DamagePayload.Element.ACID)
+	batch.write_trace(acid, 0, 3)
+	batch.publish(acid)
+	resolver.logic_step(1)
+	var ticket: int = batch.reserve(0, 1, 10000, DamagePayload.Element.ELECTRIC)
+	batch.write_trace(ticket, 0, 1)
+	batch.add_candidate(ticket, 0, 2)
+	batch.add_candidate(ticket, 0, 3)
+	batch.publish(ticket)
+	combat.statuses.logic_step(2)
+	await assert_error(func() -> void: resolver.logic_step(2)).is_push_error(ReactionRuntime.CONFIGURATION_ERROR)
+	assert_int(results.size()).is_equal(2)
+	assert_bool(results.has(1)).is_false()
+	assert_int(combat.statuses.acid_stacks(3)).is_equal(1)  # nothing was reset
+	assert_int(combat.reactions.secondary_hits).is_equal(2)
+	assert_bool(combat.reset_room()).is_true()  # quiescent again
+	assert_int(combat.statuses.acid_stacks(3)).is_equal(0)
 
 
 func test_no_reaction_without_hp_damage_team_or_reactive_element() -> void:
@@ -168,7 +235,22 @@ func test_reentry_during_execution_is_refused() -> void:
 	).is_push_error(ReactionRuntime.CONFIGURATION_ERROR)
 	assert_array(_reentry).is_equal(PackedInt64Array([0, 0, 0]))
 	assert_array(_secondary).is_equal(PackedInt64Array([2, 5000]))
-	assert_int(_reactions.configuration_errors).is_equal(3)
+	assert_int(_reactions.configuration_errors).is_equal(4)
+
+
+func test_resolver_refuses_reactions_bound_elsewhere() -> void:
+	var other := StatusRuntime.new(_stats)
+	await assert_error(func() -> void:
+		var resolver := ShotResolver.new(_stats, _batch, 64, other, _reactions)
+		assert_int(resolver.configuration_errors).is_equal(1)
+		assert_int(resolver.damage_configuration_errors()).is_equal(1)
+	).is_push_error(ShotResolver.REACTIONS_ERROR)
+	var broken := ReactionRuntime.new(StatBlock.new(4), _statuses)  # fails: other StatBlock
+	_reactions.reset_diagnostics()
+	await assert_error(func() -> void:
+		var resolver := ShotResolver.new(_stats, _batch, 64, _statuses, broken)
+		assert_int(resolver.configuration_errors).is_equal(1)
+	).is_push_error(ShotResolver.REACTIONS_ERROR)
 
 
 func test_secondary_payloads_are_admitted_only_inside_execution() -> void:

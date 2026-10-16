@@ -3,33 +3,39 @@
 Run from the repository root: python 3d-shooter/tests/tools/reaction_ref.py
 Direct contacts and their statuses come from the status model (status_ref.py); reactions
 are modelled here with plain lists: eligible candidates are filtered and sorted by full
-handle, then the first N are hit. Python unbounded integers define every floor.
+handle, then the first N are hit. Python unbounded integers define every floor. A kill by a
+secondary hit clears the target's statuses at once, like every other kill.
 """
 
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from status_ref import ACID, ELECTRIC, FIRE, NONE, StatusModel, digest  # noqa: E402
+from status_ref import ACID, ELECTRIC, FIRE, StatusModel, digest  # noqa: E402
 
 ARC, CONDUCTING, EXPLOSION = 'arc', 'conducting', 'explosion'
 LIMITS = {ARC: 2, CONDUCTING: 4, EXPLOSION: 4}
 PERCENT = {ARC: 500, CONDUCTING: 500, EXPLOSION: 750}
-TEAMS = {0: 1, 10: 1, 11: 0}  # everyone else is team 2
+# Source 0 and ally 2 are team 1, 3 is neutral, everyone else is hostile team 2; 9 is WET.
+TEAMS = {0: 1, 2: 1, 3: 0}
 WET = {9}
 
 # (tick, source, element, raw, [(primary, [candidates])...], hp edits before the shot)
 SHOTS = (
-    (1, 0, ELECTRIC, 10003, [(1, [5, 3, 11, 10, 2, 0, 1])], {}),
+    # Ally 2, neutral 3 and dead 4 sort below the eligible 5, 6, 7: the filters must drop them.
+    (1, 0, ELECTRIC, 10003, [(1, [2, 3, 4, 5, 6, 7])], {4: 0}),
     (2, 0, ACID, 1000, [(1, [])], {}),
-    (3, 0, ELECTRIC, 2000, [(1, [8, 7, 6, 5, 4, 3])], {}),
-    (4, 0, FIRE, 10000, [(1, [6, 7, 8, 9])], {}),
-    (5, 0, FIRE, 10000, [(1, [7])], {}),
-    (6, 0, ELECTRIC, 4000, [(9, [1, 2, 7, 9])], {}),
-    (7, 0, ELECTRIC, 1000, [(4, [5])], {}),
-    (8, 11, ELECTRIC, 3000, [(2, [3])], {}),
-    (9, 0, ELECTRIC, 10000, [(8, [7, 5])], {8: 500}),
-    (10, 0, ELECTRIC, 2000, [(5, [3, 7]), (5, [3, 7])], {}),
+    (3, 0, ELECTRIC, 2000, [(1, [11, 10, 9, 8, 7, 6, 5, 2])], {}),
+    (4, 0, FIRE, 10000, [(10, [])], {}),
+    (5, 0, ACID, 1000, [(10, [])], {}),
+    # 10 burns and is corroded; the explosion kills it: its statuses must go at once.
+    (6, 0, FIRE, 10000, [(1, [10, 11, 9, 8])], {10: 1500}),
+    (7, 0, ELECTRIC, 4000, [(9, [1, 2, 9, 11])], {}),
+    (8, 0, ELECTRIC, 1000, [(7, [5])], {}),
+    (9, 3, ELECTRIC, 3000, [(5, [6])], {}),
+    (10, 0, ELECTRIC, 3000, [(2, [5]), (3, [5])], {}),
+    (11, 0, ELECTRIC, 10000, [(9, [11, 5])], {9: 500}),
+    (12, 0, ELECTRIC, 2000, [(5, [6, 11]), (5, [6, 11])], {}),
 )
 
 
@@ -39,7 +45,7 @@ def team(handle):
 
 def plan(m, source, primary, raw, element):
     e = m.entities[primary]
-    if team(source) == 0 or raw <= 0:
+    if raw <= 0 or team(source) == 0 or team(primary) in (0, team(source)):
         return None
     if element == ELECTRIC:
         kind = CONDUCTING if e.acid > 0 or primary in WET else ARC
@@ -53,9 +59,9 @@ def plan(m, source, primary, raw, element):
 
 def reference():
     m = StatusModel(12, {})
-    m.entities[3].armor = 50000
-    m.entities[4].shield = 2000
-    m.entities[6].hp = 3000
+    m.entities[6].armor = 50000
+    m.entities[7].shield = 2000
+    m.entities[8].hp = 3000
     words = []
     hits = kills = 0
     for tick, source, element, raw, pellets, edits in SHOTS:
@@ -97,7 +103,7 @@ def reference():
         words.extend((300, tick))
         for handle in range(12):
             e = m.entities[handle]
-            words.extend((e.hp, e.shield, e.acid))
+            words.extend((e.hp, e.shield, e.acid, e.burn['end'] if e.burn else 0))
     return digest(words), len(words), hits, kills
 
 

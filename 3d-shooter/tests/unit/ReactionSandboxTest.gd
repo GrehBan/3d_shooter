@@ -101,3 +101,31 @@ func test_logic_step_is_guarded_before_load_after_abort_and_for_old_ticks() -> v
 	await assert_error(func() -> void: add_child(_scene)).is_push_error("Sandbox: invalid room configuration")
 	_scene.logic_step(GameLoop.get_logic_tick() + 1)  # aborted load: still a no-op
 	assert_int(_scene.phase_steps()).is_equal(0)
+
+
+## End to end: real rays hit TargetCenter, the neighbour cache supplies its neighbours (the
+## side targets 3 m away), and the logic tick resolves the arcs as secondary hits.
+func test_electric_shot_reaches_neighbours_through_rays_cache_and_logic() -> void:
+	_instantiate()
+	_scene.weapon_data_directory = "res://tests/fixtures/weapon_electric"
+	add_child(_scene)
+	_scene.resolver.on_secondary_hit.connect(_count_secondary)
+	var candidates: ReactionCandidates = _scene.weapon.reaction_candidates
+	assert_bool(candidates.active).is_true()
+	assert_int(candidates.tracked_count()).is_equal(3)
+	for frame: int in 3:  # three refreshes per tick: every target has its cache
+		await get_tree().physics_frame
+	var center: int = _scene.target_handles[1]
+	assert_int(candidates.cached_count(center)).is_equal(2)
+	_scene.weapon.set_fire_pressed(true)
+	for frame: int in 6:
+		await get_tree().physics_frame
+	_scene.weapon.set_fire_pressed(false)
+	assert_int(_scene.weapon.state.accepted_shots).is_equal(1)
+	assert_int(_secondary_hits).is_greater(0)
+	assert_int(_scene.combat.reactions.arcs).is_greater(0)
+	var stats: StatBlock = _scene.combat.stats
+	assert_int(stats.get_stat(_scene.target_handles[0], StatBlock.Stat.HP)).is_less(100_000)
+	assert_int(stats.get_stat(_scene.target_handles[2], StatBlock.Stat.HP)).is_less(100_000)
+	assert_int(_scene.effects.accepted_events).is_equal(0)  # no definitions, and never secondaries
+	assert_int(candidates.configuration_errors).is_equal(0)
