@@ -226,3 +226,44 @@ func test_final_close_releases_only_its_own_tree_ownership() -> void:
 	assert_int(_resolver.resolved_shots).is_equal(3)
 	assert_int(_resolver.contexts.alive_count()).is_equal(0)
 	assert_bool(_resolver.reset_room()).is_true()
+
+
+## M2.3a: the weapon element travels WeaponData -> WeaponState -> ShotBatch -> pipeline.
+func test_element_travels_through_the_batch_and_starts_statuses() -> void:
+	var statuses := StatusRuntime.new(_stats)
+	statuses.register_target(_target)
+	var resolver := ShotResolver.new(_stats, _batch, 64, statuses)
+	var data := WeaponData.new()
+	data.element = DamagePayload.Element.ACID
+	var state := WeaponState.new()
+	_stats.set_stat(0, StatBlock.Stat.HP, 1000)  # a living source may fire
+	assert_bool(state.configure(data, 0)).is_true()
+	state.set_pressed(true)
+	var ticket: int = state.request_shot(_batch, _stats, 0)
+	for trace: int in data.pellet_count:
+		_batch.write_trace(ticket, trace, _target if trace == 0 else ShotBatch.INVALID)
+	_batch.publish(ticket)
+	assert_int(_batch.prepare()).is_equal(1)
+	assert_int(_batch.element_at(0)).is_equal(DamagePayload.Element.ACID)
+	resolver.logic_step(1)
+	assert_int(statuses.acid_stacks(_target)).is_equal(1)
+	assert_int(resolver.damage_configuration_errors()).is_equal(0)
+
+
+func test_invalid_element_is_refused_and_physical_pipeline_rejects_elements() -> void:
+	await assert_error(func() -> void:
+		assert_int(_batch.reserve(0, 1, 6000, 9 as DamagePayload.Element)).is_equal(ShotBatch.INVALID)
+	).is_push_error("ShotBatch: invalid request, capacity or identity exhausted")
+	var data := WeaponData.new()
+	data.element = 9 as DamagePayload.Element
+	assert_bool(data.is_valid()).is_false()
+	# Without a StatusRuntime the M2.1 physical contract stays: an elemental pellet is a
+	# configuration error, its child closes and the shot still completes once.
+	var ticket: int = _batch.reserve(0, 1, 6000, DamagePayload.Element.FIRE)
+	_batch.write_trace(ticket, 0, _target)
+	_batch.publish(ticket)
+	await assert_error(func() -> void: _resolver.logic_step(1)).is_push_error(DamagePipeline.INVALID_PAYLOAD_ERROR)
+	assert_int(_stats.get_stat(_target, StatBlock.Stat.HP)).is_equal(10000)
+	assert_int(_resolver.damage_configuration_errors()).is_equal(1)
+	assert_int(_completion.size()).is_equal(3)
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
