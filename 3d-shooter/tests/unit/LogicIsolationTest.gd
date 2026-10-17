@@ -14,7 +14,12 @@ const ALLOWED_NODES: Dictionary = {
 	"res://core/EventBus.gd": "autoload, только сигналы переходов",
 	"res://player/FPSController.gd": "CharacterBody3D, физический адаптер и ввод M1",
 	"res://weapons/HitscanWeapon.gd": "Node3D, reused raycast and input adapter; pure weapon state/resolver",
+	"res://weapons/ReactionCandidates.gd": "Node3D, ShapeCast3D physics adapter: writes candidate handles, no logic",
 }
+## Spatial engine types that must never appear in pure logic (M2.3b): physics hands the
+## logic handles and events only, never positions.
+const SPATIAL_TOKENS: PackedStringArray = ["Vector2", "Vector3", "Transform3D", "Basis",
+		"Quaternion", "global_position", ".position"]
 
 
 static func _collect_recursive(dir_path: String, paths: PackedStringArray) -> void:
@@ -57,3 +62,16 @@ func test_allowlist_entries_still_exist_and_are_nodes() -> void:
 		assert_bool(ResourceLoader.exists(path)).is_true()
 		var script: Script = load(path) as Script
 		assert_bool(ClassDB.is_parent_class(script.get_instance_base_type(), "Node")).is_true()
+
+
+func test_pure_logic_has_no_positions_or_vectors() -> void:
+	var paths := _collect(PackedStringArray())
+	var violations := PackedStringArray()
+	for path: String in paths:
+		if ALLOWED_NODES.has(path):
+			continue
+		var source: String = FileAccess.get_file_as_string(path)
+		for token: String in SPATIAL_TOKENS:
+			if source.contains(token):
+				violations.append("%s: %s" % [path, token])
+	assert_array(violations).is_empty()

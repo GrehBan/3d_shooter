@@ -1,11 +1,17 @@
 class_name StatusPipelineBenchmark
 extends Node
-## M2.3a profile "40 targets + 1 source": the real Sandbox composition root with its
-## RoomCombat statuses, resolver, counter effects and mobility under GameLoop. A physics
-## driver publishes one 8-pellet record per logic tick into ShotBatch (15x the shotgun's
-## cadence), rotating five groups of eight targets over FIRE, ICE, ACID, ELECTRIC and NONE,
-## so every target keeps burning, chilling, freezing, shattering and corroding. Raycasts are
-## not part of this profile: real_pipeline measures them.
+## M2.3 profile "40 targets + 1 source": the real Sandbox composition root with its
+## RoomCombat statuses and reactions, resolver, counter effects and mobility under GameLoop.
+## Forty hitbox targets stand on an 8 x 5 grid (3 m by 2 m), so a 3 m sphere around an inner
+## target overlaps exactly its 8 neighbours (K = 8, no overflow). A physics driver publishes
+## one 8-pellet record per logic tick into ShotBatch (15x the shotgun's cadence): one grid
+## row per record, each pellet on a different target, the element changing every five
+## records (FIRE, ICE, ACID, ELECTRIC, NONE; the last row gets ELECTRIC instead of ACID, so it
+## never corrodes and arcs). The weapon's ReactionCandidates neighbour cache tracks all forty
+## targets; the driver runs its refresh step (candidate_queries_per_tick queries) in every
+## physics tick and times it, and FIRE and ELECTRIC records copy each target's cache into the
+## record. With --saturated the grid shrinks to 1 m so every query fills K and overflows.
+## Raycasts are not part of this profile: real_pipeline measures them.
 
 const SANDBOX: PackedScene = preload("res://world/sandbox/Sandbox.tscn")
 const ROOM: RoomConfig = preload("res://tests/fixtures/rooms/status_load_40.tres")
@@ -22,6 +28,19 @@ const FRAME_CAPACITY: int = 120000
 const ELEMENTS: PackedInt32Array = [DamagePayload.Element.FIRE, DamagePayload.Element.ICE,
 		DamagePayload.Element.ACID, DamagePayload.Element.ELECTRIC, DamagePayload.Element.NONE]
 const PHASE_NAMES: PackedStringArray = ["statuses", "resolver", "effects", "mobility"]
+const GRID_COLUMNS: int = 8
+const GRID_DX: float = 3.0
+const GRID_DZ: float = 2.0
+## --saturated: a 1 m grid, so every query finds more than K hitboxes (overflow expected)
+## and returns the full K + 2 results: the costliest query.
+const SATURATED_DX: float = 1.0
+const SATURATED_DZ: float = 1.0
+## Neighbour-cache refresh cost per physics tick: 10 us buckets over 0..10 ms (last open).
+const CANDIDATE_BUCKET_USEC: int = 10
+const CANDIDATE_BUCKETS: int = 1000
+## Deterministic activity of the measured window, in _activity() order (contracts §10).
+const EXPECTED_ACTIVITY: PackedInt64Array = [14400, 4800, 10944, 718080, 19200, 21000,
+		5760, 1152, 2304, 2304, 20448, 9468000, 7200]
 
 var _sandbox: Sandbox
 var _combat: RoomCombat
@@ -32,9 +51,21 @@ var _visuals: ShotVisualPool
 var _mobility: MobilityRuntime
 var _player: int = StatBlock.INVALID_HANDLE
 var _targets: PackedInt64Array = PackedInt64Array()
+var _bodies: Array[Node3D] = []
+var _candidates: ReactionCandidates
+var _candidate_histogram: PackedInt32Array = PackedInt32Array()
+var _candidate_frames: int = 0
+var _candidate_max: int = 0
+# Shot ticks that copy caches: the refresh and the record write with its copies, together.
+var _shot_histogram: PackedInt32Array = PackedInt32Array()
+var _shot_frames: int = 0
+var _shot_max: int = 0
+var _queries_base: int = 0
+var _overflows_base: int = 0
 var _driver: Driver
 var _published: int = 0
 var _inject_leak: bool = false
+var _saturated: bool = false
 var _leaked: Node
 var _graphical: bool = false
 var _done: bool = false
@@ -68,6 +99,8 @@ func _ready() -> void:
 	for argument: String in OS.get_cmdline_user_args():
 		if argument == "--inject-leak":
 			_inject_leak = true
+		elif argument == "--saturated":
+			_saturated = true
 		else:
 			_abort("unknown option: " + argument)
 			return
@@ -92,6 +125,8 @@ func _ready() -> void:
 		preload("res://tests/fixtures/effects/refuse_damage.tres"),
 		preload("res://tests/fixtures/effects/cooldown_hit.tres")]
 	_sandbox.effect_definitions = definitions
+	_layout_targets(_sandbox.get_node(^"Targets"), SATURATED_DX if _saturated else GRID_DX,
+			SATURATED_DZ if _saturated else GRID_DZ)
 	var player_node: FPSController = _sandbox.get_node(^"Player") as FPSController
 	player_node.hardware_input_enabled = false
 	(player_node.get_node(^"Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
@@ -106,17 +141,22 @@ func _ready() -> void:
 		_abort("Sandbox initialization failed")
 		return
 	_player = _sandbox.player_handle
+	_candidates = _sandbox.weapon.reaction_candidates
+	if _candidates != null:
+		_candidates.set_physics_process(false)  # the driver runs and times its refresh step
+		_candidates.active = true  # the driver's records are elemental; the scene's shotgun is not
+	_candidate_histogram.resize(CANDIDATE_BUCKETS)
+	_shot_histogram.resize(CANDIDATE_BUCKETS)
+	for body: Node in _sandbox.get_node(^"Targets").get_children():
+		_bodies.append(body as Node3D)
 	var host: EffectHost = _sandbox.effect_host
 	for index: int in definitions.size():
 		host.add_effect(_player, EffectTrigger.Trigger.ON_HIT, EffectTrigger.Phase.MAIN, index, index, index, index)
-	# The scene's targets plus extra entities make forty status targets; all cold.
+	# The Sandbox registered all forty hitboxes laid out before it entered the tree.
 	_targets = _sandbox.target_handles.duplicate()
-	while _targets.size() < TARGETS:
-		var entity: int = _combat.stats.allocate()
-		if entity == StatBlock.INVALID_HANDLE or not _combat.statuses.register_target(entity):
-			_abort("target allocation failed")
-			return
-		_targets.append(entity)
+	if _targets.size() != TARGETS or _candidates == null:
+		_abort("target layout failed")
+		return
 	for target: int in _targets:
 		_combat.stats.set_stat(target, StatBlock.Stat.MAX_HP, TARGET_HP)
 		_combat.stats.set_stat(target, StatBlock.Stat.HP, TARGET_HP)
@@ -138,24 +178,74 @@ func _ready() -> void:
 ## Driver callback, once per physics tick before GameLoop: one record every second tick
 ## and, with --inject-leak, one deliberate orphan right after the baseline.
 func on_driver_tick(ticks: int) -> void:
-	if ticks % 2 == 0:
-		_publish_shot()
+	if not _done:
+		var start: int = Time.get_ticks_usec()
+		_candidates.refresh_step()
+		var refreshed: int = Time.get_ticks_usec()
+		var copied: bool = ticks % 2 == 0 and _publish_shot()
+		if _measuring:
+			_candidate_frames += 1
+			_candidate_max = _record(_candidate_histogram, _candidate_max, refreshed - start)
+			if copied:
+				_shot_frames += 1
+				_shot_max = _record(_shot_histogram, _shot_max, Time.get_ticks_usec() - start)
 	if _inject_leak and ticks == WARMUP_TICKS + 1:
 		_leaked = Node.new()  # Deliberate negative probe, cleaned after capture.
 
 
-func _publish_shot() -> void:
+## Adds one sample to a preallocated histogram; returns the new maximum.
+static func _record(histogram: PackedInt32Array, maximum: int, usec: int) -> int:
+	histogram[clampi(usec / CANDIDATE_BUCKET_USEC, 0, CANDIDATE_BUCKETS - 1)] += 1
+	return maxi(maximum, usec)
+
+
+## Cold, before the Sandbox enters the tree: the scene's three targets plus copies of the
+## first one, all on the hitbox layer, moved onto the grid in child order.
+static func _layout_targets(targets: Node, dx: float, dz: float) -> void:
+	var prototype: Node3D = targets.get_child(0) as Node3D
+	while targets.get_child_count() < TARGETS:
+		var copy: Node3D = prototype.duplicate() as Node3D
+		copy.name = "Grid%d" % targets.get_child_count()
+		targets.add_child(copy)
+	for index: int in TARGETS:
+		var body: Node3D = targets.get_child(index) as Node3D
+		body.position = Vector3(-10.5 + dx * float(index % GRID_COLUMNS), 1.3,
+				-6.0 - dz * float(index / GRID_COLUMNS))
+
+
+## Publishes the tick's record; true if its pellets copied neighbour caches.
+func _publish_shot() -> bool:
 	if _done:
-		return
+		return false
 	var group: int = _published % (TARGETS / GROUP)
-	var element: int = ELEMENTS[(_published / (TARGETS / GROUP)) % ELEMENTS.size()]
-	var ticket: int = _batch.reserve(_player, GROUP, RAW_DAMAGE, element as DamagePayload.Element)
+	var element: DamagePayload.Element = ELEMENTS[(_published / (TARGETS / GROUP)) % ELEMENTS.size()] \
+			as DamagePayload.Element
+	# The last row never corrodes, so its ELECTRIC records arc instead of conducting.
+	if group == TARGETS / GROUP - 1 and element == DamagePayload.Element.ACID:
+		element = DamagePayload.Element.ELECTRIC
+	var ticket: int = _batch.reserve(_player, GROUP, RAW_DAMAGE, element)
 	if ticket == ShotBatch.INVALID:
-		return
+		return false
+	var gather: bool = _combat.reactions.needs_candidates(element)
 	for pellet: int in GROUP:
-		_batch.write_trace(ticket, pellet, _targets[group * GROUP + pellet])
+		var target: int = group * GROUP + pellet
+		_batch.write_trace(ticket, pellet, _targets[target])
+		if gather:
+			_candidates.copy_to(ticket, pellet, _targets[target])
 	_batch.publish(ticket)
 	_published += 1
+	return gather
+
+
+## Upper bound of the bucket holding the 99th percentile of a preallocated histogram.
+static func _p99(histogram: PackedInt32Array, samples: int, maximum: int) -> int:
+	var rank: int = (samples * 990 + 999) / 1000
+	var seen: int = 0
+	for bucket: int in CANDIDATE_BUCKETS:
+		seen += histogram[bucket]
+		if seen >= rank and rank > 0:
+			return maximum if bucket == CANDIDATE_BUCKETS - 1 else (bucket + 1) * CANDIDATE_BUCKET_USEC
+	return maximum
 
 
 func _physics_process(_delta: float) -> void:
@@ -187,11 +277,15 @@ func _process(_delta: float) -> void:
 	_last_frame_usec = now
 
 
-## [hits, pulses, statuses applied, pulse damage, effect events, effect actions]
+## [hits, pulses, statuses applied, pulse damage, effect events, effect actions,
+##  reactions, arcs, conducting, explosions, secondary hits, secondary damage, queries]
 func _activity() -> PackedInt64Array:
+	var reactions: ReactionRuntime = _combat.reactions
 	return PackedInt64Array([_resolver.registered_hits, _combat.statuses.processed_pulses,
 			_combat.statuses.applied_statuses, _combat.statuses.pulse_hp_damage,
-			_effects.processed_events, _effects.executed_actions])
+			_effects.processed_events, _effects.executed_actions, reactions.admitted_reactions,
+			reactions.arcs, reactions.conducting, reactions.explosions, reactions.secondary_hits,
+			reactions.secondary_hp_damage, _candidates.queries])
 
 
 func _capture_baseline() -> void:
@@ -201,6 +295,8 @@ func _capture_baseline() -> void:
 	_monitors[3] = _monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
 	_monitors[4] = _monitor(Performance.MEMORY_STATIC)
 	_baseline = _activity()
+	_queries_base = _candidates.queries
+	_overflows_base = _candidates.overflows
 	_last_logic_tick = GameLoop.get_logic_tick()
 	_sandbox.reset_phase_metrics()
 	_measuring = true
@@ -218,7 +314,8 @@ func _finish() -> void:
 	for index: int in activity.size():
 		activity[index] -= _baseline[index]
 	var errors: int = _combat.statuses.configuration_errors + _batch.configuration_errors \
-			+ _resolver.damage_configuration_errors() + _effects.configuration_errors + _visuals.configuration_errors
+			+ _resolver.damage_configuration_errors() + _effects.configuration_errors + _visuals.configuration_errors \
+			+ _combat.reactions.configuration_errors + _resolver.reaction_refusals
 	var dropped: int = _effects.dropped_events + _mobility.landings.dropped_count() + _visuals.dropped_count
 	var refusals: int = _resolver.contexts.capacity_refusals + _resolver.contexts.hit_set_overflows \
 			+ _resolver.contexts.budget_refusals + _resolver.contexts.depth_refusals \
@@ -234,8 +331,19 @@ func _finish() -> void:
 		failures.append("logic sampling incomplete")
 	if _logic_max > LOGIC_LIMIT_USEC:
 		failures.append("logic tick max %d us exceeds the 7000 us budget" % _logic_max)
-	if activity[0] != MEASURE_TICKS / 2 * GROUP or activity[1] <= 0 or activity[2] <= 0 or activity[4] <= 0:
-		failures.append("status workload inactive")
+	if activity[0] != MEASURE_TICKS / 2 * GROUP or activity[1] <= 0 or activity[2] <= 0 or activity[4] <= 0 \
+			or activity[7] <= 0 or activity[8] <= 0 or activity[9] <= 0 or activity[10] <= 0:
+		failures.append("status or reaction workload inactive")
+	if not _saturated and activity != EXPECTED_ACTIVITY:
+		failures.append("activity differs from the deterministic expectation")
+	var window_queries: int = _candidates.queries - _queries_base
+	var window_overflows: int = _candidates.overflows - _overflows_base
+	if _saturated and (window_queries <= 0 or window_overflows != window_queries):
+		failures.append("saturated layout: not every measured query filled K")
+	if _candidates.ignored_results != 0 or _candidates.configuration_errors != 0:
+		failures.append("candidate adapter ignored results or refused calls")
+	if not _saturated and _candidates.overflows != 0:
+		failures.append("candidate overflow in a layout that fits K")
 	if _combat.statuses.active_count() != TARGETS:
 		failures.append("not every target carries statuses")
 	if errors != 0 or dropped != 0 or refusals != 0:
@@ -247,6 +355,13 @@ func _finish() -> void:
 	print("STATUS_PIPELINE activity: hits=%d pulses=%d statuses_applied=%d pulse_damage=%d effect_events=%d effect_actions=%d active=%d kills=%d" % [
 		activity[0], activity[1], activity[2], activity[3], activity[4], activity[5],
 		_combat.statuses.active_count(), _resolver.kills + _combat.statuses.pulse_kills])
+	print("STATUS_PIPELINE reactions: reactions=%d arcs=%d conducting=%d explosions=%d secondary_hits=%d secondary_damage=%d queries=%d overflows=%d" % [
+		activity[6], activity[7], activity[8], activity[9], activity[10], activity[11], activity[12],
+		_candidates.overflows])
+	print("STATUS_PIPELINE candidates: physics_ticks=%d refresh p99<=%d max=%d us shot_ticks=%d refresh+copy p99<=%d max=%d us queries=%d overflows=%d saturated=%s" % [
+		_candidate_frames, _p99(_candidate_histogram, _candidate_frames, _candidate_max), _candidate_max,
+		_shot_frames, _p99(_shot_histogram, _shot_frames, _shot_max), _shot_max, window_queries,
+		window_overflows, _saturated])
 	print("STATUS_PIPELINE logic: samples=%d avg=%.1f us max=%d us limit=%d us" % [
 		_logic_samples, float(_logic_sum) / maxf(1.0, float(_logic_samples)), _logic_max, LOGIC_LIMIT_USEC])
 	var line: String = "STATUS_PIPELINE phases: steps=%d" % steps

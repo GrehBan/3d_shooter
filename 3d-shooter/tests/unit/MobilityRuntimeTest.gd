@@ -212,7 +212,7 @@ func test_cooldown_rebase_does_not_allocate() -> void:
 
 func _definition(kind: int, cost: int = 1000, cooldown: int = 6) -> MovementAbilityData:
 	var data := MovementAbilityData.new()
-	data.set("kind", kind)
+	data.kind = kind as MovementAbilityData.Kind
 	data.energy_cost = cost
 	data.cooldown_ticks = cooldown
 	data.usable_on_ground = kind != MovementAbilityData.Kind.DOUBLE_JUMP
@@ -320,7 +320,7 @@ func test_null_room_stats_leave_mobility_inert() -> void:
 	# A valid frozen preset is still refused: an inert runtime grants nothing.
 	assert_bool(_made_mobility.grant_content(0, registry, category)).is_false()
 	_made_mobility.logic_step(5)
-	assert_int(_made_mobility.get(&"_last_tick")).is_equal(-1)  # an initialized runtime would store 5
+	assert_int(_made_mobility.last_tick()).is_equal(-1)  # an initialized runtime would store 5
 	assert_int(_made_mobility.logic_steps).is_equal(0)
 	_made_mobility.reset_clock(5)
 	assert_object(_made_mobility.abilities).is_null()  # reset neither crashes nor builds stores

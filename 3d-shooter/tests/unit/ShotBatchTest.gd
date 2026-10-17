@@ -103,9 +103,15 @@ func test_room_preset_dimensions_memory_and_retained_children_budget() -> void:
 	assert_int(WeaponData.validate_room([data], 4, 32, 131072, 16, 35, 0)).is_equal(-1)
 	data.pellet_count = 12
 	assert_int(WeaponData.validate_room([data], 2, 32, 131072, 16, 32, 0)).is_equal(12)
-	for property: StringName in [&"pellet_count", &"damage_raw", &"range_mm", &"cooldown_ticks"]:
+	var corruptions: Array[Callable] = [
+		func(d: WeaponData) -> void: d.pellet_count = 0,
+		func(d: WeaponData) -> void: d.damage_raw = 0,
+		func(d: WeaponData) -> void: d.range_mm = 0,
+		func(d: WeaponData) -> void: d.cooldown_ticks = 0,
+	]
+	for corrupt: Callable in corruptions:
 		var invalid := WeaponData.new()
-		invalid.set(property, 0)
+		corrupt.call(invalid)
 		assert_bool(invalid.is_valid()).is_false()
 	data.spread_millidegrees = 90000
 	assert_bool(data.is_valid()).is_false()

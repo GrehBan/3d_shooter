@@ -22,6 +22,11 @@ var _visual_source: int = ShotBatch.INVALID
 var _visual_epoch: int = ShotBatch.INVALID
 var _visual_sequence: int = ShotBatch.INVALID
 var _visual_cooldown: int = 0
+## Reaction candidate adapter (M2.3b); null until bind_reactions().
+var reaction_candidates: ReactionCandidates
+var _element: DamagePayload.Element = DamagePayload.Element.NONE
+var _gather: bool = false
+var _excluded_body: CollisionObject3D
 
 
 func _ready() -> void:
@@ -39,6 +44,8 @@ func initialize(data: WeaponData, stats: StatBlock, batch: ShotBatch, source: in
 	_stats = stats
 	_batch = batch
 	_pellets = data.pellet_count
+	_element = data.element
+	_excluded_body = excluded_body
 	_visual_cooldown = data.cooldown_ticks
 	_rays.resize(batch.trace_capacity())
 	_endpoints.resize(batch.trace_capacity())
@@ -63,6 +70,25 @@ func initialize(data: WeaponData, stats: StatBlock, batch: ShotBatch, source: in
 			ray.add_exception(excluded_body)
 		_rays[index] = ray
 	_bound = true
+	return true
+
+
+## Cold: creates this weapon's neighbour cache for reactions (`slots` tracked targets,
+## `queries_per_tick` cache refreshes per physics tick). It refreshes only when the weapon's
+## element can trigger an area reaction (ReactionRuntime.needs_candidates); otherwise no
+## query ever runs. Targets are tracked by the composition root.
+func bind_reactions(reactions: ReactionRuntime, slots: int, queries_per_tick: int) -> bool:
+	if not _bound or reaction_candidates != null or reactions == null or not reactions.is_initialized() \
+			or _batch.candidate_capacity() <= 0:
+		return false
+	var adapter := ReactionCandidates.new()
+	if not adapter.initialize(_batch, reactions.radius_mm(), slots, queries_per_tick, _excluded_body):
+		adapter.free()
+		return false
+	add_child(adapter)
+	reaction_candidates = adapter
+	_gather = reactions.needs_candidates(_element)
+	adapter.active = _gather
 	return true
 
 
@@ -111,7 +137,10 @@ func _physics_process(_delta: float) -> void:
 		_collided[index] = 1 if ray.is_colliding() else 0
 		_points[index] = ray.get_collision_point() if _collided[index] != 0 else Vector3.ZERO
 		_normals[index] = ray.get_collision_normal() if _collided[index] != 0 else Vector3.ZERO
-		_batch.write_trace(ticket, index, Damageable.handle_of(ray.get_collider()))
+		var handle: int = Damageable.handle_of(ray.get_collider())
+		_batch.write_trace(ticket, index, handle)
+		if _gather and handle != Damageable.NO_HANDLE:
+			reaction_candidates.copy_to(ticket, index, handle)
 		traces_cast += 1
 	var published: bool = _batch.publish(ticket)
 	if not published:
@@ -132,6 +161,10 @@ func _physics_process(_delta: float) -> void:
 
 func is_initialized() -> bool:
 	return _bound
+
+
+func uses_stats(stats: StatBlock) -> bool:
+	return _bound and _stats == stats
 
 
 func visual_burst_limit() -> int:

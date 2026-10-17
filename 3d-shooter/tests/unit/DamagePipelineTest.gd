@@ -199,7 +199,7 @@ func test_suppressed_invalid_hot_path_no_allocations() -> void:
 func test_resolver_scratch_failure_closes_tree_without_negative_hit_and_resets() -> void:
 	var batch := ShotBatch.new(1, 1, 1)
 	var resolver := ShotResolver.new(_stats, batch, 4)
-	var scratch: DamagePayloadBuffer = resolver.get("_payloads") as DamagePayloadBuffer
+	var scratch: DamagePayloadBuffer = resolver.scratch_payloads()
 	scratch.push(0, _target, 1_000, DamagePayload.Element.NONE, 0, 0, -1)
 	var ticket: int = batch.reserve(65_536, 1, 1_000)
 	batch.write_trace(ticket, 0, _target)

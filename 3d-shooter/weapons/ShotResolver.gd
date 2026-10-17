@@ -6,8 +6,13 @@ signal on_fire(source: int, epoch: int, sequence: int, root: int)
 signal on_hit(source: int, target: int, epoch: int, sequence: int, trace: int, child: int, hp_damage: int)
 signal on_kill(source: int, target: int, epoch: int, sequence: int, trace: int)
 signal on_attack_resolved(source: int, epoch: int, sequence: int, root: int)
+## Secondary hits of reactions (M2.3b), kept apart from on_hit/on_kill so that direct-hit
+## consumers such as EffectRunner never receive them by accident.
+signal on_secondary_hit(source: int, target: int, epoch: int, sequence: int, trace: int, child: int, hp_damage: int)
+signal on_secondary_kill(source: int, target: int, epoch: int, sequence: int, trace: int)
 
 const NO_SLOT: int = -1
+const REACTIONS_ERROR: String = "ShotResolver: reactions must be initialized on the resolver's StatusRuntime"
 
 var contexts: AttackContextPool
 var damage_pipeline: DamagePipeline
@@ -16,9 +21,14 @@ var registered_hits: int = 0
 var kills: int = 0
 var no_op_traces: int = 0
 var logic_steps: int = 0
+var reaction_refusals: int = 0
+## Construction errors: reactions that are not initialized or use another StatusRuntime.
+var configuration_errors: int = 0
 var _stats: StatBlock
 var _batch: ShotBatch
 var _payloads: DamagePayloadBuffer
+var _reactions: ReactionRuntime
+var _hit_budget_per_trace: int = 1
 var _last_tick: int = -1
 var _root: PackedInt64Array = PackedInt64Array()
 var _source: PackedInt64Array = PackedInt64Array()
@@ -31,10 +41,22 @@ var _owned_next: PackedInt32Array = PackedInt32Array()
 
 
 ## statuses, when given, enables elemental pellets; it must use the same StatBlock.
-func _init(stats: StatBlock, batch: ShotBatch, capacity: int, statuses: StatusRuntime = null) -> void:
+## reactions, when given, must use the same statuses; each pellet may then add one reaction
+## child (depth 2) with up to reactions.max_targets() secondary hits.
+func _init(stats: StatBlock, batch: ShotBatch, capacity: int, statuses: StatusRuntime = null,
+		reactions: ReactionRuntime = null) -> void:
 	_stats = stats
 	_batch = batch
 	damage_pipeline = DamagePipeline.new(stats, statuses)
+	if reactions != null:
+		if statuses == null or not reactions.uses_statuses(statuses):
+			configuration_errors += 1
+			push_error(REACTIONS_ERROR)
+		else:
+			_reactions = reactions
+			_hit_budget_per_trace = 1 + reactions.max_targets()
+			reactions.on_hit.connect(_on_reaction_hit)
+			reactions.on_kill.connect(_on_reaction_kill)
 	_payloads = DamagePayloadBuffer.new(1)
 	contexts = AttackContextPool.new(capacity)
 	_root.resize(capacity)
@@ -64,7 +86,7 @@ func logic_step(tick: int) -> void:
 func _resolve(shot: int) -> void:
 	var source: int = _batch.source_at(shot)
 	var traces: int = _batch.trace_count_at(shot)
-	var root: int = contexts.open_root(source, traces)
+	var root: int = contexts.open_root(source, traces * _hit_budget_per_trace)
 	if root == AttackContextPool.INVALID_HANDLE:
 		return
 	var slot: int = root % HandlePool.INDEX_SPAN
@@ -86,30 +108,86 @@ func _resolve(shot: int) -> void:
 			continue
 		if contexts.try_register_hit(child, target):
 			var before: int = _stats.get_stat(target, StatBlock.Stat.HP)
-			var payload: int = _payloads.push(source, target, _batch.damage_at(shot), _batch.element_at(shot),
-					0, 0, child)
+			var raw: int = _batch.damage_at(shot)
+			var element: DamagePayload.Element = _batch.element_at(shot)
+			# Reaction inputs (team, pre-contact corrosion, WET) are captured before the contact.
+			var planned: bool = _reactions != null and _reactions.plan(source, target, raw, element)
+			var payload: int = _payloads.push(source, target, raw, element, 0, 0, child)
 			if payload == DamagePayloadBuffer.INVALID_SLOT:
+				_finish_reaction()
 				close_context(child)
 				continue
 			var damage: int = damage_pipeline.resolve_front(_payloads, source, _epoch[slot],
 					_sequence[slot], trace)
 			if damage == DamagePipeline.INVALID_RESULT:
+				_finish_reaction()
 				_payloads.pop_front()
 				close_context(child)
 				continue
 			var killed: bool = before > 0 and _stats.get_stat(target, StatBlock.Stat.HP) == 0
+			var reaction_child: int = AttackContextPool.INVALID_HANDLE
+			if planned and damage > 0:
+				reaction_child = _open_reaction(child, damage, shot, trace)
 			registered_hits += 1
 			on_hit.emit(source, target, _epoch[slot], _sequence[slot], trace, child, damage)
 			if killed:
 				kills += 1
 				on_kill.emit(source, target, _epoch[slot], _sequence[slot], trace)
+			if reaction_child != AttackContextPool.INVALID_HANDLE:
+				_reactions.execute(trace, contexts, reaction_child, _epoch[slot], _sequence[slot])
+				close_context(reaction_child)
+			_finish_reaction()
 			_payloads.pop_front()
 		close_context(child)
 	close_context(root)
 
 
+## Opens the reaction child before the primary callbacks and admits the planned reaction
+## on it (target selection; an admitted explosion consumes corrosion here). A full context
+## pool or a hit budget smaller than the reaction's targets is a configuration error, and a
+## reaction without eligible candidates is not admitted: no acid is consumed either way.
+func _open_reaction(child: int, damage: int, shot: int, trace: int) -> int:
+	if contexts.budget_left(child) < _reactions.planned_limit():
+		reaction_refusals += 1
+		return AttackContextPool.INVALID_HANDLE
+	var reaction_child: int = open_child(child)
+	if reaction_child == AttackContextPool.INVALID_HANDLE:
+		reaction_refusals += 1
+		return reaction_child
+	if not _reactions.admit(damage, _batch, shot, trace):
+		close_context(reaction_child)
+		return AttackContextPool.INVALID_HANDLE
+	return reaction_child
+
+
+func _finish_reaction() -> void:
+	if _reactions != null:
+		_reactions.finish()
+
+
+func _on_reaction_hit(source: int, target: int, epoch: int, sequence: int, trace: int,
+		child: int, hp_damage: int) -> void:
+	on_secondary_hit.emit(source, target, epoch, sequence, trace, child, hp_damage)
+
+
+func _on_reaction_kill(source: int, target: int, epoch: int, sequence: int, trace: int) -> void:
+	on_secondary_kill.emit(source, target, epoch, sequence, trace)
+
+
+## The resolver's one-record payload scratch, for fault-injection tests of its overflow
+## path. Gameplay never writes it.
+func scratch_payloads() -> DamagePayloadBuffer:
+	return _payloads
+
+
 func damage_configuration_errors() -> int:
-	return _payloads.dropped_count() + damage_pipeline.configuration_errors
+	var reaction_errors: int = 0 if _reactions == null else _reactions.damage_configuration_errors()
+	return _payloads.dropped_count() + damage_pipeline.configuration_errors + reaction_errors \
+			+ configuration_errors
+
+
+func uses_stats(stats: StatBlock) -> bool:
+	return _stats == stats
 
 
 ## Read-only inspection: owned slots listed at this root's slot. A released root's list is
@@ -185,6 +263,7 @@ func reset_room() -> bool:
 	_payloads.reset_dropped_count()
 	damage_pipeline.reset_counters()
 	_last_tick = -1
+	reaction_refusals = 0
 	resolved_shots = 0
 	registered_hits = 0
 	kills = 0

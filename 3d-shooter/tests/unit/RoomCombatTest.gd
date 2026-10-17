@@ -2,7 +2,7 @@ extends GdUnitTestSuite
 ## RoomCombat owns the room's StatBlock and StatusRuntime; runtimes only hold references.
 
 const SANDBOX: PackedScene = preload("res://world/sandbox/Sandbox.tscn")
-var _scene: Node3D
+var _scene: Sandbox
 var _made_combat: RoomCombat
 
 
@@ -15,6 +15,7 @@ func after_test() -> void:
 static func _config(host_capacity: int) -> RoomConfig:
 	var config := RoomConfig.new()
 	config.host_capacity = host_capacity
+	config.candidate_queries_per_tick = mini(config.candidate_queries_per_tick, host_capacity)
 	return config
 
 
@@ -46,14 +47,14 @@ func test_cold_creation_then_hot_stat_access_does_not_allocate() -> void:
 
 
 func test_sandbox_room_owns_the_single_stat_block_and_reset_keeps_it() -> void:
-	_scene = SANDBOX.instantiate() as Node3D
+	_scene = SANDBOX.instantiate() as Sandbox
 	(_scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
 	(_scene.get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon).hardware_input_enabled = false
 	add_child(_scene)
-	var combat: RoomCombat = _scene.get(&"combat") as RoomCombat
-	var mobility: MobilityRuntime = _scene.get(&"mobility") as MobilityRuntime
-	var player: int = _scene.get(&"player_handle")
-	var shots: ShotBatch = _scene.get(&"shots") as ShotBatch
+	var combat: RoomCombat = _scene.combat
+	var mobility: MobilityRuntime = _scene.mobility
+	var player: int = _scene.player_handle
+	var shots: ShotBatch = _scene.shots
 	var stats_before: StatBlock = combat.stats
 	var alive_before: int = combat.stats.alive_count()
 	combat.stats.set_stat(player, StatBlock.Stat.HP, 12345)
@@ -61,15 +62,15 @@ func test_sandbox_room_owns_the_single_stat_block_and_reset_keeps_it() -> void:
 		await get_tree().physics_frame
 	var tick_before: int = GameLoop.get_logic_tick()
 	var epoch_before: int = shots.epoch
-	_scene.call(&"reset_mobility_clock")
+	_scene.reset_mobility_clock()
 	assert_int(tick_before).is_greater(0)
 	assert_int(GameLoop.get_logic_tick()).is_equal(0)  # the reset really ran to the end
 	assert_int(shots.epoch).is_equal(epoch_before + 1)
 	assert_int(_scene.process_mode).is_not_equal(Node.PROCESS_MODE_DISABLED)
 	assert_object(mobility.stats).is_same(combat.stats)
-	assert_object(_scene.get(&"effects").get(&"_stats")).is_same(combat.stats)
-	assert_object(_scene.get(&"resolver").get(&"_stats")).is_same(combat.stats)
-	assert_object(_scene.get(&"weapon").get(&"_stats")).is_same(combat.stats)
+	assert_bool(_scene.effects.uses_stats(combat.stats)).is_true()
+	assert_bool(_scene.resolver.uses_stats(combat.stats)).is_true()
+	assert_bool(_scene.weapon.uses_stats(combat.stats)).is_true()
 	assert_object(combat.stats).is_same(stats_before)
 	assert_int(alive_before).is_equal(4)  # player and three targets
 	assert_int(combat.stats.alive_count()).is_equal(4)
@@ -91,7 +92,7 @@ func test_every_invalid_room_config_field_refuses_the_room() -> void:
 		["context_capacity", func(c: RoomConfig) -> void: c.context_capacity = 0],
 		["context_capacity", func(c: RoomConfig) -> void: c.context_capacity = over],
 		["deferred_reserve", func(c: RoomConfig) -> void: c.deferred_reserve = -1],
-		["deferred_reserve", func(c: RoomConfig) -> void: c.deferred_reserve = 64],
+		["deferred_reserve", func(c: RoomConfig) -> void: c.deferred_reserve = c.context_capacity],
 		["landing_capacity", func(c: RoomConfig) -> void: c.landing_capacity = 0],
 		["landing_capacity", func(c: RoomConfig) -> void: c.landing_capacity = LandingEventQueue.MAX_CAPACITY + 1],
 		["effect_entries", func(c: RoomConfig) -> void: c.effect_entries = 0],
@@ -103,6 +104,12 @@ func test_every_invalid_room_config_field_refuses_the_room() -> void:
 		["visual_nodes", func(c: RoomConfig) -> void: c.visual_nodes = 0],
 		["visual_packed_bytes", func(c: RoomConfig) -> void: c.visual_packed_bytes = 0],
 		["visual_texture_bytes", func(c: RoomConfig) -> void: c.visual_texture_bytes = 0],
+		["reaction_candidates", func(c: RoomConfig) -> void: c.reaction_candidates = 0],
+		["candidate_queries_per_tick", func(c: RoomConfig) -> void: c.candidate_queries_per_tick = 0],
+		["candidate_queries_per_tick",
+				func(c: RoomConfig) -> void: c.candidate_queries_per_tick = c.host_capacity + 1],
+		["reaction_candidates",
+				func(c: RoomConfig) -> void: c.reaction_candidates = AttackContextPool.HITS_PER_CONTEXT + 1],
 	]
 	for entry: Array in cases:
 		var config := RoomConfig.new()

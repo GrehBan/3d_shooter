@@ -2,6 +2,10 @@ class_name Sandbox
 extends Node3D
 ## Composition root. Content and stores allocate only while loading the sandbox.
 
+## Reaction teams: the player and the room's hostile targets (0 would be neutral).
+const TEAM_PLAYER: int = 1
+const TEAM_HOSTILE: int = 2
+
 var combat: RoomCombat
 var mobility: MobilityRuntime
 var player_handle: int = StatBlock.INVALID_HANDLE
@@ -25,6 +29,14 @@ var _dead_material: StandardMaterial3D
 # Kill events mark targets here; the frame applies the defeated look.
 var _dead_pending: PackedByteArray = PackedByteArray()
 var _dead_dirty: bool = false
+# The same kill events mark targets here; the next physics tick takes them out of the
+# reaction neighbour cache and off the hitbox layer, so the logic tick never touches nodes.
+var _retire_pending: PackedByteArray = PackedByteArray()
+var _retire_dirty: bool = false
+# Set only by a complete load; logic_step refuses before it, after an abort and for
+# a tick that is not newer than the last one it ran.
+var _loaded: bool = false
+var _last_logic_step: int = -1
 ## Diagnostic logic-phase timing (statuses, resolver, effects, mobility), outside the
 ## deterministic contour: only benchmarks read it, gameplay logic never does.
 enum Phase { STATUSES, RESOLVER, EFFECTS, MOBILITY }
@@ -41,6 +53,8 @@ var _phase_histogram: PackedInt32Array = _zeroes(PHASE_COUNT * PHASE_BUCKETS)
 
 
 func _ready() -> void:
+	# Death marks retire before the reaction cache refresh (0) and the weapon (10).
+	process_physics_priority = -1
 	var registry := Registry.new()
 	var category: int = registry.add_category(&"movement", preload("res://player/MovementAbilityData.gd"))
 	if registry.load_directory(category, movement_data_directory) != 3:
@@ -60,7 +74,8 @@ func _ready() -> void:
 		return
 	var config: RoomConfig = combat.config
 	var stride: int = WeaponData.validate_room(definitions, config.shot_capacity, config.trace_cap,
-			config.shot_packed_bytes, config.host_capacity, config.context_capacity, config.deferred_reserve)
+			config.shot_packed_bytes, config.host_capacity, config.context_capacity, config.deferred_reserve,
+			config.reaction_candidates, true)
 	if stride < 0:
 		_abort_initialization("Sandbox: invalid weapon preset or room capacity")
 		return
@@ -83,7 +98,8 @@ func _ready() -> void:
 	combat.statuses.on_pulse_hit.connect(_on_pulse_hit)
 	combat.statuses.on_pulse_kill.connect(_on_pulse_kill)
 	player_handle = combat.stats.allocate()
-	if not combat.statuses.register_target(player_handle, StatusRuntime.Profile.PLAYER):
+	if not combat.statuses.register_target(player_handle, StatusRuntime.Profile.PLAYER) \
+			or not combat.reactions.register_target(player_handle, TEAM_PLAYER):
 		_abort_initialization("Sandbox: player status registration failed")
 		return
 	combat.stats.set_stat(player_handle, StatBlock.Stat.MAX_HP, 100_000)
@@ -94,12 +110,16 @@ func _ready() -> void:
 		_abort_initialization("Sandbox: movement grant failed")
 		return
 	(get_node(^"Player") as FPSController).bind_mobility(mobility, player_handle)
-	shots = ShotBatch.new(config.shot_capacity, stride, config.host_capacity)
-	resolver = ShotResolver.new(combat.stats, shots, config.context_capacity, combat.statuses)
+	shots = ShotBatch.new(config.shot_capacity, stride, config.host_capacity, config.reaction_candidates)
+	resolver = ShotResolver.new(combat.stats, shots, config.context_capacity, combat.statuses,
+			combat.reactions)
 	resolver.on_hit.connect(_on_hit)
 	resolver.on_kill.connect(_on_kill)
+	# Secondary reaction hits only repaint kills; they never reach EffectRunner in M2.3b.
+	resolver.on_secondary_kill.connect(_on_kill)
 	weapon = get_node(^"Player/Camera3D/HitscanWeapon") as HitscanWeapon
-	if not weapon.initialize(definitions[0], combat.stats, shots, player_handle, get_node(^"Player") as FPSController):
+	if not weapon.initialize(definitions[0], combat.stats, shots, player_handle, get_node(^"Player") as FPSController) \
+			or not weapon.bind_reactions(combat.reactions, config.host_capacity, config.candidate_queries_per_tick):
 		_abort_initialization("Sandbox: weapon initialization failed")
 		return
 	visuals = get_node(^"ShotVisualPool") as ShotVisualPool
@@ -108,20 +128,24 @@ func _ready() -> void:
 		return
 	for body: Node in get_node(^"Targets").get_children():
 		var target: int = combat.stats.allocate()
-		if not combat.statuses.register_target(target, StatusRuntime.Profile.ORDINARY):
+		if not combat.statuses.register_target(target, StatusRuntime.Profile.ORDINARY) \
+				or not combat.reactions.register_target(target, TEAM_HOSTILE):
 			_abort_initialization("Sandbox: target status registration failed")
 			return
 		combat.stats.set_stat(target, StatBlock.Stat.MAX_HP, 100_000)
 		combat.stats.set_stat(target, StatBlock.Stat.HP, 100_000)
 		Damageable.attach(body, target)
+		weapon.reaction_candidates.track(body as CollisionObject3D, target)
 		target_handles.append(target)
 		_target_meshes.append(body.get_child(1) as MeshInstance3D)
 	_dead_pending.resize(target_handles.size())
+	_retire_pending.resize(target_handles.size())
 	(weapon.get_node(^"Viewmodel") as ViewmodelSway).bind(get_node(^"Player") as FPSController,
 			get_node(^"Player/Camera3D") as Camera3D)
 	_dead_material = StandardMaterial3D.new()
 	_dead_material.albedo_color = Color(0.22, 0.25, 0.27)
 	GameLoop.logic_tick.connect(_on_logic_tick)
+	_loaded = true
 	EventBus.room_entered.emit(room_id)
 
 
@@ -130,8 +154,12 @@ func _on_logic_tick(tick: int) -> void:
 
 
 ## The room's single logic subscriber, public so tests and benchmarks can drive a tick:
-## statuses (expiry, burn pulses) -> resolver -> effects -> mobility.
+## statuses (expiry, burn pulses) -> resolver -> effects -> mobility. A no-op before a
+## complete load, after an aborted one and for a tick not newer than the last step.
 func logic_step(tick: int) -> void:
+	if not _loaded or tick <= _last_logic_step:
+		return
+	_last_logic_step = tick
 	var start: int = Time.get_ticks_usec()
 	if not combat.statuses.logic_step(tick):
 		_abort_initialization("Sandbox: status tick failed")
@@ -221,8 +249,24 @@ func _process(_delta: float) -> void:
 	apply_dead_marks()
 
 
+func _physics_process(_delta: float) -> void:
+	apply_retire_marks()
+
+
+## Physics-side half of the kill path: the targets marked by kill events since the last
+## physics tick leave the reaction neighbour cache and the hitbox layer (contracts §7).
+func apply_retire_marks() -> void:
+	if not _retire_dirty:
+		return
+	_retire_dirty = false
+	for index: int in _retire_pending.size():
+		if _retire_pending[index] != 0:
+			_retire_pending[index] = 0
+			weapon.reaction_candidates.untrack(target_handles[index])
+
+
 ## Frame-side half of the kill path: greys the targets marked by kill events since the last
-## frame. Visible defeated targets keep an inspectable collider and full handle.
+## frame. Defeated targets stay visible; their hitbox has left layer 7 in the physics tick.
 func apply_dead_marks() -> void:
 	if not _dead_dirty:
 		return
@@ -242,11 +286,14 @@ func _on_pulse_kill(_source: int, target: int, _credit: int, _generation: int, _
 	_mark_dead(target)
 
 
+## Logic tick: only marks. The frame repaints, the next physics tick retires the hitbox.
 func _mark_dead(target: int) -> void:
 	for index: int in target_handles.size():
 		if target_handles[index] == target:
 			_dead_pending[index] = 1
 			_dead_dirty = true
+			_retire_pending[index] = 1
+			_retire_dirty = true
 
 
 func _on_hit(source: int, _target: int, _epoch: int, _sequence: int,
@@ -261,6 +308,7 @@ func _on_pulse_hit(source: int, _target: int, _credit: int, _generation: int, _o
 
 
 func _abort_initialization(message: String) -> void:
+	_loaded = false
 	process_mode = Node.PROCESS_MODE_DISABLED
 	if GameLoop.logic_tick.is_connected(_on_logic_tick):
 		GameLoop.logic_tick.disconnect(_on_logic_tick)
@@ -284,5 +332,6 @@ func reset_mobility_clock() -> void:
 		return
 	mobility.reset_clock(old_tick)
 	GameLoop.reset_clock()
+	_last_logic_step = -1
 	reset_phase_metrics()
 	EventBus.room_entered.emit(room_id)

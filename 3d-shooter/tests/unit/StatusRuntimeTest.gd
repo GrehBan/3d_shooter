@@ -615,3 +615,57 @@ func test_mismatched_pipeline_stats_rejected_cold_and_never_write() -> void:
 		assert_int(bad.resolve_front(_payloads)).is_equal(-1)
 	).is_push_error(DamagePipeline.INVALID_PAYLOAD_ERROR)
 	assert_int(other.get_stat(handle, StatBlock.Stat.HP)).is_equal(12345)
+
+
+## clear_dead_target (M2.3b kill paths): a no-op on a living target and on a stale handle,
+## refused while a pulse is being resolved.
+func test_clear_dead_target_needs_a_dead_target_and_a_quiet_runtime() -> void:
+	_hit(DamagePayload.Element.ACID)
+	_hit(DamagePayload.Element.FIRE)
+	assert_bool(_statuses.clear_dead_target(_target)).is_true()  # alive: statuses stay
+	assert_int(_statuses.acid_stacks(_target)).is_equal(1)
+	assert_int(_burn(F.BURN_UNTIL)).is_greater(0)
+	assert_bool(_statuses.clear_dead_target(_target + HandlePool.INDEX_SPAN)).is_true()  # stale
+	assert_int(_statuses.acid_stacks(_target)).is_equal(1)
+	_statuses.on_pulse_hit.connect(_try_clear_dead)
+	await assert_error(func() -> void:
+		_advance(_burn(F.BURN_NEXT_DUE))
+	).is_push_error(StatusRuntime.CONFIGURATION_ERROR)
+	assert_array(_reentry).is_equal(PackedInt64Array([0]))
+	assert_int(_statuses.acid_stacks(_target)).is_equal(1)
+	_statuses.on_pulse_hit.disconnect(_try_clear_dead)
+	_stats.set_stat(_target, StatBlock.Stat.HP, 0)
+	assert_bool(_statuses.clear_dead_target(_target)).is_true()
+	assert_int(_statuses.acid_stacks(_target)).is_equal(0)
+	assert_int(_burn(F.BURN_UNTIL)).is_equal(0)
+	assert_int(_statuses.configuration_errors).is_equal(1)
+
+
+func _try_clear_dead(_source_arg: int, _target_arg: int, _credit: int, _generation: int, _ordinal: int,
+		_damage: int, _epoch: int, _sequence: int, _trace: int, _tags: int) -> void:
+	if _reentry.is_empty():
+		_reentry.append(int(_statuses.clear_dead_target(_target)))
+
+
+func test_lethal_landing_clears_statuses_at_once() -> void:
+	var stats := StatBlock.new(4)
+	var entity: int = stats.allocate()
+	stats.set_stat(entity, StatBlock.Stat.HP, 100000)
+	var statuses := StatusRuntime.new(stats)
+	var mobility := MobilityRuntime.new(stats, LandingEventQueue.DEFAULT_CAPACITY, statuses)
+	statuses.register_target(entity, StatusRuntime.Profile.ORDINARY)
+	statuses.logic_step(1)
+	var pipeline := DamagePipeline.new(stats, statuses)
+	var payloads := DamagePayloadBuffer.new(1)
+	for element: DamagePayload.Element in [DamagePayload.Element.ACID, DamagePayload.Element.FIRE]:
+		payloads.push(-1, entity, 1000, element, 0, 0, -1)
+		pipeline.resolve_front(payloads)
+		payloads.pop_front()
+	assert_int(statuses.acid_stacks(entity)).is_equal(1)
+	stats.set_stat(entity, StatBlock.Stat.HP, 1000)
+	mobility.landings.push(entity, 9000, 0)  # 10000 raw fall damage: lethal
+	mobility.logic_step(1)
+	assert_int(stats.get_stat(entity, StatBlock.Stat.HP)).is_equal(0)
+	assert_int(statuses.acid_stacks(entity)).is_equal(0)
+	assert_int(statuses.burn_field(entity, F.BURN_UNTIL)).is_equal(0)
+	assert_int(statuses.configuration_errors).is_equal(0)

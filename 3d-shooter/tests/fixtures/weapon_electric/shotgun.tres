@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://weapons/WeaponData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+pellet_count = 8
+damage_raw = 6000
+range_mm = 40000
+spread_millidegrees = 5000
+cooldown_ticks = 15
+pattern = &"central_ring"
+semi_auto = true
+element = 1

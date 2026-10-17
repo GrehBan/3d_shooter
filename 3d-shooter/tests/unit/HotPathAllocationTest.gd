@@ -332,3 +332,109 @@ func test_status_runtime_step_contacts_and_pulses() -> void:
 	assert_int(statuses.active_count()).is_equal(40)
 	assert_int(statuses.configuration_errors).is_equal(0)
 	assert_int(pipeline.configuration_errors).is_equal(0)
+
+
+func test_reactions_through_the_resolver() -> void:
+	var stats := StatBlock.new(48)
+	var statuses := StatusRuntime.new(stats)
+	var reactions := ReactionRuntime.new(stats, statuses)
+	var handles := PackedInt64Array()
+	for index: int in 41:
+		handles.append(stats.allocate())
+		stats.set_stat(handles[index], StatBlock.Stat.HP, 2_000_000_000)
+		statuses.register_target(handles[index])
+		reactions.register_target(handles[index], 1 if index == 0 else 2)
+	var batch := ShotBatch.new(4, 8, 48, 8)
+	var resolver := ShotResolver.new(stats, batch, 128, statuses, reactions)
+	resolver.on_secondary_hit.connect(_count_hit)
+	# ACID, then ELECTRIC (conducting), FIRE (explosion), ELECTRIC (arcs): every reaction kind.
+	var elements := PackedInt32Array([DamagePayload.Element.ACID, DamagePayload.Element.ELECTRIC,
+			DamagePayload.Element.ACID, DamagePayload.Element.FIRE, DamagePayload.Element.ELECTRIC])
+	for tick: int in range(1, WARMUP + MEASURED + 1):
+		if tick == WARMUP + 1:
+			_hits = 0
+			_begin()
+		statuses.logic_step(tick)
+		var group: int = tick % 5
+		var ticket: int = batch.reserve(handles[0], 8, 1000, elements[(tick / 5) % 5] as DamagePayload.Element)
+		for pellet: int in 8:
+			batch.write_trace(ticket, pellet, handles[1 + group * 8 + pellet])
+			for candidate: int in 8:
+				batch.add_candidate(ticket, pellet, handles[1 + group * 8 + candidate])
+		batch.publish(ticket)
+		resolver.logic_step(tick)
+	var deltas: PackedInt64Array = _deltas()
+	_assert_no_growth(deltas)
+	assert_int(_hits).is_greater(10000)  # secondary hits really ran in the window
+	assert_int(reactions.explosions).is_greater(0)
+	assert_int(reactions.conducting).is_greater(0)
+	assert_int(reactions.arcs).is_greater(0)
+	assert_int(reactions.configuration_errors).is_equal(0)
+	assert_int(resolver.damage_configuration_errors()).is_equal(0)
+	assert_int(resolver.reaction_refusals).is_equal(0)
+	assert_int(resolver.contexts.alive_count()).is_equal(0)
+
+
+## m5: an ELECTRIC weapon on the real shot path: neighbour-cache refresh every physics tick
+## and the cache copy into ShotBatch on each shot, without allocations.
+func test_electric_weapon_candidate_cache_refresh_copy_death_and_respawn() -> void:
+	_root = Node3D.new()
+	add_child(_root)
+	var stats := StatBlock.new(16)
+	var source: int = stats.allocate()
+	stats.set_stat(source, StatBlock.Stat.HP, 100000)
+	var statuses := StatusRuntime.new(stats)
+	var reactions := ReactionRuntime.new(stats, statuses)
+	var batch := ShotBatch.new(4, 8, 16, 8)
+	var weapon := HitscanWeapon.new()
+	weapon.hardware_input_enabled = false
+	_root.add_child(weapon)
+	var data := WeaponData.new()
+	data.element = DamagePayload.Element.ELECTRIC
+	var initialized: bool = weapon.initialize(data, stats, batch, source)
+	var bound: bool = weapon.bind_reactions(reactions, 16, 3)
+	weapon.set_physics_process(false)
+	weapon.reaction_candidates.set_physics_process(false)
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.2, 2.0, 0.5)
+	var bodies: Array[StaticBody3D] = []
+	var handles: PackedInt64Array = PackedInt64Array()
+	for index: int in 14:  # a crowd 0.5 m apart: every refresh in the middle fills K and overflows
+		var body := StaticBody3D.new()
+		var collision := CollisionShape3D.new()
+		collision.shape = shape
+		body.add_child(collision)
+		body.position = Vector3(0.5 * float(index) - 3.25, 0, -6)
+		body.collision_layer = ReactionCandidates.CANDIDATE_MASK
+		_root.add_child(body)
+		var handle: int = stats.allocate()
+		Damageable.attach(body, handle)
+		weapon.reaction_candidates.track(body, handle)
+		bodies.append(body)
+		handles.append(handle)
+	await get_tree().physics_frame
+	for i: int in WARMUP + MEASURED:
+		if i == WARMUP:
+			_begin()
+		if i % 7 == 3:  # applied death (untrack, off layer 7) and respawn with a new generation
+			var k: int = (i / 7) % bodies.size()
+			weapon.reaction_candidates.untrack(handles[k])
+			handles[k] += HandlePool.INDEX_SPAN
+			Damageable.attach(bodies[k], handles[k])
+			weapon.reaction_candidates.track(bodies[k], handles[k])
+		weapon.reaction_candidates.refresh_step()
+		if i % 30 == 0:
+			weapon.set_fire_pressed(true)
+			weapon._physics_process(1.0 / 60.0)
+			weapon.set_fire_pressed(false)
+			weapon.reset_clock(1_000_000)
+			batch.prepare()
+			batch.consume_prepared()
+	var deltas: PackedInt64Array = _deltas()
+	assert_bool(initialized).is_true()
+	assert_bool(bound).is_true()
+	_assert_no_growth(deltas)
+	assert_int(weapon.reaction_candidates.queries).is_equal((WARMUP + MEASURED) * 3)
+	assert_int(weapon.reaction_candidates.overflows).is_greater(0)
+	assert_int(weapon.reaction_candidates.configuration_errors).is_equal(0)
+	assert_int(batch.configuration_errors).is_equal(0)

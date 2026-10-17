@@ -33,7 +33,8 @@ const EXPECTED_SYNTHETIC_CHECKSUM: int = 3032385286
 const EXIT_PASS: int = 0
 const EXIT_FAIL: int = 1
 const EXIT_SETUP_ERROR: int = 2
-const SyntheticCombatLoad: Script = preload("res://tests/perf/SyntheticCombatLoad.gd")
+const SyntheticCombatLoad := preload("res://tests/perf/SyntheticCombatLoad.gd")
+const GameLoopScript := preload("res://core/GameLoop.gd")
 
 enum Phase { LOADING, WARMUP, MEASURE, DONE }
 
@@ -42,8 +43,8 @@ var _ticks: int = 0
 var _scene_path: String = DEFAULT_SCENE
 var _use_synthetic: bool = true
 var _inject_leak: bool = false
-var _game_loop: Node
-var _load: RefCounted
+var _game_loop: GameLoopScript
+var _load: SyntheticCombatLoad
 
 var _objects_before: int = 0
 var _nodes_before: int = 0
@@ -68,7 +69,7 @@ func _initialize() -> void:
 		else:
 			_abort("неизвестная опция %s" % arg)
 			return
-	_game_loop = root.get_node_or_null(^"GameLoop")
+	_game_loop = root.get_node_or_null(^"GameLoop") as GameLoopScript
 	if _game_loop == null:
 		_abort("autoload GameLoop не найден")
 		return
@@ -100,8 +101,8 @@ func _physics_process(_delta: float) -> bool:
 func _start_warmup() -> void:
 	if _use_synthetic:
 		_load = SyntheticCombatLoad.new(LOAD_SEED)
-		_load.set(&"inject_leak", _inject_leak)
-		_game_loop.connect(&"logic_tick", Callable(_load, &"on_logic_tick"))
+		_load.inject_leak = _inject_leak
+		_game_loop.logic_tick.connect(_load.on_logic_tick)
 	_phase = Phase.WARMUP
 	_ticks = 0
 
@@ -112,17 +113,17 @@ func _start_measure() -> void:
 	_resources_before = _monitor(Performance.OBJECT_RESOURCE_COUNT)
 	_orphans_before = _monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
 	_memory_before = _monitor(Performance.MEMORY_STATIC)
-	_last_logic_tick = _game_loop.call(&"get_logic_tick")
+	_last_logic_tick = _game_loop.get_logic_tick()
 	_phase = Phase.MEASURE
 	_ticks = 0
 
 
 func _sample_logic_tick() -> void:
-	var logic_tick: int = _game_loop.call(&"get_logic_tick")
+	var logic_tick: int = _game_loop.get_logic_tick()
 	if logic_tick == _last_logic_tick:
 		return
 	_last_logic_tick = logic_tick
-	var usec: int = _game_loop.call(&"get_last_logic_tick_usec")
+	var usec: int = _game_loop.get_last_logic_tick_usec()
 	_logic_samples += 1
 	_logic_usec_sum += usec
 	if usec > _logic_usec_max:
@@ -152,13 +153,13 @@ func _finish() -> void:
 	var dropped: int = 0
 	var config_errors: int = 0
 	if _load != null:
-		checksum = int(_load.get(&"checksum"))
+		checksum = _load.checksum
 		if checksum != EXPECTED_SYNTHETIC_CHECKSUM:
 			failures.append("контрольная сумма нагрузки %d, эталон %d" % [checksum, EXPECTED_SYNTHETIC_CHECKSUM])
-		dropped = int(_load.call(&"dropped_payloads"))
+		dropped = _load.dropped_payloads()
 		if dropped != 0:
 			failures.append("отброшено записей урона: %d (ожидается 0)" % dropped)
-		config_errors = int(_load.call(&"config_errors"))
+		config_errors = _load.config_errors()
 		if config_errors != 0:
 			failures.append("ошибок конфигурации конвейера: %d (ожидается 0)" % config_errors)
 
@@ -173,8 +174,8 @@ func _finish() -> void:
 	print("REGRESS wall_time=%d ms" % (Time.get_ticks_msec() - _wall_start_msec))
 
 	if _load != null:
-		_game_loop.disconnect(&"logic_tick", Callable(_load, &"on_logic_tick"))
-		_load.call(&"dispose")
+		_game_loop.logic_tick.disconnect(_load.on_logic_tick)
+		_load.dispose()
 		_load = null
 
 	if failures.is_empty():

@@ -97,6 +97,33 @@ func resolve_dot_front(payloads: DamagePayloadBuffer, statuses: StatusRuntime) -
 	return damage
 
 
+## Secondary hit of a reaction (M2.3b): ELECTRIC or FIRE with flags exactly SECONDARY,
+## admitted only while the given ReactionRuntime executes its own reaction and only on a
+## pipeline with that runtime's StatusRuntime. Shield, effective armor and HP apply once;
+## no statuses, shatter, crit or further reactions follow.
+func resolve_secondary_front(payloads: DamagePayloadBuffer, reactions: ReactionRuntime) -> int:
+	if not _compatible:
+		return _reject()
+	var slot: int = payloads.front_slot()
+	if slot == DamagePayloadBuffer.INVALID_SLOT:
+		return INVALID_RESULT
+	var element: DamagePayload.Element = payloads.get_element(slot)
+	if _statuses == null or reactions == null or not reactions.uses_statuses(_statuses) \
+			or not reactions.is_executing() or payloads.get_phase(slot) != DamagePayload.Phase.BASE \
+			or payloads.get_flags(slot) != DamagePayload.Flag.SECONDARY or payloads.get_amount(slot) < 0 \
+			or (element != DamagePayload.Element.ELECTRIC and element != DamagePayload.Element.FIRE):
+		return _reject()
+	var target: int = payloads.get_target(slot)
+	var damage: int = 0
+	if _stats.is_valid(target) and _stats.get_stat(target, StatBlock.Stat.HP) > 0:
+		payloads.set_phase(slot, DamagePayload.Phase.MITIGATION)
+		payloads.set_phase(slot, DamagePayload.Phase.APPLY)
+		damage = DamageApply.apply_with_armor(_stats, target, payloads.get_amount(slot),
+				_statuses.effective_armor(target))
+	payloads.set_phase(slot, DamagePayload.Phase.POST_HIT)
+	return damage
+
+
 func reset_counters() -> void:
 	configuration_errors = 0
 	_error_reported = false

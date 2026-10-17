@@ -18,6 +18,8 @@ var config: RoomConfig:
 var stats: StatBlock
 ## The single status authority of the room, built on `stats`.
 var statuses: StatusRuntime
+## The room's reactions, built on `stats` and `statuses`.
+var reactions: ReactionRuntime
 var _config: RoomConfig
 
 
@@ -32,13 +34,19 @@ func _init(room_config: RoomConfig = null) -> void:
 	_config = source.duplicate() as RoomConfig
 	stats = StatBlock.new(_config.host_capacity)
 	statuses = StatusRuntime.new(stats)
+	reactions = ReactionRuntime.new(stats, statuses)
 
 
 func is_initialized() -> bool:
-	return stats != null and statuses.is_initialized()
+	return stats != null and statuses.is_initialized() and reactions.is_initialized()
 
 
-## Quiescent room reset of room-owned state; StatBlock and registrations survive.
-## false (with the store's own diagnostic) if a status step or contact is in progress.
+## Quiescent room reset of room-owned state (statuses, reaction metrics); StatBlock and
+## registrations survive. false, with the busy store's own diagnostic and nothing reset,
+## while a status step, contact, pulse or reaction is in progress.
 func reset_room() -> bool:
-	return is_initialized() and statuses.reset_room()
+	if not is_initialized():
+		return false
+	if not reactions.can_reset_room():
+		return reactions.reset_room()
+	return statuses.reset_room() and reactions.reset_room()

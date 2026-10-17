@@ -1,6 +1,9 @@
 class_name ShotBatch
 extends RefCounted
 ## Atomic complete-shot transport. The room owns this ONE sequence allocator.
+## Each trace may carry up to candidate_capacity() reaction candidates: full handles found
+## by the physics adapter around the hit target, written only before publish (physics
+## tick) and read only from prepared shots (logic tick).
 
 const INVALID: int = -1
 const INT_MAX: int = 0x7FFFFFFFFFFFFFFF
@@ -28,12 +31,18 @@ var _written: PackedByteArray = PackedByteArray()
 var _order: PackedInt32Array = PackedInt32Array()
 var _owner: PackedInt64Array = PackedInt64Array()
 var _next_sequence: PackedInt64Array = PackedInt64Array()
+var _candidate_capacity: int = 0
+var _candidates: PackedInt64Array = PackedInt64Array()
+var _candidate_count: PackedInt32Array = PackedInt32Array()
 
 
-func _init(shots: int, stride: int, hosts: int) -> void:
-	assert(shots > 0 and stride > 0 and hosts > 0 and hosts <= HandlePool.MAX_CAPACITY)
+func _init(shots: int, stride: int, hosts: int, candidates: int = 0) -> void:
+	assert(shots > 0 and stride > 0 and hosts > 0 and hosts <= HandlePool.MAX_CAPACITY and candidates >= 0)
 	_shots = shots
 	_stride = stride
+	_candidate_capacity = maxi(candidates, 0)
+	_candidates.resize(shots * stride * _candidate_capacity)
+	_candidate_count.resize(shots * stride)
 	_ticket.resize(shots)
 	_source.resize(shots)
 	_sequence.resize(shots)
@@ -57,6 +66,10 @@ func trace_capacity() -> int:
 
 func shot_capacity() -> int:
 	return _shots
+
+
+func candidate_capacity() -> int:
+	return _candidate_capacity
 
 
 func count() -> int:
@@ -98,6 +111,7 @@ func reserve(source: int, traces: int, damage: int,
 	_state[slot] = 1
 	for trace: int in traces:
 		_written[slot * _stride + trace] = 0
+		_candidate_count[slot * _stride + trace] = 0
 	_occupied += 1
 	return _ticket[slot]
 
@@ -113,6 +127,49 @@ func write_trace(ticket: int, index: int, target: int) -> bool:
 	_written[offset] = 1
 	_written_count[slot] += 1
 	return true
+
+
+## Physics tick, before publish: appends one candidate handle to a trace. false when the
+## ticket is not an open reservation, the trace is out of range or its candidates are full.
+func add_candidate(ticket: int, trace: int, handle: int) -> bool:
+	var slot: int = _find(ticket)
+	if slot < 0 or _state[slot] != 1 or trace < 0 or trace >= _count[slot]:
+		return false
+	var offset: int = slot * _stride + trace
+	var used: int = _candidate_count[offset]
+	if used >= _candidate_capacity:
+		return false
+	_candidates[offset * _candidate_capacity + used] = handle
+	_candidate_count[offset] = used + 1
+	return true
+
+
+## Bulk form of add_candidate for the physics adapter: copies up to `count` handles of
+## `source` starting at `from` into the trace, as many as fit. Returns how many were written,
+## or INVALID if the ticket is not an open reservation or the trace is out of range. One
+## lookup for the whole copy; `source` is only read.
+func add_candidates(ticket: int, trace: int, source: PackedInt64Array, from: int, count: int) -> int:
+	var slot: int = _find(ticket)
+	if slot < 0 or _state[slot] != 1 or trace < 0 or trace >= _count[slot] or from < 0 \
+			or count < 0 or from + count > source.size():
+		return INVALID
+	var offset: int = slot * _stride + trace
+	var used: int = _candidate_count[offset]
+	var written: int = mini(count, _candidate_capacity - used)
+	var base: int = offset * _candidate_capacity + used
+	for index: int in written:
+		_candidates[base + index] = source[from + index]
+	_candidate_count[offset] = used + written
+	return written
+
+
+## Free candidate slots of an open reservation's trace; -1 if the ticket is not an open
+## reservation or the trace is out of range.
+func candidate_space(ticket: int, trace: int) -> int:
+	var slot: int = _find(ticket)
+	if slot < 0 or _state[slot] != 1 or trace < 0 or trace >= _count[slot]:
+		return INVALID
+	return _candidate_capacity - _candidate_count[slot * _stride + trace]
 
 
 func publish(ticket: int) -> bool:
@@ -180,6 +237,14 @@ func trace_count_at(index: int) -> int:
 func target_at(index: int, trace: int) -> int:
 	assert(trace >= 0 and trace < trace_count_at(index))
 	return _target[_order[index] * _stride + trace]
+
+
+func candidate_count_at(index: int, trace: int) -> int:
+	return _candidate_count[_order[index] * _stride + trace]
+
+
+func candidate_at(index: int, trace: int, candidate: int) -> int:
+	return _candidates[(_order[index] * _stride + trace) * _candidate_capacity + candidate]
 
 
 ## Only prepared complete shots are consumed; unfinished reservations remain hidden.
