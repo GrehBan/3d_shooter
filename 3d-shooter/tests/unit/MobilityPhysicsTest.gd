@@ -503,8 +503,8 @@ func test_two_controllers_share_single_regen_and_scene_subscriber_lifecycle() ->
 
 func test_invalid_sandbox_preset_disables_controller_and_logic_subscription() -> void:
 	var before: int = GameLoop.logic_tick.get_connections().size()
-	var scene: Node3D = load("res://world/sandbox/Sandbox.tscn").instantiate() as Node3D
-	scene.set("movement_data_directory", "res://tests/fixtures/movement_invalid")
+	var scene: Sandbox = load("res://world/sandbox/Sandbox.tscn").instantiate() as Sandbox
+	scene.movement_data_directory = "res://tests/fixtures/movement_invalid"
 	var player: FPSController = scene.get_node(^"Player") as FPSController
 	player.hardware_input_enabled = false
 	var initial_position: Vector3 = player.position
@@ -795,14 +795,14 @@ func test_new_generation_or_runtime_binding_starts_new_physical_lifecycle() -> v
 
 
 func test_scene_clock_reset_uses_exact_old_game_loop_tick() -> void:
-	var scene: Node3D = load("res://world/sandbox/Sandbox.tscn").instantiate() as Node3D
+	var scene: Sandbox = load("res://world/sandbox/Sandbox.tscn").instantiate() as Sandbox
 	(scene.get_node(^"Player") as FPSController).hardware_input_enabled = false
 	_arena.add_child(scene)
-	var runtime: MobilityRuntime = scene.get("mobility")
-	var entity: int = scene.get("player_handle")
+	var runtime: MobilityRuntime = scene.mobility
+	var entity: int = scene.player_handle
 	assert_bool(runtime.abilities.try_activate(entity, MovementAbilityData.Kind.DASH,
 		GameLoop.get_logic_tick(), false, runtime.stats)).is_true()
-	scene.call("reset_mobility_clock")
+	scene.reset_mobility_clock()
 	assert_int(GameLoop.get_logic_tick()).is_equal(0)
 	assert_int(runtime.abilities.ready_tick(entity, MovementAbilityData.Kind.DASH)).is_equal(6)
 	assert_int(runtime.stats.get_stat(entity, StatBlock.Stat.ENERGY)).is_equal(2000)

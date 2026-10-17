@@ -1,14 +1,14 @@
 extends GdUnitTestSuite
 ## Registry: детерминированные id, загрузка каталога, проверка типов, заморозка.
 
-const FixtureData: Script = preload("res://tests/fixtures/registry/RegistryFixtureData.gd")
+const FixtureData := preload("res://tests/fixtures/registry/RegistryFixtureData.gd")
 const ITEMS_DIR: String = "res://tests/fixtures/registry/items"
 const MIXED_DIR: String = "res://tests/fixtures/registry/mixed"
 
 
 static func _make(value: int) -> Resource:
-	var data: Resource = FixtureData.new()
-	data.set("value", value)
+	var data := FixtureData.new()
+	data.value = value
 	return data
 
 
@@ -32,7 +32,7 @@ func test_ids_are_sorted_by_key_regardless_of_registration_order() -> void:
 	assert_int(a.id_of(ca, &"alpha")).is_equal(0)
 	assert_int(a.id_of(ca, &"beta")).is_equal(1)
 	assert_int(a.id_of(ca, &"gamma")).is_equal(2)
-	assert_int(a.get_resource(ca, 2).get("value")).is_equal(3)
+	assert_int((a.get_resource(ca, 2) as FixtureData).value).is_equal(3)
 	assert_str(String(a.key_of(ca, 1))).is_equal("beta")
 
 
@@ -44,7 +44,7 @@ func test_load_directory_registers_tres_by_file_name() -> void:
 	assert_int(registry.count(items)).is_equal(3)
 	for id: int in 3:
 		# alpha=1, beta=2, gamma=3: id совпадает с порядком ключей.
-		assert_int(registry.get_resource(items, id).get("value")).is_equal(id + 1)
+		assert_int((registry.get_resource(items, id) as FixtureData).value).is_equal(id + 1)
 
 
 func test_lookup_misses_return_sentinels() -> void:
@@ -73,8 +73,8 @@ func test_categories_are_independent() -> void:
 	registry.freeze()
 	assert_int(registry.count(weapons)).is_equal(1)
 	assert_int(registry.count(cards)).is_equal(2)
-	assert_int(registry.get_resource(weapons, registry.id_of(weapons, &"shotgun")).get("value")).is_equal(10)
-	assert_int(registry.get_resource(cards, registry.id_of(cards, &"shotgun")).get("value")).is_equal(20)
+	assert_int((registry.get_resource(weapons, registry.id_of(weapons, &"shotgun")) as FixtureData).value).is_equal(10)
+	assert_int((registry.get_resource(cards, registry.id_of(cards, &"shotgun")) as FixtureData).value).is_equal(20)
 
 
 func test_duplicate_key_is_rejected() -> void:
@@ -84,7 +84,7 @@ func test_duplicate_key_is_rejected() -> void:
 	await assert_error(func() -> void: registry.register(items, &"alpha", _make(2))) \
 		.is_push_error("Registry: дубликат ключа 'alpha' в категории 'items'")
 	registry.freeze()
-	assert_int(registry.get_resource(items, 0).get("value")).is_equal(1)
+	assert_int((registry.get_resource(items, 0) as FixtureData).value).is_equal(1)
 
 
 func test_wrong_type_is_rejected_on_load() -> void:

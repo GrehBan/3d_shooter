@@ -318,3 +318,24 @@ func test_room_reset_clears_metrics_and_keeps_registrations() -> void:
 	assert_int(_reactions.team_of(2)).is_equal(2)
 	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [2])
 	assert_int(_reactions.arcs).is_equal(1)
+
+
+## An admitted explosion has already consumed the acid; targets its primary callbacks kill are
+## stale skips, never replaced, and the acid stays consumed.
+func test_admitted_explosion_whose_targets_all_die_in_the_callbacks() -> void:
+	_shoot(DamagePayload.Element.ACID, 1000, 1, [])
+	_resolver.on_hit.connect(_kill_two_and_three)
+	_shoot(DamagePayload.Element.FIRE, 10000, 1, [2, 3])
+	assert_int(_reactions.explosions).is_equal(1)
+	assert_int(_reactions.empty_reactions).is_equal(0)
+	assert_int(_reactions.stale_skips).is_equal(2)
+	assert_array(_secondary).is_empty()
+	assert_int(_statuses.acid_stacks(1)).is_equal(0)
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
+	assert_int(_reactions.configuration_errors).is_equal(0)
+
+
+func _kill_two_and_three(_source: int, _target: int, _epoch: int, _sequence: int, _trace: int,
+		_child: int, _damage: int) -> void:
+	_stats.set_stat(2, StatBlock.Stat.HP, 0)
+	_stats.set_stat(3, StatBlock.Stat.HP, 0)

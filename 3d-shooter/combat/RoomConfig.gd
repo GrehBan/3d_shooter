@@ -31,7 +31,8 @@ const MAX_EFFECT_QUOTA: int = 512
 ## Reaction candidates per trace (K): hitboxes the physics adapter may hand to one reaction.
 ## More bodies in the area is normal (a crowd): extras are dropped and counted.
 @export var reaction_candidates: int = 8
-## Neighbour-cache refreshes per physics tick (round-robin over tracked targets).
+## Neighbour-cache refreshes per physics tick: the Q tracked targets with the oldest cache
+## (least-recently-refreshed).
 @export var candidate_queries_per_tick: int = 2
 
 

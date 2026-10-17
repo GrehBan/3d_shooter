@@ -212,7 +212,7 @@ func test_cooldown_rebase_does_not_allocate() -> void:
 
 func _definition(kind: int, cost: int = 1000, cooldown: int = 6) -> MovementAbilityData:
 	var data := MovementAbilityData.new()
-	data.set("kind", kind)
+	data.kind = kind as MovementAbilityData.Kind
 	data.energy_cost = cost
 	data.cooldown_ticks = cooldown
 	data.usable_on_ground = kind != MovementAbilityData.Kind.DOUBLE_JUMP

@@ -14,9 +14,14 @@ const NO_TARGET: int = -1
 const MAX_TEAM: int = 0x7FFFFFFF
 
 var configuration_errors: int = 0
+## Admitted reactions only (admit() returned true), by kind below; a planned reaction that
+## was refused or found no eligible target is not counted here.
 var admitted_reactions: int = 0
+## Admitted radial arcs.
 var arcs: int = 0
+## Admitted conducting pulses.
 var conducting: int = 0
+## Admitted toxic explosions (each consumed the primary's corrosion).
 var explosions: int = 0
 var inspected_candidates: int = 0
 var secondary_hits: int = 0
