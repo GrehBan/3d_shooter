@@ -187,9 +187,16 @@ func test_full_entry_and_owner_handles_above_int32() -> void:
 
 
 func test_invalid_cold_definitions_and_capacities_do_not_initialize() -> void:
-	for field: StringName in [&"minimum_value", &"counter_increment", &"cooldown_ticks", &"condition", &"action"]:
+	var corruptions: Array[Callable] = [
+		func(d: EffectRuleData) -> void: d.minimum_value = -1,
+		func(d: EffectRuleData) -> void: d.counter_increment = -1,
+		func(d: EffectRuleData) -> void: d.cooldown_ticks = -1,
+		func(d: EffectRuleData) -> void: d.condition = -1 as EffectRuleData.Condition,
+		func(d: EffectRuleData) -> void: d.action = -1 as EffectRuleData.Action,
+	]
+	for corrupt: Callable in corruptions:
 		var definition := EffectRuleData.new()
-		definition.set(field, -1)
+		corrupt.call(definition)
 		var definitions: Array[EffectRuleData] = [definition]
 		await assert_error(func() -> void:
 			var runner := EffectRunner.new(_stats, _host, definitions)

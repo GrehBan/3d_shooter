@@ -8,12 +8,12 @@ extends Node3D
 ## so the shot frame runs no queries. No result arrays at the GDScript level (the ShapeCast3D
 ## keeps its results inside the engine).
 ##
-## Cache age bound: a target is refreshed at most ceil((N0 + S) / Q) refresh steps (physics
-## ticks while the adapter is active) after its previous refresh (or its track), where N0 is
-## the number of tracked targets at that moment and S the number of targets tracked since;
-## with no spawns that is ceil(N / Q). Which
-## bodies overlap and how old a cache is are physics and stay outside the deterministic
-## contour: the logic validates every handle by full handle and HP and sorts what it gets.
+## Cache age bound: a target is refreshed at most ceil((N0 + S) / Q) refresh steps after its
+## previous refresh or its track; a refresh step is a physics tick while the adapter is active.
+## N0 is the number of tracked targets at that moment and S the number of targets tracked
+## since; with no spawns that is ceil(N / Q). Which bodies overlap and how old a cache is
+## are physics and stay outside the deterministic contour: the logic validates every handle
+## by full handle and HP and sorts what it gets.
 ##
 ## Physics priority 0: after the Sandbox death marks (-1), before HitscanWeapon (10), so a
 ## shot copies caches refreshed in the same tick.

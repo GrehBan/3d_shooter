@@ -7,9 +7,9 @@
 ## 2026-10-16 — M2.3b: реакции
 
 Шаг `claude/m23-reactions` от `master` `58eef19`; числа пресета реакций, утверждённые Max, не
-менялись. Решениями координатора в свободном режиме добавлены правила: первичная цель должна
-быть врагом источника, а без подходящих целей реакции нет и взрыв оставляет коррозию. M2.3
-закрыта.
+менялись. Решениями координатора в свободном режиме добавлены три правила: первичная цель
+должна быть врагом источника; цели реакции — только живые; без подходящих целей реакции нет,
+и взрыв оставляет коррозию. M2.3 закрыта.
 
 * Решение координатора по квоте (вариант A): вторичные попадания реакций идут в отдельные
   сигналы `ShotResolver.on_secondary_hit` / `on_secondary_kill` и в перекраску убитых, но не
@@ -38,8 +38,8 @@
   адаптера `ignored_results` и `configuration_errors` в профиле обязаны быть 0. Отражение
   `get` / `set` / `call` по имени заменено типизированным доступом и публичными геттерами во
   всей тестовой обвязке: тесты Sandbox, `RealPipelineBenchmark`, `regress.gd`,
-  `SyntheticCombatLoad`, `DamagePipelineTest`, `MobilityRuntimeTest`, `MobilityPhysicsTest`
-  и `RegistryTest` (follow-up закрыт). Единственное оставшееся место — `GdUnitErrorCount`,
+  `SyntheticCombatLoad`, `DamagePipelineTest`, `MobilityRuntimeTest`, `MobilityPhysicsTest`,
+  `RegistryTest`, `EffectRunnerTest` и `ShotBatchTest` (follow-up закрыт). Единственное оставшееся место — `GdUnitErrorCount`,
   который читает приватный `_logger` аддона gdUnit4; оно вынесено в follow-ups. В манифест
   §II.1 добавлены
   правило долей и статья физического тика.
