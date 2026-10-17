@@ -111,7 +111,7 @@ func test_candidate_released_or_reused_between_physics_and_logic_is_skipped() ->
 	_resolver.logic_step(_tick)
 	assert_array(_secondary).is_empty()  # neither the replacement nor a free slot is hit
 	assert_int(_stats.get_stat(reused, StatBlock.Stat.HP)).is_equal(1_000_000)
-	assert_int(_reactions.arcs).is_equal(0)  # no eligible candidate: not admitted
+	assert_int(_reactions.arcs).is_equal(1)  # no eligible candidate: still fires and counts
 	assert_int(_reactions.empty_reactions).is_equal(1)
 
 
@@ -163,33 +163,37 @@ func test_no_reaction_without_hp_damage_team_or_reactive_element() -> void:
 	assert_int(_reactions.configuration_errors).is_equal(0)
 
 
-func test_explosion_without_eligible_targets_keeps_corrosion() -> void:
+## Max, 2026-10-17: a reaction always fires. An explosion with nobody eligible nearby still
+## consumes the acid and counts; it just hits nobody.
+func test_explosion_without_eligible_targets_still_fires_and_consumes_corrosion() -> void:
 	_reactions.register_target(3, 1)  # an ally of the source
 	_shoot(DamagePayload.Element.ACID, 1000, 1, [])
 	assert_int(_statuses.acid_stacks(1)).is_equal(1)
-	_shoot(DamagePayload.Element.FIRE, 10000, 1, [])
 	_shoot(DamagePayload.Element.FIRE, 10000, 1, [3, 0])  # only the ally and the source
-	assert_int(_reactions.explosions).is_equal(0)
-	assert_int(_reactions.empty_reactions).is_equal(2)
-	assert_int(_reactions.admitted_reactions).is_equal(0)
-	assert_int(_statuses.acid_stacks(1)).is_equal(1)
-	assert_int(_resolver.contexts.alive_count()).is_equal(0)
-	_shoot(DamagePayload.Element.FIRE, 10000, 1, [2])
 	assert_int(_reactions.explosions).is_equal(1)
+	assert_int(_reactions.admitted_reactions).is_equal(1)
+	assert_int(_reactions.empty_reactions).is_equal(1)
 	assert_int(_statuses.acid_stacks(1)).is_equal(0)
-	assert_array(_secondary).is_equal(PackedInt64Array([2, 7500]))
+	assert_array(_secondary).is_empty()
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
 	_shoot(DamagePayload.Element.FIRE, 10000, 1, [2])  # no corrosion left: no second explosion
+	assert_int(_reactions.explosions).is_equal(1)
+	assert_array(_secondary).is_empty()
+	_shoot(DamagePayload.Element.FIRE, 10000, 1, [])  # with no candidates at all, the same
 	assert_int(_reactions.explosions).is_equal(1)
 	assert_int(_reactions.configuration_errors).is_equal(0)
 
 
-func test_arcs_without_eligible_targets_are_not_admitted() -> void:
+func test_arcs_without_eligible_targets_still_fire() -> void:
 	_stats.set_stat(2, StatBlock.Stat.HP, 0)
 	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [2])
-	assert_int(_reactions.arcs).is_equal(0)
-	assert_int(_reactions.empty_reactions).is_equal(1)
+	_shoot(DamagePayload.Element.ELECTRIC, 10000, 1, [])
+	assert_int(_reactions.arcs).is_equal(2)
+	assert_int(_reactions.admitted_reactions).is_equal(2)
+	assert_int(_reactions.empty_reactions).is_equal(2)
 	assert_int(_resolver.reaction_refusals).is_equal(0)
 	assert_array(_secondary).is_empty()
+	assert_int(_resolver.contexts.alive_count()).is_equal(0)
 
 
 func test_corroded_or_wet_primary_conducts_to_four() -> void:

@@ -91,12 +91,14 @@ func test_arcs_conduction_explosion_and_gates_golden() -> void:
 		# WET 11 is not corroded: conduction reaches the three eligible targets, arcs would hit two.
 		[13, 0, ELECTRIC, 2000, [[11, [8, 7, 6, 5, 10, 2]]], {}],
 		[14, 0, ACID, 1000, [[11, []]], {}],
-		# Only the ally and the neutral stand nearby: no eligible target, the acid stays.
+		# Only the ally and the neutral stand nearby: the explosion still fires and takes the acid.
 		[15, 0, FIRE, 2000, [[11, [2, 3]]], {}],
-		[16, 0, FIRE, 2000, [[11, [6, 5]]], {}],
+		[16, 0, FIRE, 2000, [[11, [6, 5]]], {}],  # no acid left: no explosion
+		[17, 0, ACID, 1000, [[11, []]], {}],
+		[18, 0, FIRE, 2000, [[11, [6, 5]]], {}],
 	]
 	var corroded_before_explosion: int = 0
-	var acid_after_empty_explosion: int = 0
+	var acid_after_empty_explosion: int = -1
 	for shot: Array in shots:
 		_tick = shot[0]
 		assert_bool(statuses.logic_step(_tick)).is_true()
@@ -119,17 +121,17 @@ func test_arcs_conduction_explosion_and_gates_golden() -> void:
 			_record(PackedInt64Array([stats.get_stat(handle, StatBlock.Stat.HP),
 					stats.get_stat(handle, StatBlock.Stat.SHIELD), statuses.acid_stacks(handle),
 					statuses.burn_field(handle, StatusRuntime.Field64.BURN_UNTIL)]))
-	assert_int(_hash).is_equal(3711385127)
-	assert_int(_words).is_equal(1058)
+	assert_int(_hash).is_equal(3107360089)
+	assert_int(_words).is_equal(1170)
 	assert_int(_secondary_hits).is_equal(23)
 	assert_int(_secondary_kills).is_equal(2)
 	assert_int(corroded_before_explosion).is_equal(1)
 	assert_int(reactions.arcs).is_equal(3)  # t1 and both pellets of t12
 	assert_int(reactions.conducting).is_equal(4)  # corroded t3, WET t7, t11 and t13
-	assert_int(reactions.explosions).is_equal(2)  # t6 and t16; t15 found no eligible target
+	assert_int(reactions.explosions).is_equal(3)  # t6, t15 (no eligible target) and t18
 	assert_int(reactions.empty_reactions).is_equal(1)
-	assert_int(acid_after_empty_explosion).is_equal(1)
-	assert_int(statuses.acid_stacks(11)).is_equal(0)  # consumed by the t16 explosion
+	assert_int(acid_after_empty_explosion).is_equal(0)  # the empty explosion took the acid
+	assert_int(statuses.acid_stacks(11)).is_equal(0)  # consumed by the t18 explosion
 	assert_int(statuses.acid_stacks(10)).is_equal(0)  # the secondary kill cleared it at once
 	assert_int(reactions.configuration_errors).is_equal(0)
 	assert_int(resolver.damage_configuration_errors()).is_equal(0)

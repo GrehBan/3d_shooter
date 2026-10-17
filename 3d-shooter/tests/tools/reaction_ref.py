@@ -3,10 +3,10 @@
 Run from the repository root: python 3d-shooter/tests/tools/reaction_ref.py
 Direct contacts and their statuses come from the status model (status_ref.py); reactions
 are modelled here with plain lists: eligible candidates are filtered and sorted by full
-handle, then the first N are hit. A reaction without eligible candidates is not admitted:
-an explosion then keeps the primary's corrosion. Python unbounded integers define every
-floor. A kill by a secondary hit clears the target's statuses at once, like every other
-kill.
+handle, then the first N are hit. A reaction always fires: with no eligible candidates it
+still consumes what its rule consumes (an explosion the primary's corrosion), it just hits
+nobody. Python unbounded integers define every floor. A kill by a secondary hit clears the
+target's statuses at once, like every other kill.
 """
 
 import os
@@ -42,9 +42,11 @@ SHOTS = (
     # WET 11 is not corroded: conduction reaches the three eligible targets, arcs would hit two.
     (13, 0, ELECTRIC, 2000, [(11, [8, 7, 6, 5, 10, 2])], {}),
     (14, 0, ACID, 1000, [(11, [])], {}),
-    # Only the ally and the neutral stand nearby: no eligible target, the acid stays.
+    # Only the ally and the neutral stand nearby: the explosion still fires and takes the acid.
     (15, 0, FIRE, 2000, [(11, [2, 3])], {}),
-    (16, 0, FIRE, 2000, [(11, [6, 5])], {}),
+    (16, 0, FIRE, 2000, [(11, [6, 5])], {}),  # no acid left: no explosion
+    (17, 0, ACID, 1000, [(11, [])], {}),
+    (18, 0, FIRE, 2000, [(11, [6, 5])], {}),
 )
 
 
@@ -95,8 +97,6 @@ def reference():
             eligible = sorted({c for c in candidates
                                if c not in (primary, source) and team(c) != 0
                                and team(c) != team(source) and m.entities[c].hp > 0})
-            if not eligible:
-                continue
             if kind == EXPLOSION:
                 e.acid = e.acid_end = 0
             for target in eligible[:LIMITS[kind]]:
