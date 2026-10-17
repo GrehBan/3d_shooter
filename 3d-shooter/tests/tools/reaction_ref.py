@@ -5,8 +5,8 @@ Direct contacts and their statuses come from the status model (status_ref.py); r
 are modelled here with plain lists: eligible candidates are filtered and sorted by full
 handle, then the first N are hit. A reaction always fires: with no eligible candidates it
 still consumes what its rule consumes (an explosion the primary's corrosion), it just hits
-nobody. Python unbounded integers define every floor. A kill by a secondary hit clears the target's statuses at once, like every other
-kill.
+nobody. Python unbounded integers define every floor. A kill by a secondary hit clears the
+target's statuses at once, like every other kill.
 """
 
 import os

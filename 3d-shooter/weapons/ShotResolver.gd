@@ -144,8 +144,8 @@ func _resolve(shot: int) -> void:
 
 ## Opens the reaction child before the primary callbacks and admits the planned reaction
 ## on it (target selection; an admitted explosion consumes corrosion here). A full context
-## pool or a hit budget smaller than the reaction's targets is a configuration error, and a
-## reaction without eligible candidates is not admitted: no acid is consumed either way.
+## pool or a hit budget smaller than the reaction's targets is a configuration error and
+## consumes no acid. A reaction without eligible candidates is still admitted.
 func _open_reaction(child: int, damage: int, shot: int, trace: int) -> int:
 	if contexts.budget_left(child) < _reactions.planned_limit():
 		reaction_refusals += 1
