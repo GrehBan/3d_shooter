@@ -14,8 +14,8 @@ const NO_TARGET: int = -1
 const MAX_TEAM: int = 0x7FFFFFFF
 
 var configuration_errors: int = 0
-## Admitted reactions only (admit() returned true), by kind below; a planned reaction that
-## was refused or found no eligible target is not counted here.
+## Admitted reactions only (admit() returned true), by kind below, including those with no
+## eligible target; a reaction the resolver refused (context or hit budget) is not counted.
 var admitted_reactions: int = 0
 ## Admitted radial arcs.
 var arcs: int = 0
@@ -29,7 +29,8 @@ var secondary_hp_damage: int = 0
 var secondary_kills: int = 0
 ## Selected targets that died or were released before their secondary hit.
 var stale_skips: int = 0
-## Planned reactions with no eligible candidate: not admitted, an explosion keeps the acid.
+## Diagnostic: admitted reactions that found no eligible target (they still consumed what
+## their rule consumes and were counted above; they only have no secondary hits).
 var empty_reactions: int = 0
 ## Secondary hits refused by the attack context (hit budget or branch hit-set).
 var hit_refusals: int = 0
@@ -179,9 +180,10 @@ func planned_limit() -> int:
 
 ## After the direct contact, before its callbacks: admits the planned reaction if the
 ## captured HP damage is positive (lethal hits included) and selects up to the planned
-## number of eligible candidates of this shot's trace, smallest full handle first. No
-## eligible candidate: not admitted (empty_reactions), an explosion keeps the corrosion.
-## An admitted explosion consumes the primary's corrosion here.
+## number of eligible candidates of this shot's trace, smallest full handle first. A
+## reaction always fires (Max, 2026-10-17): with no eligible candidate it is still admitted
+## and counted, only without secondary hits (empty_reactions). An admitted explosion
+## consumes the primary's corrosion here.
 func admit(hp_damage: int, batch: ShotBatch, shot: int, trace: int) -> bool:
 	if not _planned or _admitted or _executing or batch == null:
 		_refuse()
@@ -191,7 +193,6 @@ func admit(hp_damage: int, batch: ShotBatch, shot: int, trace: int) -> bool:
 	_select(batch, shot, trace)
 	if _selected_count == 0:
 		empty_reactions += 1
-		return false
 	if _kind == ReactionRules.Kind.EXPLOSION and not _statuses.consume_corrosion(_primary):
 		return _refuse()
 	_admitted = true

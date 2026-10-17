@@ -9,16 +9,14 @@
 «Tests and benchmark (ubuntu-latest)» и «(windows-latest)»; **squash** — слияние
 PR одним коммитом в `master`.
 
-## Текущее состояние — 2026-10-15
+## Текущее состояние — 2026-10-17
 
-* `master` — `3c94d6d` (squash PR #15), required CI SUCCESS
-  ([run 38721326788](https://github.com/GrehBan/3d_shooter/actions/runs/38721326788)).
-* Слиты PR #1–#15, открытых PR нет.
-* Закрыты вехи M0, M1a и M1 (кроме frame-слоя), слиты пакеты M2.1 и M2.2.
-* Несмёрженный снимок M2.3 от Codex лежит вне git в `m23-element-contract/`;
-  переносится в ветку `claude/m23-element-contract` после нормализации проекта.
-* [Аудит 2026-10-15](audit-2026-10-15.md) и решения координатора по нему определяют
-  порядок работ до M2.3.
+* `master` — `1ea0e52` (squash PR #27), required CI SUCCESS
+  ([run 39019050732](https://github.com/GrehBan/3d_shooter/actions/runs/39019050732)).
+* Слиты PR #1–#27, открытых PR нет.
+* Закрыты вехи M0, M1a и M1, в M2 слиты M2.1, M2.2 и M2.3 (M2.3a — PR #25, M2.3b — PR #27).
+* Снимок M2.3 от Codex `m23-element-contract/` после проверки удалён; что в нём было и почему
+  не перенесено — в [журнале работ](work-log.md).
 
 ## Сводка PR
 
@@ -39,9 +37,23 @@ PR одним коммитом в `master`.
 | [#13](https://github.com/GrehBan/3d_shooter/pull/13) | codex/m1-real-pipeline | `062534d` | SUCCESS, [38595049442](https://github.com/GrehBan/3d_shooter/actions/runs/38595049442) | `962741d` | M1 пакет 5: реальный бенчмарк, приёмка M1 | архитектура и QA 17 файлов — PASS, манифест SHA256 `208e98fa7c84d60c9204748386bb7b1ba020f227636fdcc1d832f1686a27f215` |
 | [#14](https://github.com/GrehBan/3d_shooter/pull/14) | codex/m2-combat-plan | `bc18104` | SUCCESS, [38646433608](https://github.com/GrehBan/3d_shooter/actions/runs/38646433608) | `e00dff1` | M2.1: физический `DamagePipeline` | точный diff 18 файлов — PASS, манифест SHA256 `b16726e0ebb1052e4ddc1a59de41bb0df10151b62065b762df9d92120d327cb5` |
 | [#15](https://github.com/GrehBan/3d_shooter/pull/15) | codex/m2-effect-runner | `9d309dd` | SUCCESS, [38720677226](https://github.com/GrehBan/3d_shooter/actions/runs/38720677226) | `3c94d6d` | M2.2: `EffectRunner` со счётчиками | точный diff 29 файлов — PASS |
+| [#16](https://github.com/GrehBan/3d_shooter/pull/16) | claude/audit-docs | `338c910` | SUCCESS, [38730777852](https://github.com/GrehBan/3d_shooter/actions/runs/38730777852) | `628c9a4` | нормализация документов после аудита | координатор |
+| [#17](https://github.com/GrehBan/3d_shooter/pull/17) | claude/process-manifest | `bfafbd5` | SUCCESS, [38735180723](https://github.com/GrehBan/3d_shooter/actions/runs/38735180723) | `8c69211` | нейтральный процесс в `CLAUDE.md`, исключения манифеста | координатор |
+| [#18](https://github.com/GrehBan/3d_shooter/pull/18) | claude/sandbox-events | `b4b47d2` | SUCCESS, [38767193483](https://github.com/GrehBan/3d_shooter/actions/runs/38767193483) | `97770d7` | визуал смерти по событию убийства, `room_entered` при сбросе | координатор |
+| [#19](https://github.com/GrehBan/3d_shooter/pull/19) | claude/room-combat | `4c50239` | SUCCESS, [38771165625](https://github.com/GrehBan/3d_shooter/actions/runs/38771165625) | `c3c176e` | `RoomCombat` владеет `StatBlock` комнаты | координатор |
+| [#20](https://github.com/GrehBan/3d_shooter/pull/20) | claude/alloc-tests | `95d9069` | SUCCESS, [38773458582](https://github.com/GrehBan/3d_shooter/actions/runs/38773458582) | `11f6d67` | тесты аллокаций горячих путей пяти классов | координатор |
+| [#21](https://github.com/GrehBan/3d_shooter/pull/21) | claude/fall-height-cap | `9288028` | SUCCESS, [38776091838](https://github.com/GrehBan/3d_shooter/actions/runs/38776091838) | `bcf75b9` | точный целочисленный предел высоты падения | координатор |
+| [#22](https://github.com/GrehBan/3d_shooter/pull/22) | claude/check-scripts-abstract | `442ccdb` | SUCCESS, [38779840257](https://github.com/GrehBan/3d_shooter/actions/runs/38779840257) | `0489610` | `check_scripts` отвергает неудачную компиляцию | координатор |
+| [#23](https://github.com/GrehBan/3d_shooter/pull/23) | claude/m1-frame-layer | `f165d0a` | SUCCESS, [38812964743](https://github.com/GrehBan/3d_shooter/actions/runs/38812964743) | `130dc3f` | M1: кадровый слой, покачивание оружия и камеры | координатор |
+| [#24](https://github.com/GrehBan/3d_shooter/pull/24) | claude/pipeline-phase-budget | `ee2c783` | SUCCESS, [38818296806](https://github.com/GrehBan/3d_shooter/actions/runs/38818296806) | `1ece751` | замер логики по фазам и доли бюджета | координатор |
+| [#25](https://github.com/GrehBan/3d_shooter/pull/25) | claude/m23-statuses | `72a88fe` | SUCCESS, [38894501891](https://github.com/GrehBan/3d_shooter/actions/runs/38894501891) | `141771b` | M2.3a: элементы и статусы | координатор |
+| [#26](https://github.com/GrehBan/3d_shooter/pull/26) | claude/gdd-campaign-structure | `309cb6d` | SUCCESS, [38924325429](https://github.com/GrehBan/3d_shooter/actions/runs/38924325429) | `58eef19` | документы: забег / этап / кампания, баланс, сюжет | координатор |
+| [#27](https://github.com/GrehBan/3d_shooter/pull/27) | claude/m23-reactions | `f34dea0` | SUCCESS, [39019050732](https://github.com/GrehBan/3d_shooter/actions/runs/39019050732) | `1ea0e52` | M2.3b: элементальные реакции | координатор |
 
 Все слияния выполнены от учётной записи GrehBan: #1–#7 — по процессу координатора
-(ревью координатора, зелёный CI), #8–#15 — в работе Codex по поручениям пользователя.
+(ревью координатора, зелёный CI), #8–#15 — в работе Codex по поручениям пользователя,
+#16–#27 — после аудита по процессу координатора (ревью координатора, зелёный CI на точном
+HEAD, squash).
 Колонка CI — проверка точного итогового HEAD. Ревью субагента локально не равно
 одобрению на GitHub; обязательных ревью на GitHub защита `master` не требует.
 
@@ -149,3 +161,12 @@ p95/p99/худший кадр 7776/9449/11146 µs, медленных кадро
 `ci/run_checks.sh all` (exit 0, 280/280 тестов). Найдены устаревшие статусы документов,
 отступления от манифеста и блокеры снимка M2.3; решения координатора и порядок
 исправлений записаны в отчёте и [журнале работ](work-log.md).
+
+### 2026-10-15…17 — нормализация после аудита, M1 frame-слой, M2.3 (PR #16–#27)
+
+* #16–#24 закрыли решения аудита: документы и процесс, владение `StatBlock` комнатой,
+  события смерти в Sandbox, тесты аллокаций, предел высоты падения, проверка скриптов,
+  frame-слой M1 и замер логики по фазам.
+* #25 (M2.3a, статусы) и #27 (M2.3b, реакции) перенесли M2.3 из снимка Codex с переработкой
+  по аудиту; #26 — документы структуры забега и сюжета. Подробности проверок и ревью — в
+  [журнале работ](work-log.md).
